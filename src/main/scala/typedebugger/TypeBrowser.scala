@@ -1,6 +1,5 @@
 package scala.typedebugger
 
-
 import java.awt.{List => awtList, _}
 import java.awt.geom.{Point2D, Rectangle2D}
 import java.awt.event._
@@ -10,28 +9,25 @@ import javax.swing.event.TreeModelListener
 import javax.swing.text.{Highlighter, DefaultHighlighter}
 
 import scala.concurrent.Lock
-import scala.collection.mutable.{ ListBuffer, Stack }
-import scala.collection.mutable. { HashMap }
-import scala.tools.nsc.{ Global, CompilerCommand, Settings, symtab, io }
-import scala.tools.nsc.reporters.{ ConsoleReporter }
+import scala.collection.mutable.{ ListBuffer, Stack, HashMap }
+import scala.collection.JavaConversions._
 
+import scala.tools.nsc.{ Global, CompilerCommand, Settings, io, interactive }
+import scala.tools.nsc.reporters.{ ConsoleReporter }
 
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
 import prefuse.data.tuple.{TupleSet, DefaultTupleSet}
 import prefuse.data.io.TreeMLReader
 import prefuse.data.expression.{AbstractPredicate, Predicate, OrPredicate}
 import prefuse.util.PrefuseLib
-
 import prefuse.{Constants, Display, Visualization}
 import prefuse.action._
 import prefuse.action.animate.{ColorAnimator, LocationAnimator, QualityControlAnimator, VisibilityAnimator}
 import prefuse.action.assignment.{ColorAction, FontAction}
 import prefuse.action.filter.{FisheyeTreeFilter, VisibilityFilter}
-
 import prefuse.activity.SlowInSlowOutPacer
 import prefuse.controls.{ControlAdapter, FocusControl, PanControl, WheelZoomControl,
                          ZoomControl, ZoomToFitControl}
-
 import prefuse.action.layout.CollapsedSubtreeLayout
 import prefuse.action.layout.graph.NodeLinkTreeLayout
 import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
@@ -40,68 +36,59 @@ import prefuse.visual.sort.TreeDepthItemSorter
 import prefuse.util.{ColorLib, FontLib, GraphicsLib}
 import prefuse.util.display.{DisplayLib}
 import prefuse.util.ui.{JFastLabel, JSearchPanel}
-
 import prefuse.render._
 
-import scala.collection.JavaConversions._
 
 import java.io.File
 
-abstract class TypeBrowser {
+trait CompilerInfo {
   val global: Global
+  val DEBUG: Boolean
+}
+
+abstract class TypeBrowser extends CompilerInfo
+                           with internal.IStructure
+                           with internal.StructureBuilders
+                           with processing.PrefusePostProcessors
+                           with processing.StringOps {
  
   import global.{Tree => STree, _}
   import EV._
-
-  object CompileWrapper {
-    private def sources(roots: List[String]): List[String] = {
-      val lb = new ListBuffer[String]
-      roots foreach { p =>
-        io.Path(p).walk foreach { x =>
-          if (x.isFile && x.hasExtension("scala", "java"))
-            lb += x.path
-        }
-      }
-      lb.toList.distinct
-    }
   
-    def cc(paths: List[String]): Boolean = {
-      val run = new Run
-      val srcs = sources(paths)
-      println("[compiling] " + srcs)
-      run compile srcs
-      !reporter.hasErrors
-    }
-  }
+  type PNode = PrefuseEventNode
+  
 
-  object TypeBrowserFrame {
+  object TypeDebuggerFrame {
     val BACKGROUND = Color.WHITE
     val FOREGROUND = Color.BLACK
-    val COLUMN_CLASS = ETreeNode(null, new ListBuffer(), None, null).getClass
+    val COLUMN_PREFUSENODE_CLASS = (new PrefuseEventNode(null, null, null)).getClass
   }
 
-  object TreeView {
+  object TreeDisplay {
     val tree = "tree"
     val treeNodes = "tree.nodes"
     val treeEdges = "tree.edges"
-    val typecheckerNodes = "tree.typechecker"
-    //val orientation = Constants.ORIENT_LEFT_RIGHT
+
     val orientation = Constants.ORIENT_BOTTOM_TOP
 
-    val fixedNodes = "tree.fixed"
+    val fixedNodes = "tree.fixed"           // Nodes that are 'fixed' to be visible
     val openGoalNodes = "tree.openGoals"
-    val nonGoalNodes = "tree.openNods"
-    val toRemoveNodes = "tree.removeNodes"
+    val nonGoalNodes = "tree.openNods"      // Intermediate nodes on the path to the goal nodes
+    val toRemoveNodes = "tree.removeNodes"  // Nodes to be removed on the refresh of UI
     val linkGroupNodes = "tree.link"
     val clickedNode = "tree.clicked"
+    
+    val typerNodes = "tree.typer"
+    val namerNodes = "tree.namer"
   }
 
-  class TreeView(t: Tree, label: String, initialGoals: List[ETreeNode])
+  class TreeDisplay(t: Tree, label: String, initialGoals: List[PNode])
     extends Display(new Visualization()) with ui.PrefuseTooltips {
     
     treeViewSelf => 
     
-    import TreeView._
+    import TreeDisplay._
+    import TypeDebuggerFrame._
     
     m_vis.add(tree, t)
 
@@ -166,14 +153,9 @@ abstract class TypeBrowser {
     // create the filtering and layout
     val filter = new ActionList()
     // Includes degree-of-interest factor
-    //filter.add(new FocusOnItems(Visualization.FOCUS_ITEMS,
-    //                            ErrorPredicate))
-    //filter.add(new FocusOnItems(Visualization.FOCUS_ITEMS,
-    //                            new FixedNodesPredicate(fixedNodes)))
-    //filter.add(new FisheyeTreeFilter(tree, 1))
     filter.add(new VisualizeFixedNodes(fixedNodes, nonGoalNodes))
     filter.add(new UnfocusOnItems(Visualization.FOCUS_ITEMS, toRemoveNodes))
-    filter.add(new FocusOnItems(Visualization.FOCUS_ITEMS,
+    filter.add(new VisualizeNodesWithPred(Visualization.FOCUS_ITEMS,
                                 new GoalPathPredicate(openGoalNodes, nonGoalNodes)))
     filter.add(new VisualizeNodes(Visualization.FOCUS_ITEMS, linkGroupNodes))
 
@@ -209,11 +191,12 @@ abstract class TypeBrowser {
     orient.add(new RepaintAction())
     m_vis.putAction("orient", orient)
 
-    //m_vis.putAction("initial-focus", new InitialFocusOnErrors(Visualization.FOCUS_ITEMS))
-    //m_vis.putAction("initial-goals", new VisibilityFilter(InitialGoalPredicate))
-    val initialNodes = new InitialCollapseOnGoal(Visualization.ALL_ITEMS,
-                                                 openGoalNodes,
-                                                 clickedNode)
+    // We cache collapse tree because it has a minimal version of
+    // the graph that contains all the errors and intermediate nodes leading to it.
+    // TODO refactor
+    val initialNodes = new CollapseTree(Visualization.ALL_ITEMS,
+                                        openGoalNodes,
+                                        clickedNode)
     m_vis.putAction("initial-goals", initialNodes)
  
     val zoomToFit = new ZoomToFitControl()
@@ -236,11 +219,10 @@ abstract class TypeBrowser {
     m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
 
+    // To have the whole tree expanded initially
+    // comment out initial-goals
     m_vis.run("initial-goals")
     m_vis.run("filter")
-    //
-    //m_vis.run("initial-focus")
-    
 
     private def setOrientation(orientation0: Int) {
       val rtl = m_vis.getAction("treeLayout").asInstanceOf[NodeLinkTreeLayout]
@@ -281,8 +263,8 @@ abstract class TypeBrowser {
 
     class CustomLabelRenderer(label0: String) extends LabelRenderer(label0) {
       override protected def getText(item: VisualItem): String = {
-        if (item.canGet(label0, TypeBrowserFrame.COLUMN_CLASS)) {
-          val eNode = item.get(label0).asInstanceOf[ETreeNode]
+        if (item.canGet(label0, COLUMN_PREFUSENODE_CLASS)) {
+          val eNode = item.get(label0).asInstanceOf[PNode]
           eNode.ev.eventString
         } else null
       }
@@ -294,53 +276,49 @@ abstract class TypeBrowser {
       
       object GoalNode extends AbstractPredicate {
         override def getBoolean(t: Tuple): Boolean = {
-          if (t.canGet(label, TypeBrowserFrame.COLUMN_CLASS) && t.isInstanceOf[NodeItem]) {
+          if (t.canGet(label, COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[ETreeNode]
+            val nodeItem = t.get(label).asInstanceOf[PNode]
             nodeItem.goal && t.asInstanceOf[NodeItem].isVisible
           } else false
         }
       }
       
+      // Find respective visual NodeItem for the prefuse normal Node
       class FirstNodeFallback(search: Node) extends AbstractPredicate {
         override def getBoolean(t: Tuple): Boolean = {
-          if (t.canGet(label, TypeBrowserFrame.COLUMN_CLASS) && t.isInstanceOf[NodeItem]) {
+          if (t.canGet(label, COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[ETreeNode]
+            val nodeItem = t.get(label).asInstanceOf[PNode]
             nodeItem.pfuseNode == search
           } else false
         }
       } 
       
+      // Anchor the layout root at the first error
+      // or show the synthetic root
+      // TODO expand to more errors
       override def getLayoutRoot(): NodeItem = {
-        // use initialGoals information
-        // for now just one and go upwards
         val allVisibleGoals = m_vis.items(visGroup, GoalNode)
         val allPNodeVisibleGoals = allVisibleGoals.map(t => {
           val t0 = t.asInstanceOf[NodeItem]
-          (t0.get(label).asInstanceOf[ETreeNode].pfuseNode, t0)
+          (t0.get(label).asInstanceOf[PNode].pfuseNode, t0)
         }).toMap
         
         initialGoals match {
           case head::_ =>
             // Need to find respective VisualItem for node so that
-            // we can match prefuse node stored in ETreeNode
+            // we can match prefuse node stored in PrefuseEventNode
             var eNode = head 
-            while (eNode.parentENode.isDefined && allPNodeVisibleGoals.contains(eNode.parentENode.get.pfuseNode)) {
-              eNode = eNode.parentENode.get
+            while (eNode.parent.isDefined && allPNodeVisibleGoals.contains(eNode.parent.get.pfuseNode)) {
+              eNode = eNode.parent.get
             }
             if (!allPNodeVisibleGoals.contains(eNode.pfuseNode)) {
-              // we are dealing with a first node
+              // we are dealing with a first (root) node
               // so try to find it manually
               val first = m_vis.items(wholeTree, new FirstNodeFallback(head.pfuseNode))
-              if (first.hasNext)
-                first.next.asInstanceOf[NodeItem]
-              else {
-                //println("FALLBACK")
-                super.getLayoutRoot()
-              }
+              if (first.hasNext) first.next.asInstanceOf[NodeItem] else super.getLayoutRoot()
             } else {
-              
               allPNodeVisibleGoals(eNode.pfuseNode) // get corresponding visualitem
             }
           case _ =>
@@ -351,12 +329,10 @@ abstract class TypeBrowser {
       override def getGraph(): Graph = {
         m_vis.getGroup(visGroup).asInstanceOf[Graph]
       }
-      
-      
     }
 
 
-    // Some predefined actions (direct translation from the example)
+    // Some predefined actions (direct translation from the prefuse examples)
     class OrientAction(var orientation: Int) extends AbstractAction {
       def actionPerformed(evt: ActionEvent) {
         setOrientation(orientation)
@@ -413,7 +389,6 @@ abstract class TypeBrowser {
       var activeTooltip: PrefuseTooltip = _
     
       override def itemExited(item: VisualItem, e: MouseEvent) {
-        
         if(activeTooltip != null)
           activeTooltip.stopShowing()
       }
@@ -436,7 +411,7 @@ abstract class TypeBrowser {
       
       protected def showNodeTooltip(item: VisualItem, e: MouseEvent) {
         val v = item.getVisualization()
-        val eNode = item.get(label).asInstanceOf[ETreeNode]
+        val eNode = item.get(label).asInstanceOf[PNode]
         
         showTooltip(new NodeTooltip("Some name",
           eNode.fullInfo,
@@ -465,18 +440,23 @@ abstract class TypeBrowser {
     class NodeColorAction(group: String) extends ColorAction(group, VisualItem.FILLCOLOR) {
       import NodeColorAction._
       private def retrieveEvent(item: VisualItem): Option[Event] =
-        if (item.canGet(label, TypeBrowserFrame.COLUMN_CLASS))
-          Some(item.get(label).asInstanceOf[ETreeNode].ev)
+        if (item.canGet(label, COLUMN_PREFUSENODE_CLASS))
+          Some(item.get(label).asInstanceOf[PNode].ev)
         else
           None
 
-      // TODO: events should have appropriate colors
+      // TODO: Refactor that
       override def getColor(item: VisualItem): Int = {
         val event = retrieveEvent(item)
         event match {
+          // TODO
           case Some(ev: HardErrorEvent) =>
             ColorLib.rgba(255, 0, 0, 150)
+          case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Hard =>
+            ColorLib.rgba(255, 0, 0, 150)
           case Some(ev: SoftErrorEvent) =>
+            ColorLib.rgba(255, 0, 0, 50)
+          case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Soft =>
             ColorLib.rgba(255, 0, 0, 50)
           case _ =>
             // search currently not supported
@@ -518,7 +498,9 @@ abstract class TypeBrowser {
 
 
 
-    class FocusOnItems(visGroup: String, predicate: Predicate) extends Action{
+    // Add all NodeItems/EdgeItems for which predicate resolves true 
+    // to the visible section of the graph
+    class VisualizeNodesWithPred(visGroup: String, predicate: Predicate) extends Action{
       def run(frac: Double) {
         import scala.collection.JavaConversions._
         val items = m_vis.items(predicate).map(_.asInstanceOf[Tuple])
@@ -531,25 +513,54 @@ abstract class TypeBrowser {
       }
     }
     
-    // Remove given nodes from toRemoveGoals group 
+    // Add all nodes from groupName to the visible elements of the graph
+    // Similar to FocusOnItems but doesn't take a predicate
+    class VisualizeNodes(visGroup: String, groupName: String) extends Action {
+      def run(frac: Double) {
+        val target = m_vis.getFocusGroup(visGroup)
+        val ts = m_vis.getFocusGroup(groupName)
+        ts.tuples().foreach(n => target.addTuple(n.asInstanceOf[Tuple]))
+      }
+    }
+    
+    // Add all intermediate nodes that lead to the already visible nodes
+    // to the nonGoalGroup (i.e. not goals, but still visible)
+    class VisualizeFixedNodes(fixedGroup: String, nonGoalGroup: String)
+      extends VisualizeNodes(fixedGroup, "") {
+      override def run(frac: Double) {
+        val target = m_vis.getFocusGroup(fixedGroup)
+        target.tuples().foreach(n =>
+          addLinkPath(n.asInstanceOf[NodeItem]))
+      }
+      
+      def addLinkPath(starting: NodeItem) {
+        var n = starting.get(label).asInstanceOf[PNode]
+        val tsNonGoal = m_vis.getFocusGroup(nonGoalGroup)
+        while (!n.goal && n.parent.isDefined) {
+          tsNonGoal.addTuple(n.pfuseNode)
+          n = n.parent.get
+        }
+      }
+    }
+    
+    // Remove all nodes (and outgoing/incoming edges) that are in the toRemoveGoals group
     class UnfocusOnItems(visGroup: String, toRemoveGoals: String) extends Action{
      
       class ToRemovePredicate(toRemoveGroup: String) extends AbstractPredicate {
-        override def getBoolean(t: Tuple): Boolean = {
         val ts = m_vis.getFocusGroup(toRemoveGroup)
-  
-          if (ts != null && t.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
+        
+        override def getBoolean(t: Tuple): Boolean = {
+          if (ts != null && t.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[ETreeNode].pfuseNode
+            val nodeItem = t.get(label).asInstanceOf[PNode].pfuseNode
             ts.containsTuple(nodeItem)
           } else false
         }
       }
-      
-      private val pred = new ToRemovePredicate(toRemoveGoals)
-      
+
       def run(frac: Double) {
         import scala.collection.JavaConversions._
+        val pred = new ToRemovePredicate(toRemoveGoals)
         val items = m_vis.items(pred).map(_.asInstanceOf[Tuple])
         val ts = m_vis.getFocusGroup(visGroup)
         if (ts != null) {
@@ -567,35 +578,9 @@ abstract class TypeBrowser {
       }
     }
     
+
     
-    // Add all nodes from groupName to the vis
-    class VisualizeNodes(visGroup: String, groupName: String) extends Action {
-      def run(frac: Double) {
-        val target = m_vis.getFocusGroup(visGroup)
-        val ts = m_vis.getFocusGroup(groupName)
-        ts.tuples().foreach(n => target.addTuple(n.asInstanceOf[Tuple]))
-      }
-    }
-    
-    class VisualizeFixedNodes(fixedGroup: String, nonGoalGroup: String)
-      extends VisualizeNodes(fixedGroup, "") {
-      override def run(frac: Double) {
-        val target = m_vis.getFocusGroup(fixedGroup)
-        target.tuples().foreach(n =>
-          addLinkPath(n.asInstanceOf[NodeItem]))
-      }
-      
-      def addLinkPath(starting: NodeItem) {
-        var n = starting.get(label).asInstanceOf[ETreeNode]
-        val tsNonGoal = m_vis.getFocusGroup(nonGoalGroup)
-        while (!n.goal && n.parentENode.isDefined) {
-          tsNonGoal.addTuple(n.pfuseNode)
-          n = n.parentENode.get
-        }
-      }
-    }
-    
-    // need to show all the goals, all edges between them, 
+    // Need to show all the goals, all edges between them, 
     // as well as immediate (1-distance) subgoals of each goal
     class ShowAllGoalsAndEdges(visGroup: String, clickedNode: String) extends Action {
       
@@ -604,6 +589,9 @@ abstract class TypeBrowser {
         val ts = m_vis.getFocusGroup(visGroup)
         
         if (ts.getTupleCount() == 0) {
+          // in case of no visible nodes available
+          // display only the synthetic root
+          // add it to clickable nodes (for zooming purposes etc).
           val root = treeLayout.getLayoutRoot()
           ts.addTuple(root)
           val clickedTs = m_vis.getFocusGroup(clickedNode)
@@ -627,7 +615,7 @@ abstract class TypeBrowser {
                   // neigbors should be added to separate group
                 })
               // If this is not a goal, then expand all the incoming edges as well
-              val eNode = item0.get(label).asInstanceOf[ETreeNode]
+              val eNode = item0.get(label).asInstanceOf[PNode]
               if (!eNode.goal)
                 item0.inEdges().foreach(edge =>
                   PrefuseLib.updateVisible(edge.asInstanceOf[VisualItem], true)
@@ -635,169 +623,34 @@ abstract class TypeBrowser {
             case _ =>
           }
         }
-        
-
-        
-      }
-    }
-
-    // Set focus window on errors first
-    class InitialFocusOnErrors(group: String) extends Action {
-      private val margin = 50
-      private val duration = 100
- 
-      def run(frac: Double) {
-        if (m_vis.getDisplayCount != 1)
-          println("[Warning] Multiple displays detected! " + m_vis.getDisplayCount)
-
-        val ts = m_vis.getFocusGroup(group).tuples
-        if (!ts.isEmpty) {
-          // Adapt bounds
-          val bounds = m_vis.getBounds(group)
-          val display = m_vis.getDisplay(0)
-          //println("Current bounds " + bounds)
-//          val tsMap: Iterator[VisualI] = ts.map(_.asInstanceOf[VisualItem]).t
-          //println(ts.map(_.toString).mkString(","))
-          GraphicsLib.expand(bounds, margin + (1/display.getScale))
-          //println("New Bounds: " + bounds)
-          val boundsss = ts.map(_.asInstanceOf[VisualItem]).toList
-          //println("Different boundss: " + boundsss)
-          val cx = bounds.getCenterX
-          val cy = bounds.getCenterY
-          val center = new Point2D.Double(cx,cy)
-          //DisplayLib.fitViewToBounds(display, bounds, new Point2D.Double(cx,cy), 0)
-          // TODO: this should properly calculate the bounds, but for some reason
-          // it fails
-          display.panToAbs(center)
-          display.zoomAbs(center, calculateScale(display, center, bounds))
-        }
-      }
-      
-      //TODO: fix properly 
-      private def calculateScale(display: Display, center: Point2D, bounds: Rectangle2D): Double = {
-        val w = display.getWidth()
-        val h = display.getHeight()
-        
-        // compute half-widths of final bounding box around
-        // the desired center point
-        val wb = Math.max(center.getX-bounds.getMinX(),
-                             bounds.getMaxX()-center.getX)
-        val hb = Math.max(center.getY-bounds.getMinY(),
-                             bounds.getMaxY()-center.getY)
-        
-        // compute scale factor
-        //  - figure out if z or y dimension takes priority
-        //  - then balance against the current scale factor
-        //println("Half widths: " + wb + " " + hb + " for " + bounds)
-        val scale = Math.min(w/(2*wb),h/(2*hb)) / display.getScale()
-        //println("display width " + w + " " + h)
-        //println("scala::: " + display.getScale + " " + scale)
-        //println("True size: " + treeViewSelf.getSize())
-        
-        //scale
-        1
-      }
-
-    }
-    
-    
-
-    
-    class GoalPathPredicate(openGoalsGroup: String, nonGoalsGroup: String) extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean = {
-        
-
-
-        if (t.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-          val ts = m_vis.getFocusGroup(openGoalsGroup)
-          // because we added nodeItem to the list, not visualItem which 't' is
-          val nodeItem = t.get(label).asInstanceOf[ETreeNode].pfuseNode
-          val res0 = ts != null && ts.containsTuple(nodeItem)
-          val res = if (res0) {
-//            println("adding goal: " + nodeItem)
-            res0
-          } else {
-            // try non goal group
-            val ts2 = m_vis.getFocusGroup(nonGoalsGroup)
-            val res1 = ts2 != null && ts2.containsTuple(nodeItem)
-//            if (res1)
-//              println("adding non-goal : " + nodeItem)
-            res1
-          }
-          res
-        } else false
       }
     }
     
-
-
-
-    object ErrorPredicate extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean = {
-        if (t.isInstanceOf[NodeItem]) {
-          val e = t.asInstanceOf[NodeItem]
-          if (e.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-            val ev = e.get(label).asInstanceOf[ETreeNode].ev
-            // Automatic expand for all errors
-            // TODO: make this configurable
-            ev.isInstanceOf[HardErrorEvent] || ev.isInstanceOf[SoftErrorEvent]
-          } else false
-        } else false
-      }
-    }
-
-    class FixedNodesPredicate(fixedGroup: String) extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean = {
-        val ts = m_vis.getFocusGroup(fixedGroup)
-        ts != null && ts.containsTuple(t)
-      }
-    }
-
-    object InformationEdgePredicate extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean =
-        if (t.isInstanceOf[Edge]) {
-          val e = t.asInstanceOf[Edge]
-          if (e.getTargetNode.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-            val n = e.getTargetNode.get(label).asInstanceOf[ETreeNode]
-            !n.ev.blockStart
-          } else false
-        } else false
-    }
-    
-    // Predicate for checking if an edge is between the two goals
-    class MainGoalPathEdgePredicate(goalsGroup:String) extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean =
-        if (t.isInstanceOf[EdgeItem]) {
-          val e = t.asInstanceOf[EdgeItem]
-          if (e.getSourceNode.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-            val tNode = e.getTargetNode.get(label).asInstanceOf[ETreeNode]
-            val sNode = e.getSourceNode.get(label).asInstanceOf[ETreeNode]
-            tNode.goal && sNode.goal
-            //val vis = e.getVisualization()
-            //val ts = vis.getFocusGroup(goalsGroup)
-            
-            //ts.containsTuple(tNode.pfuseNode) && ts.containsTuple(sNode.pfuseNode)
-          } else false
-        } else false
-    }
-
     // Collapse the whole tree initially so that only (hard) errors are visible
-    class InitialCollapseOnGoal(group: String, openGoalsGroup: String, clickedNode: String)
+    class CollapseTree(group: String, openGoalsGroup: String, clickedNode: String)
       extends Action {
       
       val toExpand = new ListBuffer[NodeItem]()
       
       object InitialGoalPredicate extends AbstractPredicate {
-        private def isInitialGoal(node: ETreeNode) =
-          node.ev.isInstanceOf[HardErrorEvent] && initialGoals.contains(node)
+        // TODO: snd is redundant?
+        private def isInitialGoal(node: PNode) =
+          if (initialGoals.contains(node)) {
+            node.ev match {
+              case _: HardErrorEvent => true
+              case e: ContextTypeError if e.errType == ErrorLevel.Hard => true
+              case _ => true
+            }
+          } else false
         
         override def getBoolean(t: Tuple): Boolean = {
           if (t.isInstanceOf[NodeItem]) {
             val e = t.asInstanceOf[NodeItem]
-            if (e.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-              val eNode = e.get(label).asInstanceOf[ETreeNode]
+            if (e.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+              val eNode = e.get(label).asInstanceOf[PNode]
   
-              // this will need to be adapted
+              // Apart from expanding the error node
+              // expand also its siblings
               if (!isInitialGoal(eNode)) {
                 if (eNode.evs.exists(isInitialGoal))
                   toExpand.add(t.asInstanceOf[NodeItem])
@@ -808,16 +661,16 @@ abstract class TypeBrowser {
         }
       }
       
-      private def setGoalPath(eNode: Option[ETreeNode]) {
+      private def setGoalPath(eNode: Option[PNode]) {
         eNode match {
           case Some(n) if !n.goal =>
             n.goal = true
-            setGoalPath(n.parentENode)
+            setGoalPath(n.parent)
           case _ =>
         }   
       }
       
-      // TODO: design more clever algorithm 
+      // TODO: better algorithm 
       private def findLeastCommonSpanningTree(nodes: List[Node]): List[Node] = {
         assert(nodes.length > 1)
         val idx: HashMap[Node, Int] = HashMap.empty
@@ -838,7 +691,6 @@ abstract class TypeBrowser {
             start0 = start0.getParent()
           }
           assert(idx.contains(start0))
-          // increase the counter 
           idx(start0) = idx(start0) + 1
         })
         
@@ -852,14 +704,12 @@ abstract class TypeBrowser {
         m_vis.getFocusGroup(openGoalsGroup).tuples().toList.map(_.asInstanceOf[Node])
       }
       
-      lazy val minimumVisibleNodes: List[Node] = {
+      lazy val minimumVisibleNodes: List[Node] =
         findLeastCommonSpanningTree(allInitialGoals)
-      }
 
       def run(frac: Double) {
         val items = m_vis.items(group)
         val ts = m_vis.getFocusGroup(openGoalsGroup)
-        //val font = new Font("monospaced", Font.PLAIN, 14)
         for (item <- items) {
           val item0 = item.asInstanceOf[VisualItem]
 //          if (item0.isInstanceOf[NodeItem])
@@ -874,8 +724,8 @@ abstract class TypeBrowser {
             val panTs = m_vis.getFocusGroup(clickedNode)
             //val item0 = item.asInstanceOf[Tuple]
             panTs.addTuple(item0)
-            if (item0.canGet(label, TypeBrowserFrame.COLUMN_CLASS)) {
-              val eNode = item0.get(label).asInstanceOf[ETreeNode]
+            if (item0.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+              val eNode = item0.get(label).asInstanceOf[PNode]
               //eNode.goal = true // cache
               // set all parents up to the root with goal path
               setGoalPath(Some(eNode))
@@ -896,15 +746,69 @@ abstract class TypeBrowser {
         toExpand.foreach(nItem => {
           PrefuseLib.updateVisible(nItem, true)
           // add to goals group
-          ts.addTuple(nItem.get(label).asInstanceOf[ETreeNode].pfuseNode)
+          ts.addTuple(nItem.get(label).asInstanceOf[PNode].pfuseNode)
         })
       }
     }
+    
+    // ------------------------
+    // Some utility predicates
+    // ------------------------
+    // TODO refactor that part?
+        
+    // Predicate returning true for goal and nongoal groups
+    // TODO place in specific action?
+    class GoalPathPredicate(openGoalsGroup: String, nonGoalsGroup: String) extends AbstractPredicate {
+      override def getBoolean(t: Tuple): Boolean = {
+        if (t.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+          val ts = m_vis.getFocusGroup(openGoalsGroup)
+          // because we added nodeItem to the list, not visualItem which 't' is
+          val nodeItem = t.get(label).asInstanceOf[PNode].pfuseNode
+          val res0 = ts != null && ts.containsTuple(nodeItem)
+          if (res0)
+            true
+          else {
+            // try non goal group
+            val ts2 = m_vis.getFocusGroup(nonGoalsGroup)
+            ts2 != null && ts2.containsTuple(nodeItem)
+          }
+        } else false
+      }
+    }
+
+    // TODO needed?
+    object InformationEdgePredicate extends AbstractPredicate {
+      override def getBoolean(t: Tuple): Boolean =
+        if (t.isInstanceOf[Edge]) {
+          val e = t.asInstanceOf[Edge]
+          if (e.getTargetNode.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+            val n = e.getTargetNode.get(label).asInstanceOf[PNode]
+            !n.ev.blockStart
+          } else false
+        } else false
+    }
+    
+    // Predicate for checking if an edge is between the two goals
+    class MainGoalPathEdgePredicate(goalsGroup:String) extends AbstractPredicate {
+      override def getBoolean(t: Tuple): Boolean =
+        if (t.isInstanceOf[EdgeItem]) {
+          val e = t.asInstanceOf[EdgeItem]
+          if (e.getSourceNode.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+            val tNode = e.getTargetNode.get(label).asInstanceOf[PNode]
+            val sNode = e.getSourceNode.get(label).asInstanceOf[PNode]
+            tNode.goal && sNode.goal
+            //val vis = e.getVisualization()
+            //val ts = vis.getFocusGroup(goalsGroup)
+            
+            //ts.containsTuple(tNode.pfuseNode) && ts.containsTuple(sNode.pfuseNode)
+          } else false
+        } else false
+    }
   }
 
-  class TypeBrowserFrame(t: Tree, srcs: List[String], l: String, goals: List[ETreeNode]) {
+  class TypeDebuggerFrame(t: Tree, srcs: List[String], label: String, goals: List[PNode]) {
 
-    import TypeBrowserFrame._
+    import TypeDebuggerFrame._
     val frame = new JFrame("Type Debugger 0.0.4")
     val topPane = new JPanel(new BorderLayout())
 
@@ -912,18 +816,18 @@ abstract class TypeBrowser {
     val treeGeneralViewer = new JTextArea(30, 30)
     val treeHighlighter = treeGeneralViewer.getHighlighter()
     
-    private val cleanupNodesAction = new CleanupAction(TreeView.openGoalNodes,
-                                                       TreeView.nonGoalNodes,
-                                                       TreeView.toRemoveNodes,
-                                                       TreeView.linkGroupNodes)
+    private val cleanupNodesAction = new CleanupAction(TreeDisplay.openGoalNodes,
+                                                       TreeDisplay.nonGoalNodes,
+                                                       TreeDisplay.toRemoveNodes,
+                                                       TreeDisplay.linkGroupNodes)
     
-    val treeView = new TreeView(t, l, goals)
+    val treeView = new TreeDisplay(t, label, goals)
 
     // Displays all info related to the specific event
-    // TODO: we should customize it at this point,
-    // possibly by handling every event here and extracting necessary info
-    // instead of redirecting to Event.eventString
-//    val contextInfoArea = new JTextArea(30, 120) // TODO introduce more interactive widget
+    // TODO: we should customize it at this point, by building necessary
+    // string representation here in the type debugger rather than
+    // redirecting to eventString in the compiler
+    // val contextInfoArea = new JTextArea(30, 120) // TODO introduce more interactive widget
 
     def createFrame(lock: Lock): Unit = {
       lock.acquire // keep the lock until the user closes the window
@@ -937,12 +841,6 @@ abstract class TypeBrowser {
       
       treeView.setBackground(BACKGROUND)
       treeView.setForeground(FOREGROUND)
-
-//      val splitPane =
-//        new JSplitPane(JSplitPane.VERTICAL_SPLIT, topPane, bottomPane)
-//      splitPane.setResizeWeight(0.5)
-
-
  
       // Split right part even further
       val topSplitPane = 
@@ -953,27 +851,10 @@ abstract class TypeBrowser {
  
 
       topPane.add(topSplitPane)
-
-//      bottomPane.add(new JScrollPane(contextInfoArea))
-
-     
-
-//      bottomPane.add(new JScrollPane(textArea), BorderLayout.CENTER)
-//      textArea.setFont(new Font("monospaced", Font.PLAIN, 14))
-//      textArea.setEditable(false)
-
       tabFolder.addTab("Tree", null,
         new JScrollPane(treeGeneralViewer))
-//      val gTree = new TabItem(tabFolder, SWT.NONE)
-//      gTree.setText("Tree")
-//      gTree.setControl(treeTransformedViewerArea)
-
-//      val tTree = new TabItem(tabFolder, SWT.NONE)
       tabFolder.addTab("Transformed tree", null,
         new JScrollPane(treeTransformedViewer))
-//      tTree.setText("Transformed tree")
-//      tTree.setControl(treeGeneralViewerArea)
-//      tabFolder.setSelection(2) 
 
 
 //      contextInfoArea.setFont(new Font("monospaced", Font.PLAIN, 14))
@@ -983,33 +864,35 @@ abstract class TypeBrowser {
       // Add listeners
       treeView.addControlListener(new ControlAdapter() {
         override def itemClicked(item: VisualItem, e: MouseEvent) {
-          if (item.canGet(l, COLUMN_CLASS)) {
-            val node = item.get(l).asInstanceOf[ETreeNode]
+          if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+            val node = item.get(label).asInstanceOf[PNode]
+            if (DEBUG && node.ev != null){
+              println("ITEM CLICKED " + node.ev.getClass + " <= " + node.ev.id)
+              if (node.ev.isInstanceOf[DoneBlock])
+                println("DONE BLOCK: " + node.ev.asInstanceOf[DoneBlock].originEvent)
+            }
+            if (DEBUG && node.ev.isInstanceOf[TyperTyped] && node.ev != null) {
+              println("[TYPER-TYPED] : " + node.ev.asInstanceOf[TyperTyped].expl + " " + node.ev.asInstanceOf[TyperTyped].tree.getClass)
+            }
 //            contextInfoArea.setText(node.fullInfo)
-//            println("Item: " + item)
           }
         }
 
         override def itemEntered(item: VisualItem, e: MouseEvent) {
-          if (item.canGet(l, COLUMN_CLASS)) {
-            val node = item.get(l).asInstanceOf[ETreeNode]
+          if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+            val node = item.get(label).asInstanceOf[PNode]
             node.ev match {
 	            case e:TreeEvent =>
-//                println("Enter item")
                 val prettyTree = asString(e.tree)
                 treeTransformedViewer.setText(prettyTree)
 
-                // Color the specific part of the general tree
-//                val pos0:Position = e.tree.pos
-//                val (s,end) = if (pos0.isRange) (pos0.start, pos0.end) else (0,0)
-
-//                treeGeneralViewer.setText(pos0 + " range: " + s + " - " + end)
-//               println("hightlight in : " + e.tree.pos)
-                // Fix highlighting
-                
+                //if (DEBUG)
+                //  println("[hightlight Tree] " + e.tree.pos)
                 highlight(e.tree.pos, TreeMainHighlighter)
 	            case e: SymEvent =>
-	              // ensure not TreeEvent as well?
+	              
+	              //if (DEBUG)
+  	            //  println("[hightlight Sym] " + e.sym.pos)
 	              highlight(e.sym.pos, TreeMainHighlighter)
               case _ =>
             }
@@ -1025,28 +908,25 @@ abstract class TypeBrowser {
         }
         override def itemExited(item: VisualItem, e: MouseEvent) {
           treeTransformedViewer.setText(null)
-//          println("Item : " + item + " [out]")
           clearHighlight()
         }
       })
+      
       //treeView.addControlListener(new FocusOnNode(TreeView.fixedNodes))
-      treeView.addControlListener(new AddGoal(TreeView.openGoalNodes,
-                                              TreeView.nonGoalNodes,
-                                              TreeView.clickedNode))
-      treeView.addControlListener(new LinkNode(TreeView.linkGroupNodes,
-                                               TreeView.treeNodes,
-                                               TreeView.nonGoalNodes,
-                                               TreeView.openGoalNodes))
-      treeView.addControlListener(new FixedNode(TreeView.fixedNodes,
-                                                TreeView.nonGoalNodes,
-                                                TreeView.toRemoveNodes))
+      treeView.addControlListener(new AddGoal(TreeDisplay.openGoalNodes,
+                                              TreeDisplay.nonGoalNodes,
+                                              TreeDisplay.clickedNode))
+      treeView.addControlListener(new LinkNode(TreeDisplay.linkGroupNodes,
+                                               TreeDisplay.treeNodes,
+                                               TreeDisplay.nonGoalNodes,
+                                               TreeDisplay.openGoalNodes))
+      treeView.addControlListener(new FixedNode(TreeDisplay.fixedNodes,
+                                                TreeDisplay.nonGoalNodes,
+                                                TreeDisplay.toRemoveNodes))
 
-
-      //splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topSplitPane, bottomPane)
       if (srcs.isEmpty)
         println("[Warning] No files specified for debugging.")
       loadFile(srcs.head)
-//      frame.getContentPane().add(splitPane)
       frame.getContentPane().add(topPane)
       frame.pack()
       frame.setVisible(true)
@@ -1058,11 +938,13 @@ abstract class TypeBrowser {
         treeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
       }
     }
+    
     private def clearHighlight() {
         treeHighlighter.getHighlights.foreach(treeHighlighter.removeHighlight(_))
     }
+    
     private def loadFile(fName: String) {
-      // at the moment we only ensure that it is only one
+      // at the moment we only ensure that there is only one
       val f = new File(fName)
       val src = if (f.exists) {
        io.File(fName).slurp 
@@ -1070,46 +952,41 @@ abstract class TypeBrowser {
       treeGeneralViewer.setText(src)
     }
 
-    
-    
     object TreeMainHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.red)
     object TreeReferenceHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.green)
     
+    // Handle action on the node of the graph.
+    // Expand the node that was just clicked. Also cleanup all the intermediate nodes leading to it.
     class FixedNode(fixedGroup: String, nonGoalGroup: String, toRemoveGroup: String) extends ControlAdapter {
       override def itemClicked(item: VisualItem, e: MouseEvent) {
-        if (!e.isControlDown() || !e.isShiftDown())
+        if (!e.isControlDown() || !e.isShiftDown() || !item.isInstanceOf[NodeItem])
           return
-        //
-          
-        if (!item.isInstanceOf[NodeItem])
-          return
-          
         val vis = item.getVisualization
-        // Fixed group always contains nodeitem
+        // Fixed group always contains NodeItems
         val fGroup = vis.getFocusGroup(fixedGroup)
         if (fGroup.containsTuple(item)) {
           fGroup.removeTuple(item)
-          //fGroup.removeTuple(item.get(l).asInstanceOf[ETreeNode].pfuseNode)
-          val tsRemove = vis.getFocusGroup(toRemoveGroup)
-          tsRemove.addTuple(item.get(l).asInstanceOf[ETreeNode].pfuseNode)
+          (vis.getFocusGroup(toRemoveGroup)).addTuple(item.get(label).asInstanceOf[PNode].pfuseNode)
           cleanupLinkPath(item.asInstanceOf[NodeItem], vis)
         } else
           fGroup.addTuple(item)
-        
       }
       
       def cleanupLinkPath(starting: NodeItem, vis: Visualization) {
-        var n = starting.get(l).asInstanceOf[ETreeNode]
+        var n = starting.get(label).asInstanceOf[PNode]
         val tsNonGoal = vis.getFocusGroup(nonGoalGroup)
         val tsRemove = vis.getFocusGroup(toRemoveGroup)
-        while (!n.goal && n.parentENode.isDefined) {
+        while (!n.goal && n.parent.isDefined) {
           tsNonGoal.removeTuple(n.pfuseNode)
           tsRemove.addTuple(n.pfuseNode)
-          n = n.parentENode.get
+          n = n.parent.get
         }
       }
     }
 
+    // Find node which is somehow linked (tree or symbol reference) to the
+    // one that was just clicked (with Ctrl).
+    // Use case: clicking on a node to see at what point it's type was set.
     class LinkNode(linkGroup: String, nodeGroup: String,
       nonGoalGroup: String, goalGroup: String)
       extends ControlAdapter {
@@ -1118,8 +995,8 @@ abstract class TypeBrowser {
         override def getBoolean(t: Tuple): Boolean = {
           if (t.isInstanceOf[NodeItem]) {
             val e = t.asInstanceOf[NodeItem]
-            if (e.canGet(l, TypeBrowserFrame.COLUMN_CLASS)) {
-              val ev = e.get(l).asInstanceOf[ETreeNode].ev
+            if (e.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+              val ev = e.get(label).asInstanceOf[PNode].ev
               ev != null && ev.id == id
             } else false
           } else false
@@ -1127,41 +1004,38 @@ abstract class TypeBrowser {
       }
       
       def addLinkPath(starting: NodeItem, vis: Visualization) {
-        var n = starting.get(l).asInstanceOf[ETreeNode]
+        var n = starting.get(label).asInstanceOf[PNode]
         val tsNonGoal = vis.getFocusGroup(nonGoalGroup)
-        while (!n.goal && n.parentENode.isDefined) {
+        while (!n.goal && n.parent.isDefined) {
           tsNonGoal.addTuple(n.pfuseNode)
-          n = n.parentENode.get
+          n = n.parent.get
         }
         
         if (n.goal) {
           val tsGoal = vis.getFocusGroup(goalGroup)
           while (!tsGoal.containsTuple(n.pfuseNode)) {
             tsGoal.addTuple(n.pfuseNode)
-            n.evs.find(_.goal) match {
-              case Some(n0) => n = n0
-              case _ => // not possible to have infinite loop
-            }
+            // better check 
+            n = n.evs.find(_.goal).get
           }
         }
       }
       
       override def itemClicked(item: VisualItem, e: MouseEvent) {
-        if (!e.isControlDown() || e.isShiftDown())
+        if (!e.isControlDown() || e.isShiftDown() || !item.isInstanceOf[NodeItem])
           return
 
         val vis = item.getVisualization
         // or maybe just add to non-goal group?
         
-        
-        // TODO can we click on edge for example?
         val node = item.asInstanceOf[NodeItem]
-        val eNode = node.get(l).asInstanceOf[ETreeNode]
+        val eNode = node.get(label).asInstanceOf[PNode]
         eNode.ev match {
           case e@IdentTyper(tree0) =>
-            //println("Ident typer: " + tree0.symbol)
+            if (DEBUG)
+              println("[Link] IdentTyper event " + tree0.symbol)
             val refId = tree0.symbol.previousHistoryEvent(e.id)
-            if (refId != noEventId) {
+            if (refId != NoEvent.id) {
                 // Find corresponding event and node in the tree
                 //println("Found info in the history: " + refId)
                 val ts2 = vis.items(nodeGroup, new FindNode(refId))
@@ -1183,6 +1057,8 @@ abstract class TypeBrowser {
     }
     
     
+    // 'Stick' node that was clicked with Shift & Ctrl.
+    // It will be visible even if it is not on a path to a goal(errors etc).
     class AddGoal(goalGroup: String, nonGoalGroup: String, clickedNode: String)
       extends ControlAdapter {
       override def itemClicked(item: VisualItem, e: MouseEvent) {
@@ -1194,60 +1070,54 @@ abstract class TypeBrowser {
         val ts1 = vis.getFocusGroup(goalGroup)
         val ts2 = vis.getFocusGroup(nonGoalGroup)
         val clicked = vis.getFocusGroup(clickedNode)
-        
+
         cleanupNodesAction.clean(item)
         clicked.clear()
         clicked.addTuple(item)
-          
+
         // identify parent goal
         val node = item.asInstanceOf[NodeItem]
-        val eNode = node.get(l).asInstanceOf[ETreeNode]
+        val eNode = node.get(label).asInstanceOf[PNode]
         
         // is any of its children a goal
         val hasGoalChild = node.outNeighbors().exists(n =>
          {
-           val node0 = n.asInstanceOf[NodeItem].get(l).asInstanceOf[ETreeNode]
-           node0.goal // it has to be already expanded, so this has to valid
+           val node0 = n.asInstanceOf[NodeItem].get(label).asInstanceOf[PNode]
+           node0.goal // it has to be already expanded, so this has to be valid
          }) || eNode.goal
         if (hasGoalChild) {
-          // we are dealing we a goal
-          // expand its parent
-          eNode.parentENode match {
+          // we are dealing with a goal or its parent
+          eNode.parent match {
             case Some(parent) =>
+              // expand its parent
               parent.goal = true
               ts1.addTuple(parent.pfuseNode.asInstanceOf[Tuple])
             case None =>
           }
         } else {
-          //println("Expand non-goal: " + item)
           // we are dealing we a non-direct goal
           // expand its children which are non-goals
           var eNode0 = eNode
           // goals are all in, so we are fine 
-          while (!eNode0.goal && eNode0.parentENode.isDefined) {
+          while (!eNode0.goal && eNode0.parent.isDefined) {
             ts2.addTuple(eNode0.pfuseNode.asInstanceOf[Tuple])
-            eNode0 = eNode0.parentENode.get
+            eNode0 = eNode0.parent.get
           }
         }
-        
-      //  cleanupNodesAction.clean(item)
       }
     }
     
-    class CleanupAction(goalsGroup: String, nonGoalGroup: String,
+    class CleanupAction(goalsGroup: String, nonGoalsGroup: String,
                         removeGroup: String, linkGroup: String) {
       def clean(item: VisualItem) {
         // should do the check for l ?
-        if (!item.canGet(l, COLUMN_CLASS))
+        if (!item.canGet(label, COLUMN_PREFUSENODE_CLASS))
           return
-        var eNode = item.get(l).asInstanceOf[ETreeNode]
+
+        var eNode = item.get(label).asInstanceOf[PNode]
         val vis = item.getVisualization
-        val ts1 = vis.getFocusGroup(goalsGroup)
-        val ts2 = vis.getFocusGroup(nonGoalGroup)
-        val ts3 = vis.getFocusGroup(linkGroup)
-        
-        // Nodes to remove from the display
-        val tsRemove = vis.getFocusGroup(removeGroup)
+        val List(ts1, ts2, ts3, tsRemove) =
+          List(goalsGroup, nonGoalsGroup, linkGroup, removeGroup).map(vis.getFocusGroup(_))
         
         // Remove all the link nodes
         ts3.tuples().foreach(n => tsRemove.addTuple(n.asInstanceOf[Tuple]))
@@ -1255,15 +1125,14 @@ abstract class TypeBrowser {
         
         if (eNode.goal) {
           // Collapse all the subgoals above
-          // Currently disable// messases view when dealing
+          // Currently disable messages view when dealing
           // with multiple errors (least spanning tree problem)
-          // TODO: re-enable
-          if (eNode.parentENode.isDefined) {
+          if (eNode.parent.isDefined) {
             // cached minimal spanning tree
             val cached = treeView.initialNodes.minimumVisibleNodes
-            var eNode0 = eNode.parentENode.get
-            while (eNode0.parentENode.isDefined && ts1.containsTuple(eNode0.parentENode.get.pfuseNode)) {            
-              eNode0 = eNode0.parentENode.get
+            var eNode0 = eNode.parent.get
+            while (eNode0.parent.isDefined && ts1.containsTuple(eNode0.parent.get.pfuseNode)) {            
+              eNode0 = eNode0.parent.get
               if (!cached.contains(eNode0.pfuseNode)) {
                 ts1.removeTuple(eNode0.pfuseNode)
                 tsRemove.addTuple(eNode0.pfuseNode)
@@ -1271,7 +1140,7 @@ abstract class TypeBrowser {
             }
           }
           
-          // also collapse the non-goals?
+          // also collapse non-goals
           ts2.tuples().foreach(t => tsRemove.addTuple(t.asInstanceOf[Tuple]))
           ts2.clear()
         } else {
@@ -1280,17 +1149,16 @@ abstract class TypeBrowser {
           ts2.tuples().foreach(t => tsRemove.addTuple(t.asInstanceOf[Tuple]))
           ts2.clear()
           var eNode0 = eNode
-          while(eNode0.parentENode.isDefined && !ts1.containsTuple(eNode0.parentENode.get.pfuseNode)) {
+          while(eNode0.parent.isDefined && !ts1.containsTuple(eNode0.parent.get.pfuseNode)) {
             ts2.addTuple(eNode0.pfuseNode)
-            eNode0 = eNode0.parentENode.get            
+            eNode0 = eNode0.parent.get            
           }
-          //assert(, "Finished on parent which isn't a goal, fail." + eNode)
         }
       }
     }
     
 
-    
+    // TODO remove?
     class FocusOnNode(group: String, count: Int = 2)
       extends ControlAdapter {
       override def itemClicked(item: VisualItem, e: MouseEvent) {
@@ -1310,403 +1178,25 @@ abstract class TypeBrowser {
     }
   }
 
-  // Wrapper around the compiler that logs all the events
-  // and creates the necessary structure
-  class EventTreeStructureBuilder(srcs: List[String], nodesLabel: String) {
-    var root: ETreeNode = _
-    
-    private val currentNodes = new Stack[(ETreeNode, Int)]()
-    var previousLevel: Int = -1 // Start at root
-    private var focusNodes: List[ETreeNode] = Nil
-
-    // underlying structure necessary to build graph for prefuse library
-    var t: Tree = _
-    var hook: Hook.IndentationHook = _
-
-    initTables()
-    
-    def initialGoals: List[ETreeNode] = focusNodes.reverse
-
-    private def initTables() {
-      t = new Tree()
-      val nodes = t.getNodeTable()
-
-      // Dummy for class, not companion object
-      val dummy = ETreeNode(null, new ListBuffer(), None, null).getClass
-      nodes.addColumn(nodesLabel, dummy)
-    }
-
-    // Create the graphical node and add relationships
-    // Note: we do not always want to define relationship for end-blocks events
-    // This would basically mean not showing them
-    private def createNode(ev: Event, parentENode: ETreeNode): ETreeNode = {
-      import ETreeNode.emptyETreeNode
-      val prefuseNode = if (parentENode == null) {
-        t.addRoot()
-      } else {
-        ev match {
-          case _: TyperTypeSet => 
-            // type was already set for tree event
-            null
-          case _: TyperTyped1Done => // typing event
-            null
-          case _: NamerDone => // bug in compiler? _:NamerDone.type crashes
-            null
-// TODO re-enable
-//          case _: ImplicitSearchDone =>
-//            null
-          case _: TyperTypedDone =>
-            null
-          case _: TyperDone =>
-            null
-//          case _: AdaptDone =>
-//            null
-          case _                  =>
-            t.addChild(parentENode.pfuseNode)
-        }
-      }
-            
-      val parentNodeInfo = if (parentENode == null) None else Some(parentENode)
-      val evNode = emptyETreeNode(ev, parentNodeInfo, prefuseNode)
-      
-      // We want them in order of appearance
-      ev match {
-        case _: HardErrorEvent =>
-          focusNodes = evNode::focusNodes
-        case _ =>
-      }
-      
-      
-      if (prefuseNode != null) prefuseNode.set(nodesLabel, evNode)
-      evNode
-    }
- 
-    // analyze the logged events and build necessary structure for the tree
-    // TODO make ev implicit
-    def reportWithLevel(ev: Event, level: Int) {
-      // This relies on the fact that done blocks are not filtered out
-//      assert(previousLevel <= level, "prev: " + previousLevel + " level " + level)
-      implicit def nodeWithLevel(a: ETreeNode): (ETreeNode, Int) = (a, level)
-      implicit def onlyNode(a: Tuple2[ETreeNode, Int]): ETreeNode = a._1
-      ev match {
-        case _ if previousLevel < level => // instead use level indication
-          val top: ETreeNode = currentNodes.top
-
-          if (top.evs.isEmpty) {
-            top.evs += createNode(ev, top)
-          } else {
-            val last = top.evs.last
-            ev match {
-              case _: DoneBlock =>
-                // Don't push if it is at the same time a done block
-              case _            =>
-                currentNodes.push(last)
-            }
-             
-            //assert(last.evs == Nil, "Last is not Nil: " + last.evs.mkString(",") + " want to add " + ev + " " + ev.getClass)
-            last.evs += createNode(ev, last)
-          }
-          previousLevel = level
-
-        case _: DoneBlock  =>
-          assert(!currentNodes.isEmpty,
-                  "stack of current nodes cannot be empty on end of the block for " + ev + " " + ev.getClass)
-          val top: ETreeNode = currentNodes.pop()
-          ev match {
-            // Events that are not to be shown at all
-//            case _: TyperTypedDone =>
-            case _ =>
-              top.evs += createNode(ev, top)
-          }
-          
-          // perform filtering
-          postFilter(top)
-        
-        case _             =>
-          ev match {
-            // TODO: After we eliminate exceptions in the compiler, this shouldn't be necessary
-            case _: SecondTryTypedApplyStartTyper =>
-              // rewind to TryTypedApplyTyper as we encountered error
-              //val nStack = currentNodes.dropWhile(!_.ev.isInstanceOf[TryTypedApplyEvent])
-
-              // could use dropWhile, but then we have to assign the stack anyway
-              while(!currentNodes.top._1.ev.isInstanceOf[TryTypedApplyEvent])
-                currentNodes.pop()
-                
-
-              val baseLevel = currentNodes.top._2 + 1
-              previousLevel = baseLevel
-              hook.resetIndentation(baseLevel)
-            case _ =>
-              previousLevel = level
-          }
-          // this also handles the case when we just parsed DoneBlock
-
-          assert(!currentNodes.isEmpty)
-          val top: ETreeNode = currentNodes.top
-          top.evs += createNode(ev, top)
-      }
-    }
-    
-    private def postFilter(n: ETreeNode) {
-      val toLeave = n.evs.filter {
-        child =>
-          if (filterOutStructure(child)) {
-            t.removeChild(child.pfuseNode)
-            false
-          } else true
-      }
-      if (n.evs.length != toLeave.length)
-        n.evs = toLeave
-    }
-    
-    private def filterOutStructure(node: ETreeNode): Boolean = {
-      node.ev match {
-        case _: AdaptStart =>
-          node.evs.length == 2 &&
-          node.evs.get(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
-          node.evs.get(1).ev.isInstanceOf[AdaptDone] ||
-          node.evs.length == 1 && node.evs.head.ev.isInstanceOf[AdaptDone] 
-        case _: PolyTpeAdapt =>
-          node.evs.length == 2 &&
-          node.evs.get(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
-          node.evs.get(1).ev.isInstanceOf[AdaptDone]
-        case _: TypeTreeAdapt =>
-          node.evs.length == 2 &&
-          node.evs.get(0).ev.isInstanceOf[ConvertToTypeTreeAdapt] &&
-          node.evs.get(1).ev.isInstanceOf[AdaptDone] ||
-          node.evs.length == 1 && node.evs.head.ev.isInstanceOf[AdaptDone] ||
-          node.evs.length == 1 && node.evs.head.ev.isInstanceOf[TypeTreeAdapt]
-        case _ =>
-          false
-      }
-      // Also with adapt-typeTree
-    }
-
-    def pf(fxn: Event =>? Boolean): Unit = apply(Filter pf fxn)
-    def apply(filt: Filter): Unit = {
-      EV.resetEventsCounter()
-      // reset the intermediate structure
-      root = createNode(null, null)
-      previousLevel = -1
-      currentNodes.push((root, -1))
-      hook = Hook.indentation((level: Int) => {
-        case ev if filt(ev)=> reportWithLevel(ev, level); NoResponse
-      })
-      hook hooking CompileWrapper.cc(srcs)
-    }
-  }
-
   //TODO include settings
-  def buildStructure(srcs: List[String], settings: Settings, fxn: Filter, label: String) : (Tree, List[ETreeNode]) = {
+  def buildStructure(srcs: List[String], settings: Settings, fxn: Filter, label: String) : (Tree, List[PrefuseEventNode]) = {
     val builder = new EventTreeStructureBuilder(srcs, label)
     builder(fxn)
-    (builder.t, builder.initialGoals)
-  }
-  
-  trait VisualPrefuseNode {
-    var goal = false // for caching purposes so that we don't have to constantly
-                     // check neighbors
-  }
+    // provide prefuse-specific structure
+    val prefuseTree = new Tree()
+    val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
+                                                       builder.initialGoals, label)
 
-  // TODO: this will need to be refactored to separate from the main UI
-  case class ETreeNode(val ev: Event, var evs: ListBuffer[ETreeNode], 
-    parentENode: Option[ETreeNode], pfuseNode: Node) extends VisualPrefuseNode {
-    override def toString =
-      if (ev != null) {
-        ev match {
-          case tpchecker:TyperTyped =>
-            val str = tpchecker.expl match {
-              case _: TypeExplicitTreeReturnType =>
-                "Typecheck explicit return type" // take into account Unit
-              case _: TypeDefConstr =>
-                "Typecheck constructor's body"
-              case _: TypeDefBody =>
-                "Typecheck definition's body"
-
-              case _: TypeFunctionApply =>
-                "Typecheck function"
-              case _: TypeArgsApply =>
-                "Typecheck arguments"
-              case _: TypeArgApply =>
-                "Typecheck argument"
-              case _: TypeArgsInOverloadedApply =>
-                "Typecheck arguments \n in overloaded function application"
-              case _: TypeArgInOverloadedApply =>
-                "Typecheck argument without \n expected type \n in overloaded function application"
-              case _: TypeTypeConstructorInNew =>
-                "Typecheck type constructor for new"
-              case _: TypeEtaExpandedTreeWithWildcard =>
-                "Typecheck eta-expanded tree\n without expected type"
-              case _: TypeEtaExpandedTreeWithPt =>
-                "Typecheck eta-expanded tree\n with expected type"
-              case _: TypeFunctionTypeApply =>
-                "Typecheck function \n in type application"
-              case _: TypeHigherKindedTypeApplyWithExpectedKind =>
-                "Typecheck higher-kind type with expected kind"
-              case _: TypeHigherKindedTypeApplyOverloaded =>
-                "Typecheck overloaded polymorphic type"
-              case _: TypeHigherKindedTypeForAppliedType =>
-                "Typecheck higher-kinded type \n in applied type"
-              case _: TypeFunctionParameter =>
-                "Typecheck function parameter"
-              case _: TypeFunBody =>
-                "Typecheck function body"
-              case _: TypeArgsStandalone =>
-                "Typecheck arguments \n without expected type"
-              case _: TypeArgStandalone =>
-                "Typecheck argument without \n expected type"
-              case _: TypeStatementInBlock =>
-                "Typecheck statement"
-              case _: TypeExistentialTypeClause =>
-                "Typecheck existential type-clause"
-              case _: TypeRefinementStatement =>
-                "Typecheck refinement statement"
-              case _: TypeUseCaseStatement =>
-                "Typecheck usecase statement"
-              case _: TypePackageStatement => 
-                "Typecheck package member"
-              case e: TypeTemplateStatement =>
-                val parent = e.templateInfo match {
-                  case ClassTemplate => "class"
-                  case ModuleTemplate => "object"
-                  case TraitTemplate => "trait"
-                }
-                e.stat match {
-                  case DefDef(_, nme.CONSTRUCTOR, _, _, _, _) =>
-                    "Typecheck " + parent + " constructor"
-                  case _ =>
-                    "Typecheck " + parent + " member"
-                }
-              case _: TypeLastStatementInBlock =>
-                //"typecheck-last-statement"
-                "Typecheck last statement"
-              case _: TypeQualifierInSelect =>
-                "Typecheck qualifier"
-              case _: TypeSuperQualifier =>
-                "Typecheck super-dot qualifier"
-              case _: TypeQualifierInSuper =>
-                "Typecheck qualifier in super-dot"
-              case _: TypeValType =>
-                "Typecheck value's type"
-              case _: TypeTypeConstructor =>
-                "Typecheck type constructor"
-              case _: TypeInitialSuperType =>
-                "Typecheck first parent \n as initial supertype"
-              case e: TypeParentMixin =>
-                "Typecheck mixin \n" + anyString(e.mixin)
-              case _: TypeCurrentTraitSuperTpt =>
-                "Typecheck current \nsuper-type"
-              case _: TypeFirstConstructor => 
-                "Typecheck transformed \n primary constructor" // without 'transformed'
-              case etree: TypeClassTypeParameter =>
-                "Typecheck class type-parameter"
-              case _: TypeHigherOrderTypeParameter =>
-                "Typecheck higher-order type-parameter"
-              case tp: TypeDefTypeParameter =>
-                "Typecheck def \n type-parameter " 
-              case tp: TypeDefParameter =>
-                if (tp.param.symbol.hasFlag(symtab.Flags.IMPLICIT)) "Typecheck implicit parameter" else "Typecheck parameter"
-              case _: TypeExplicitTypeAnnotation =>
-                "Typecheck type annotation"
-              case _: TypeAnnotatedExpr =>
-                "Typecheck type-annotated expression"
-              case _: TypeAppliedImplicitView =>
-                "Typecheck application of inferred view\n that adapts qualifier"
-              case _: TypeAdaptedQualifer =>
-                "Typecheck qualifier adapted to member"
-              
-              // Bounds
-              // better explanation for default bounds
-              case lb: TypeLowerBound =>
-                lb.bound match {
-                  case Select(_, tpnme.Nothing) =>
-                    "Typecheck lower bound:Nothing"
-                  case _ =>
-                    "Typecheck lower bound"
-                }
-                
-              case hb: TypeHigherBound =>
-                hb.bound match {
-                  case Select(_, tpnme.Any) =>
-                    "Typecheck higher bound:Any"
-                  case _ =>
-                    "Typecheck higher bound"
-                }
-
-              // Adapt
-              case _: TypeQualifierWithApply =>
-                "Typecheck qualifier with \n 'apply()' member"
-              
-              // Namers
-              case _: MethodReturnType =>
-                "Typecheck return type"
-              case _: MethodReturnTypeAgain =>
-                "Typecheck return type (again)"
-              case _: InferredMethodReturnType =>
-                "Typecheck return type inferred from body"
-              case e: ValExplicitType =>
-                "Typecheck " + (if (e.sym.isMutable) "variable" else "value") + "'s \n type annotation"
-              case _: TypeAbstractTpeBounds =>
-                "Typecheck bounds"
-              case _: TypeValDefBody =>
-                "Typecheck value's body"
-              case _: TypeMethodDefBody =>
-                "Typecheck method's body"
-              
-              // implicits/infer
-              case _: TypeImplicitViewApplication =>
-                "Typecheck application of (found)\n" +
-                "implicit view"
-              case _: FirstTryTypeTreeWithAppliedImplicitArgs =>
-                "Typecheck application of\n" +
-                "(inferred) implicit arguments"
-              case _: FallbackImplicitArgsTypeClean =>
-                "Fallback\n Applying implicit arguments failed.\n" +
-                "Type and adapt original expression without expected type"
-              case _ =>
-                ETreeNode.fmt
-            }
-            (ev formattedString str)
-            // + "-" + tpchecker.tree.getClass.toString
-          case _ =>
-            ev formattedString ETreeNode.fmt
-        }
-      } else "Typecheck full tree" // root
-    def fullInfo =
-      if (ev != null)
-        ev match {
-          case evTyped: TyperTyped =>
-            //TODO This still needs adjustment
-            val tpe = if (evTyped.tree.tpe != null) evTyped.tree.tpe else if (evTyped.tree.symbol != null) evTyped.tree.symbol.tpe else null
-            /*(evTyped formattedString ETreeNode.fmtFull) + "\n" + 
-            "Type of tree: [ " + tpe + " ] expected: [ " + evTyped.pt + " ]" + 
-            "\nDebugging info: " + evTyped.tree.getClass +
-            "\nEvent toString: " + evTyped.eventString*/
-            evTyped.expl + "\n\n" +
-            "Typechecking tree: \n " +
-            evTyped.tree + "\n\n" +
-            "\nExpected type: " + (if (evTyped.pt == WildcardType) "None" else anyString(evTyped.pt)) +
-            (if (tpe != null) "\nType of tree set to: " + anyString(tpe) else "Tree not yet typed")
-            //"\nTree class " + evTyped.tree.getClass + " pos " + evTyped.tree.pos
-
-          case _ => 
-            ev formattedString ETreeNode.fmtFull
-        }
-      else "Typecheck full tree" // root
-  }
-  object ETreeNode {
-    def emptyETreeNode(ev: Event, parentENode: Option[ETreeNode], pfuseNode: Node) =
-      ETreeNode(ev, new ListBuffer(), parentENode, pfuseNode)
-//    val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
-    //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
-    val fmtFull = "%ev"
-    val fmt = "%ln"
+    if (DEBUG)
+      println("[errors] " + initial.map(_.ev))
+    (prefuseTree, initial)
   }
 
-  class SwingBrowser {
+  class SwingViewer {
     def browse(srcs: List[String], settings: Settings) {
       val filtr =  Filter.and(Filter pf {
+        // TODO shouldn't filter out accidentally the events 
+        // that open/close blocks -> this can cause unexpected graphs
         case _: TyperTypeSet                => false
         case _: DebugEvent                  => false
         case _: TyperEvent                  => true
@@ -1719,17 +1209,15 @@ abstract class TypeBrowser {
         case _: ValidateParentClassEvent    => true
         //case _: TyperDone => true
         case _: AdaptEvent                  => true
-        case _: TypingBlockEvent            => true // typecheck block
+        case _: TypingBlockEvent            => true
 //        case _: NewContext                  => true
-        case _: ErrorEvent           => true
+        case _: ErrorEvent                  => true
+        case _: ContextTypeError            => true
       }, EVDSL.ph <= 4)
 
-      val NODESLABEL = "event.node"
-      //val NODESLABEL = "name"
+      val NODESLABEL = "event.node"  // TODO
       val (prefuseTree, goals) = buildStructure(srcs, settings, filtr, NODESLABEL)
-      //val prefuseTree1 = new TreeMLReader().readGraph("/home/hubert/lib/prefuse-beta/data/chi-ontology.xml.gz").asInstanceOf[Tree]
-      val frame = new TypeBrowserFrame(prefuseTree, srcs, NODESLABEL, goals)
-      //val frame = new TypeBrowserFrame(prefuseTree1, List(), NODESLABEL)
+      val frame = new TypeDebuggerFrame(prefuseTree, srcs, NODESLABEL, goals)
       val lock = new Lock()
       frame.createFrame(lock)
      
@@ -1741,23 +1229,19 @@ abstract class TypeBrowser {
 
 
 object TypeDebuggerUI {
-  // currently fix the type of events and phases filtered
-  // only parse
   def main(args: Array[String]) {
     // parse input: sources, cp, d
     val settings = new Settings()
-    settings.Yrangepos.value = true
+    settings.Yrangepos.value = true // redundant?
     settings.stopAfter.value = List("typer")
     
     val command = new CompilerCommand(args.toList, settings)
     val tb = new TypeBrowser {
-      val global = new Global(settings, new ConsoleReporter(settings))
+      val global = new Global(settings, new ConsoleReporter(settings)) with interactive.RangePositions
+      val DEBUG = false
     }
     
-    val b = new tb.SwingBrowser()
-
-    //println("Command files: " + command.files)
-    //println("Settings: " + settings)
+    val b = new tb.SwingViewer()
     b.browse(command.files, settings)
   }
 }

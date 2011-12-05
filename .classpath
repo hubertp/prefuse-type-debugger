@@ -2,5 +2,8 @@
 <classpath>
 	<classpathentry kind="src" path="src/main"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="lib/prefuse-core-0.21.jar"/>
+	<classpathentry kind="lib" path="lib/scala-compiler.jar"/>
+	<classpathentry kind="lib" path="lib/scala-library.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

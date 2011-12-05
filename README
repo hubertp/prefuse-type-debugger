@@ -8,4 +8,17 @@ Dependencies:
  - latest scala with instrumenting support
  - prefuse library
 
-Both available in my repositories.
+Both available in my repositories. You will also need xsbt for convenient compiling of type debugger.
+
+How to start:
+1) build scala with instrumenting support ('events_in_compiler-instrumenting' branch),
+   in all other steps we assume that $SCALA_INSTRUMENTING_HOME to its directory
+2) create 'lib' directory
+3) ln -s $SCALA_INSTRUMENTING_HOME/build/pack/lib/scala-library.jar lib/scala-library.jar
+4) ln -s $SCALA_INSTRUMENTING_HOME/build/pack/lib/scala-compiler.jar lib/scala-compiler.jar
+5) build prefuse and put prefuse-core-x.x.jar into lib
+6) xsbt compile
+7) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
+8) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
+
+atm I am not providing any binaries, that's why all those steps are necessary to just try it.
