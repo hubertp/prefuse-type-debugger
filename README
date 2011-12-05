@@ -3,3 +3,9 @@
 ##########################################################
 Work in progress on Scala Type Debugger using Prefuse for
 convenient UI.
+
+Dependencies:
+ - latest scala with instrumenting support
+ - prefuse library
+
+Both available in my repositories.
