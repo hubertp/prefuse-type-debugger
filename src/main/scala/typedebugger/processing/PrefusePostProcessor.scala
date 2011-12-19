@@ -1,7 +1,7 @@
 package scala.typedebugger
 package processing
 
-import internal.IStructure
+import internal.{ CompilerInfo, IStructure, PrefuseStructure }
 
 import prefuse.data.{ Tree, Node }
 
@@ -11,63 +11,13 @@ import mutable.{ ListBuffer }
 import scala.tools.nsc.symtab
 
 trait PrefusePostProcessors {
-  self: CompilerInfo with IStructure with StringOps =>
+  self: CompilerInfo with IStructure with PrefuseStructure =>
     
   import global.{Tree => STree, _}
   import EV._
-  
-  class PrefuseEventNode(val underlying: EventNodeProcessor.ENode, val parent: Option[PrefuseEventNode], var pfuseNode: Node) {
-    def ev = underlying.ev
-    var evs = ListBuffer[PrefuseEventNode]()
-    var goal = false // for caching purposes so that we don't have to constantly
-                     // check neighbors
-    
-    // TODO refactor to a separate place that handles all the UI stuff
-    override def toString =
-      if (ev != null) {
-        ev match {
-          case tpchecker:TyperTyped =>
-            Explanations(tpchecker)
-          case _ =>
-            Events(ev)
-        }
-      } else "Typecheck full tree" // root
-        
-    def fullInfo =
-      if (ev != null)
-        ev match {
-          case evTyped: TyperTyped =>
-            //TODO This still needs adjustment
-            val tpe = if (evTyped.tree.tpe != null) evTyped.tree.tpe else if (evTyped.tree.symbol != null) evTyped.tree.symbol.tpe else null
-            /*(evTyped formattedString PrefuseEventNode.fmtFull) + "\n" + 
-            "Type of tree: [ " + tpe + " ] expected: [ " + evTyped.pt + " ]" + 
-            "\nDebugging info: " + evTyped.tree.getClass +
-            "\nEvent toString: " + evTyped.eventString*/
-            evTyped.expl + "\n\n" +
-            "Typechecking tree: \n " +
-            evTyped.tree + "\n\n" +
-            "\nExpected type: " + (if (evTyped.pt == WildcardType) "None" else anyString(evTyped.pt)) +
-            (if (tpe != null) "\nType of tree set to: " + anyString(tpe) else "Tree not yet typed")
-            //"\nTree class " + evTyped.tree.getClass + " pos " + evTyped.tree.pos
 
-          case _ => 
-            ev formattedString PrefuseEventNode.fmtFull
-        }
-      else "Typecheck full tree" // root
-  }
-  
-  object PrefuseEventNode {
-    //val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
-    //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
-    val fmtFull = "%ev"
-    val fmt = "%ln"
-  }
-
-  object EventNodeProcessor {
-    type PNode = PrefuseEventNode
-    type ENode = EventNode
-    
-    def processTree(prefuseTree: Tree, root: ENode, errors: List[ENode], label: String): (PNode, List[PNode]) = {
+  object EventNodeProcessor {    
+    def processTree(prefuseTree: Tree, root: BaseTreeNode[EventNode], errors: List[BaseTreeNode[EventNode]], label: String): (UINode[PrefuseEventNode], List[UINode[PrefuseEventNode]]) = {
       val nodes = prefuseTree.getNodeTable()
   
       // Dummy for class, not companion object
@@ -100,25 +50,25 @@ trait PrefusePostProcessors {
          false
     }
   
-    private class EventNodeProcessor1(t: Tree, unvisible: PartialFunction[Event, Boolean], errorNodes0: List[ENode], label: String) {
-      val errorNodes: ListBuffer[PNode] = ListBuffer()
+    private class EventNodeProcessor1(t: Tree, unvisible: PartialFunction[Event, Boolean], errorNodes0: List[BaseTreeNode[EventNode]], label: String) {
+      val errorNodes: ListBuffer[UINode[PrefuseEventNode]] = ListBuffer()
       
-      def process(root: ENode) =
+      def process(root: BaseTreeNode[EventNode]) =
         (processChildren(null, root).get, errorNodes.toList)
       
-      def processChildren(parent: PNode, child: ENode): Option[PNode] = {
-        val filter = child.evs.nonEmpty && child.evs.last.ev.isInstanceOf[DoneBlock] && filterOutStructure(parent)
+      def processChildren(parent: UINode[PrefuseEventNode], child: BaseTreeNode[EventNode]): Option[UINode[PrefuseEventNode]] = {
+        val filter = child.children.nonEmpty && child.children.last.ev.isInstanceOf[DoneBlock] && filterOutStructure(parent)
         // TODO use filter to abandon useless branches
         if (parent == null) {
-          val root = new PrefuseEventNode(child, None, t.addRoot())
+          val root = new PrefuseEventNode(child.ev, None, t.addRoot())
           root.pfuseNode.set(label, root)
-          root.evs = child.evs.map(processChildren(root, _)).flatten
+          root.children ++= child.children.map(processChildren(root, _)).flatten
           Some(root)
         } else if (!unvisible.isDefinedAt(child.ev) || unvisible(child.ev)) {
           //println("process-nonroot-child: " + child + " || " + parent.pfuseNode)
-          val child1 = new PrefuseEventNode(child, Some(parent), t.addChild(parent.pfuseNode))
+          val child1 = new PrefuseEventNode(child.ev, Some(parent), t.addChild(parent.pfuseNode))
           child1.pfuseNode.set(label, child1)
-          child1.evs = child.evs.map(processChildren(child1, _)).flatten
+          child1.children ++= child.children.map(processChildren(child1, _)).flatten
           // mapping of error nodes
           if (errorNodes0.contains(child))
             errorNodes += child1
@@ -126,36 +76,35 @@ trait PrefusePostProcessors {
         } else None
       }
       
-      def simplify(top: PNode) {
-        val toLeave = top.evs.filter {
+      def simplify(top: UINode[PrefuseEventNode]) {
+        val toRemove = top.children.filter {
           child =>
             if (filterOutStructure(child)) {
               //t.removeChild(child.pfuseNode)
-              false
-            } else true
+              true
+            } else false
         }
-        if (top.evs.length != toLeave.length)
-          top.evs = toLeave
+        if (toRemove.nonEmpty)
+          top.children = top.children.filterNot(toRemove contains)
       }
       
-      def filterOutStructure(node0: PNode): Boolean = {
-        val node = node0.underlying
+      def filterOutStructure(node: UINode[PrefuseEventNode]): Boolean = {
         node.ev match {
           case _: AdaptStart =>
-            node.evs.length == 2 &&
-            node.evs(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
-            node.evs(1).ev.isInstanceOf[AdaptDone] ||
-            node.evs.length == 1 && node.evs.head.ev.isInstanceOf[AdaptDone] 
+            node.children.length == 2 &&
+            node.children(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
+            node.children(1).ev.isInstanceOf[AdaptDone] ||
+            node.children.length == 1 && node.children.head.ev.isInstanceOf[AdaptDone]
           case _: PolyTpeAdapt =>
-            node.evs.length == 2 &&
-            node.evs(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
-            node.evs(1).ev.isInstanceOf[AdaptDone]
+            node.children.length == 2 &&
+            node.children(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
+            node.children(1).ev.isInstanceOf[AdaptDone]
           case _: TypeTreeAdapt =>
-            node.evs.length == 2 &&
-            node.evs(0).ev.isInstanceOf[ConvertToTypeTreeAdapt] &&
-            node.evs(1).ev.isInstanceOf[AdaptDone] ||
-            node.evs.length == 1 && node.evs.head.ev.isInstanceOf[AdaptDone] ||
-            node.evs.length == 1 && node.evs.head.ev.isInstanceOf[TypeTreeAdapt]
+            node.children.length == 2 &&
+            node.children(0).ev.isInstanceOf[ConvertToTypeTreeAdapt] &&
+            node.children(1).ev.isInstanceOf[AdaptDone] ||
+            node.children.length == 1 && node.children.head.ev.isInstanceOf[AdaptDone] ||
+            node.children.length == 1 && node.children.head.ev.isInstanceOf[TypeTreeAdapt]
           case _ =>
             false
         }

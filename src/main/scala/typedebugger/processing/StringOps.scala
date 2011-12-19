@@ -4,10 +4,17 @@ package processing
 import scala.tools.nsc.symtab
 
 trait StringOps {
-  self: CompilerInfo with PrefusePostProcessors =>
+  self: internal.CompilerInfo =>
     
   import global.{Tree => STree, _}
   import EV._
+  
+  object Formatting {
+    //val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
+    //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
+    val fmtFull = "%ev"
+    val fmt = "%ln"
+  }
   
   object Explanations extends AnyRef
                       with TyperExplanations
@@ -15,7 +22,7 @@ trait StringOps {
                       with AdaptExplanations {
     def apply(ev: TyperTyped): String = ev.expl match {
       case DefaultExplanation =>
-        ev formattedString PrefuseEventNode.fmt
+        ev formattedString Formatting.fmt
       case tEV: TyperExplanation =>
         explainTyper(tEV)
       case nEV: NamerExplanation =>
@@ -25,7 +32,7 @@ trait StringOps {
       case iEV: InferExplanation =>
         "" //ev formattedString PrefuseEventNode.fmt
       case _ =>
-        ev formattedString PrefuseEventNode.fmt
+        ev formattedString Formatting.fmt
     }
   }
   
@@ -36,7 +43,7 @@ trait StringOps {
       case eEV: ContextTypeError =>
         explainError(eEV, full)
       case _ =>
-        ev formattedString PrefuseEventNode.fmt
+        ev formattedString Formatting.fmt
     }
   }
   
@@ -333,7 +340,7 @@ trait StringOps {
         }
         
       case _ =>
-        ev formattedString PrefuseEventNode.fmt
+        ev formattedString Formatting.fmt
     }
   }
 }

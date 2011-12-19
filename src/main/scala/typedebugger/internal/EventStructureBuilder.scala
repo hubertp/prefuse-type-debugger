@@ -13,23 +13,23 @@ trait StructureBuilders {
     import global.EV
     import EV._
     
-    type ENode = EventNode
+    //type ENode = EventNode
     
-    private var _root: ENode = _
-    def root: ENode = _root
+    private var _root: BaseTreeNode[EventNode] = _
+    def root = _root
     
-    private var errorNodes: List[ENode] = Nil
-    def initialGoals: List[ENode] = errorNodes.reverse
+    private var errorNodes: List[BaseTreeNode[EventNode]] = Nil
+    def initialGoals = errorNodes.reverse
 
     
-    private val currentNodes = new Stack[(ENode, Int)]()
+    private val currentNodes = new Stack[(BaseTreeNode[EventNode], Int)]()
     var previousLevel: Int = -1 // Start at root
     
     // Hook that enables us to collect all the events
     private var hook: Hook.IndentationHook = _
     
-    private def createNode(ev: Event, parentENode: ENode): ENode = {
-      val evNode = new EventNode(ev, new ListBuffer(), if (parentENode == null) None else Some(parentENode))
+    private def createNode(ev: Event, parentENode: BaseTreeNode[EventNode]): BaseTreeNode[EventNode] = {
+      val evNode = new EventNode(ev, Nil, if (parentENode == null) None else Some(parentENode))
       // We want them in order of appearance
       ev match {
         case _: HardErrorEvent =>
@@ -40,31 +40,35 @@ trait StructureBuilders {
       }
       evNode
     }
+    
+    private def updateChildren(node: BaseTreeNode[EventNode], child0: BaseTreeNode[EventNode]) {
+      node.children = child0 +: node.children
+    }
    
     // analyze the logged events and build necessary structure for the tree
     def reportWithLevel(ev: Event, level: Int) {
       // This relies on the fact that done blocks are not filtered out
   //      assert(previousLevel <= level, "prev: " + previousLevel + " level " + level)
-      implicit def nodeWithLevel(a: ENode): (ENode, Int) = (a, level)
-      implicit def onlyNode(a: Tuple2[ENode, Int]) = a._1
+      implicit def nodeWithLevel(a: BaseTreeNode[EventNode]): (BaseTreeNode[EventNode], Int) = (a, level)
+      implicit def onlyNode(a: Tuple2[BaseTreeNode[EventNode], Int]) = a._1
 
       ev match {
         case _ if previousLevel < level => // instead use level indication
-          val top: ENode = currentNodes.top
+          val top = currentNodes.top
   
-          if (top.evs.isEmpty) {
-            top.evs += createNode(ev, top)
+          if (top.children.isEmpty) {
+            updateChildren(top, createNode(ev, top))
           } else {
-            val last = top.evs.last
+            val last = top.children.last
             ev match {
               case _: DoneBlock =>
                 // Don't push if it is at the same time a done block
               case _            =>
-                currentNodes.push(last)
+                currentNodes.push(nodeWithLevel(last))
             }
              
             //assert(last.evs == Nil, "Last is not Nil: " + last.evs.mkString(",") + " want to add " + ev + " " + ev.getClass)
-            last.evs += createNode(ev, last)
+            updateChildren(last, createNode(ev, last))
           }
           previousLevel = level
   
@@ -82,7 +86,7 @@ trait StructureBuilders {
           assert(!currentNodes.isEmpty,
                   "stack of current nodes cannot be empty on end of the block for " + ev + " " + ev.getClass)
           val top = currentNodes.pop()
-          top.evs += createNode(ev, top)
+          updateChildren(top, createNode(ev, top))
         
         case _             =>
           ev match {
@@ -106,7 +110,7 @@ trait StructureBuilders {
   
           assert(!currentNodes.isEmpty)
           val top = currentNodes.top
-          top.evs += createNode(ev, top)
+          updateChildren(top, createNode(ev, top))
       }
     }
   

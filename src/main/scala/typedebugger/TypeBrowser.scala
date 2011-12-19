@@ -41,13 +41,10 @@ import prefuse.render._
 
 import java.io.File
 
-trait CompilerInfo {
-  val global: Global
-  val DEBUG: Boolean
-}
-
-abstract class TypeBrowser extends CompilerInfo
+abstract class TypeBrowser extends AnyRef
+                           with internal.CompilerInfo
                            with internal.IStructure
+                           with internal.PrefuseStructure
                            with internal.StructureBuilders
                            with processing.PrefusePostProcessors
                            with processing.StringOps {
@@ -55,7 +52,7 @@ abstract class TypeBrowser extends CompilerInfo
   import global.{Tree => STree, _}
   import EV._
   
-  type PNode = PrefuseEventNode
+  type UINodeP = UINode[PrefuseEventNode]
   
 
   object TypeDebuggerFrame {
@@ -82,7 +79,7 @@ abstract class TypeBrowser extends CompilerInfo
     val namerNodes = "tree.namer"
   }
 
-  class TreeDisplay(t: Tree, label: String, initialGoals: List[PNode])
+  class TreeDisplay(t: Tree, label: String, initialGoals: List[UINodeP])
     extends Display(new Visualization()) with ui.PrefuseTooltips {
     
     treeViewSelf => 
@@ -264,7 +261,7 @@ abstract class TypeBrowser extends CompilerInfo
     class CustomLabelRenderer(label0: String) extends LabelRenderer(label0) {
       override protected def getText(item: VisualItem): String = {
         if (item.canGet(label0, COLUMN_PREFUSENODE_CLASS)) {
-          val eNode = item.get(label0).asInstanceOf[PNode]
+          val eNode = item.get(label0).asInstanceOf[UINodeP]
           eNode.ev.eventString
         } else null
       }
@@ -278,7 +275,7 @@ abstract class TypeBrowser extends CompilerInfo
         override def getBoolean(t: Tuple): Boolean = {
           if (t.canGet(label, COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[PNode]
+            val nodeItem = t.get(label).asInstanceOf[UINodeP]
             nodeItem.goal && t.asInstanceOf[NodeItem].isVisible
           } else false
         }
@@ -289,7 +286,7 @@ abstract class TypeBrowser extends CompilerInfo
         override def getBoolean(t: Tuple): Boolean = {
           if (t.canGet(label, COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[PNode]
+            val nodeItem = t.get(label).asInstanceOf[UINodeP]
             nodeItem.pfuseNode == search
           } else false
         }
@@ -302,7 +299,7 @@ abstract class TypeBrowser extends CompilerInfo
         val allVisibleGoals = m_vis.items(visGroup, GoalNode)
         val allPNodeVisibleGoals = allVisibleGoals.map(t => {
           val t0 = t.asInstanceOf[NodeItem]
-          (t0.get(label).asInstanceOf[PNode].pfuseNode, t0)
+          (t0.get(label).asInstanceOf[UINodeP].pfuseNode, t0)
         }).toMap
         
         initialGoals match {
@@ -411,7 +408,7 @@ abstract class TypeBrowser extends CompilerInfo
       
       protected def showNodeTooltip(item: VisualItem, e: MouseEvent) {
         val v = item.getVisualization()
-        val eNode = item.get(label).asInstanceOf[PNode]
+        val eNode = item.get(label).asInstanceOf[UINodeP]
         
         showTooltip(new NodeTooltip("Some name",
           eNode.fullInfo,
@@ -441,7 +438,7 @@ abstract class TypeBrowser extends CompilerInfo
       import NodeColorAction._
       private def retrieveEvent(item: VisualItem): Option[Event] =
         if (item.canGet(label, COLUMN_PREFUSENODE_CLASS))
-          Some(item.get(label).asInstanceOf[PNode].ev)
+          Some(item.get(label).asInstanceOf[UINodeP].ev)
         else
           None
 
@@ -534,7 +531,7 @@ abstract class TypeBrowser extends CompilerInfo
       }
       
       def addLinkPath(starting: NodeItem) {
-        var n = starting.get(label).asInstanceOf[PNode]
+        var n = starting.get(label).asInstanceOf[UINodeP]
         val tsNonGoal = m_vis.getFocusGroup(nonGoalGroup)
         while (!n.goal && n.parent.isDefined) {
           tsNonGoal.addTuple(n.pfuseNode)
@@ -552,7 +549,7 @@ abstract class TypeBrowser extends CompilerInfo
         override def getBoolean(t: Tuple): Boolean = {
           if (ts != null && t.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
             // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[PNode].pfuseNode
+            val nodeItem = t.get(label).asInstanceOf[UINodeP].pfuseNode
             ts.containsTuple(nodeItem)
           } else false
         }
@@ -615,7 +612,7 @@ abstract class TypeBrowser extends CompilerInfo
                   // neigbors should be added to separate group
                 })
               // If this is not a goal, then expand all the incoming edges as well
-              val eNode = item0.get(label).asInstanceOf[PNode]
+              val eNode = item0.get(label).asInstanceOf[UINodeP]
               if (!eNode.goal)
                 item0.inEdges().foreach(edge =>
                   PrefuseLib.updateVisible(edge.asInstanceOf[VisualItem], true)
@@ -634,7 +631,7 @@ abstract class TypeBrowser extends CompilerInfo
       
       object InitialGoalPredicate extends AbstractPredicate {
         // TODO: snd is redundant?
-        private def isInitialGoal(node: PNode) =
+        private def isInitialGoal(node: UINodeP) =
           if (initialGoals.contains(node)) {
             node.ev match {
               case _: HardErrorEvent => true
@@ -647,12 +644,12 @@ abstract class TypeBrowser extends CompilerInfo
           if (t.isInstanceOf[NodeItem]) {
             val e = t.asInstanceOf[NodeItem]
             if (e.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-              val eNode = e.get(label).asInstanceOf[PNode]
+              val eNode = e.get(label).asInstanceOf[UINodeP]
   
               // Apart from expanding the error node
               // expand also its siblings
               if (!isInitialGoal(eNode)) {
-                if (eNode.evs.exists(isInitialGoal))
+                if (eNode.children.exists(isInitialGoal))
                   toExpand.add(t.asInstanceOf[NodeItem])
                 false
               } else true
@@ -661,7 +658,7 @@ abstract class TypeBrowser extends CompilerInfo
         }
       }
       
-      private def setGoalPath(eNode: Option[PNode]) {
+      private def setGoalPath(eNode: Option[UINodeP]) {
         eNode match {
           case Some(n) if !n.goal =>
             n.goal = true
@@ -725,7 +722,7 @@ abstract class TypeBrowser extends CompilerInfo
             //val item0 = item.asInstanceOf[Tuple]
             panTs.addTuple(item0)
             if (item0.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-              val eNode = item0.get(label).asInstanceOf[PNode]
+              val eNode = item0.get(label).asInstanceOf[UINodeP]
               //eNode.goal = true // cache
               // set all parents up to the root with goal path
               setGoalPath(Some(eNode))
@@ -746,7 +743,7 @@ abstract class TypeBrowser extends CompilerInfo
         toExpand.foreach(nItem => {
           PrefuseLib.updateVisible(nItem, true)
           // add to goals group
-          ts.addTuple(nItem.get(label).asInstanceOf[PNode].pfuseNode)
+          ts.addTuple(nItem.get(label).asInstanceOf[UINodeP].pfuseNode)
         })
       }
     }
@@ -763,7 +760,7 @@ abstract class TypeBrowser extends CompilerInfo
         if (t.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
           val ts = m_vis.getFocusGroup(openGoalsGroup)
           // because we added nodeItem to the list, not visualItem which 't' is
-          val nodeItem = t.get(label).asInstanceOf[PNode].pfuseNode
+          val nodeItem = t.get(label).asInstanceOf[UINodeP].pfuseNode
           val res0 = ts != null && ts.containsTuple(nodeItem)
           if (res0)
             true
@@ -782,7 +779,7 @@ abstract class TypeBrowser extends CompilerInfo
         if (t.isInstanceOf[Edge]) {
           val e = t.asInstanceOf[Edge]
           if (e.getTargetNode.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-            val n = e.getTargetNode.get(label).asInstanceOf[PNode]
+            val n = e.getTargetNode.get(label).asInstanceOf[UINodeP]
             !n.ev.blockStart
           } else false
         } else false
@@ -794,8 +791,8 @@ abstract class TypeBrowser extends CompilerInfo
         if (t.isInstanceOf[EdgeItem]) {
           val e = t.asInstanceOf[EdgeItem]
           if (e.getSourceNode.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-            val tNode = e.getTargetNode.get(label).asInstanceOf[PNode]
-            val sNode = e.getSourceNode.get(label).asInstanceOf[PNode]
+            val tNode = e.getTargetNode.get(label).asInstanceOf[UINodeP]
+            val sNode = e.getSourceNode.get(label).asInstanceOf[UINodeP]
             tNode.goal && sNode.goal
             //val vis = e.getVisualization()
             //val ts = vis.getFocusGroup(goalsGroup)
@@ -806,7 +803,7 @@ abstract class TypeBrowser extends CompilerInfo
     }
   }
 
-  class TypeDebuggerFrame(t: Tree, srcs: List[String], label: String, goals: List[PNode]) {
+  class TypeDebuggerFrame(t: Tree, srcs: List[String], label: String, goals: List[UINodeP]) {
 
     import TypeDebuggerFrame._
     val frame = new JFrame("Type Debugger 0.0.4")
@@ -865,7 +862,7 @@ abstract class TypeBrowser extends CompilerInfo
       treeView.addControlListener(new ControlAdapter() {
         override def itemClicked(item: VisualItem, e: MouseEvent) {
           if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-            val node = item.get(label).asInstanceOf[PNode]
+            val node = item.get(label).asInstanceOf[UINodeP]
             if (DEBUG && node.ev != null){
               println("ITEM CLICKED " + node.ev.getClass + " <= " + node.ev.id)
               if (node.ev.isInstanceOf[DoneBlock])
@@ -880,7 +877,7 @@ abstract class TypeBrowser extends CompilerInfo
 
         override def itemEntered(item: VisualItem, e: MouseEvent) {
           if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-            val node = item.get(label).asInstanceOf[PNode]
+            val node = item.get(label).asInstanceOf[UINodeP]
             node.ev match {
 	            case e:TreeEvent =>
                 val prettyTree = asString(e.tree)
@@ -966,14 +963,14 @@ abstract class TypeBrowser extends CompilerInfo
         val fGroup = vis.getFocusGroup(fixedGroup)
         if (fGroup.containsTuple(item)) {
           fGroup.removeTuple(item)
-          (vis.getFocusGroup(toRemoveGroup)).addTuple(item.get(label).asInstanceOf[PNode].pfuseNode)
+          (vis.getFocusGroup(toRemoveGroup)).addTuple(item.get(label).asInstanceOf[UINodeP].pfuseNode)
           cleanupLinkPath(item.asInstanceOf[NodeItem], vis)
         } else
           fGroup.addTuple(item)
       }
       
       def cleanupLinkPath(starting: NodeItem, vis: Visualization) {
-        var n = starting.get(label).asInstanceOf[PNode]
+        var n = starting.get(label).asInstanceOf[UINodeP]
         val tsNonGoal = vis.getFocusGroup(nonGoalGroup)
         val tsRemove = vis.getFocusGroup(toRemoveGroup)
         while (!n.goal && n.parent.isDefined) {
@@ -996,7 +993,7 @@ abstract class TypeBrowser extends CompilerInfo
           if (t.isInstanceOf[NodeItem]) {
             val e = t.asInstanceOf[NodeItem]
             if (e.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-              val ev = e.get(label).asInstanceOf[PNode].ev
+              val ev = e.get(label).asInstanceOf[UINodeP].ev
               ev != null && ev.id == id
             } else false
           } else false
@@ -1004,7 +1001,7 @@ abstract class TypeBrowser extends CompilerInfo
       }
       
       def addLinkPath(starting: NodeItem, vis: Visualization) {
-        var n = starting.get(label).asInstanceOf[PNode]
+        var n = starting.get(label).asInstanceOf[UINodeP]
         val tsNonGoal = vis.getFocusGroup(nonGoalGroup)
         while (!n.goal && n.parent.isDefined) {
           tsNonGoal.addTuple(n.pfuseNode)
@@ -1016,7 +1013,7 @@ abstract class TypeBrowser extends CompilerInfo
           while (!tsGoal.containsTuple(n.pfuseNode)) {
             tsGoal.addTuple(n.pfuseNode)
             // better check 
-            n = n.evs.find(_.goal).get
+            n = n.children.find(_.goal).get
           }
         }
       }
@@ -1029,7 +1026,7 @@ abstract class TypeBrowser extends CompilerInfo
         // or maybe just add to non-goal group?
         
         val node = item.asInstanceOf[NodeItem]
-        val eNode = node.get(label).asInstanceOf[PNode]
+        val eNode = node.get(label).asInstanceOf[UINodeP]
         eNode.ev match {
           case e@IdentTyper(tree0) =>
             if (DEBUG)
@@ -1077,12 +1074,12 @@ abstract class TypeBrowser extends CompilerInfo
 
         // identify parent goal
         val node = item.asInstanceOf[NodeItem]
-        val eNode = node.get(label).asInstanceOf[PNode]
+        val eNode = node.get(label).asInstanceOf[UINodeP]
         
         // is any of its children a goal
         val hasGoalChild = node.outNeighbors().exists(n =>
          {
-           val node0 = n.asInstanceOf[NodeItem].get(label).asInstanceOf[PNode]
+           val node0 = n.asInstanceOf[NodeItem].get(label).asInstanceOf[UINodeP]
            node0.goal // it has to be already expanded, so this has to be valid
          }) || eNode.goal
         if (hasGoalChild) {
@@ -1114,7 +1111,7 @@ abstract class TypeBrowser extends CompilerInfo
         if (!item.canGet(label, COLUMN_PREFUSENODE_CLASS))
           return
 
-        var eNode = item.get(label).asInstanceOf[PNode]
+        var eNode = item.get(label).asInstanceOf[UINodeP]
         val vis = item.getVisualization
         val List(ts1, ts2, ts3, tsRemove) =
           List(goalsGroup, nonGoalsGroup, linkGroup, removeGroup).map(vis.getFocusGroup(_))
@@ -1179,7 +1176,7 @@ abstract class TypeBrowser extends CompilerInfo
   }
 
   //TODO include settings
-  def buildStructure(srcs: List[String], settings: Settings, fxn: Filter, label: String) : (Tree, List[PrefuseEventNode]) = {
+  def buildStructure(srcs: List[String], settings: Settings, fxn: Filter, label: String) : (Tree, List[UINodeP]) = {
     val builder = new EventTreeStructureBuilder(srcs, label)
     builder(fxn)
     // provide prefuse-specific structure
@@ -1187,8 +1184,8 @@ abstract class TypeBrowser extends CompilerInfo
     val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
                                                        builder.initialGoals, label)
 
-    if (DEBUG)
-      println("[errors] " + initial.map(_.ev))
+    //if (DEBUG)
+    //  println("[errors] " + initial.map(_.ev))
     (prefuseTree, initial)
   }
 
