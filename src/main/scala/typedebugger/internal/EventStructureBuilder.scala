@@ -29,7 +29,7 @@ trait StructureBuilders {
     private var hook: Hook.IndentationHook = _
     
     private def createNode(ev: Event, parentENode: BaseTreeNode[EventNode]): BaseTreeNode[EventNode] = {
-      val evNode = new EventNode(ev, Nil, if (parentENode == null) None else Some(parentENode))
+      val evNode = new EventNode(ev, new ListBuffer(), if (parentENode == null) None else Some(parentENode))
       // We want them in order of appearance
       ev match {
         case _: HardErrorEvent =>
@@ -41,9 +41,10 @@ trait StructureBuilders {
       evNode
     }
     
-    private def updateChildren(node: BaseTreeNode[EventNode], child0: BaseTreeNode[EventNode]) {
-      node.children = child0 +: node.children
-    }
+    //private def updateChildren(node: BaseTreeNode[EventNode], child0: BaseTreeNode[EventNode]) {
+    //  node.children += child0
+      //node.children = child0 +: node.children
+    //}
    
     // analyze the logged events and build necessary structure for the tree
     def reportWithLevel(ev: Event, level: Int) {
@@ -57,7 +58,7 @@ trait StructureBuilders {
           val top = currentNodes.top
   
           if (top.children.isEmpty) {
-            updateChildren(top, createNode(ev, top))
+            top.children += createNode(ev, top)
           } else {
             val last = top.children.last
             ev match {
@@ -68,7 +69,7 @@ trait StructureBuilders {
             }
              
             //assert(last.evs == Nil, "Last is not Nil: " + last.evs.mkString(",") + " want to add " + ev + " " + ev.getClass)
-            updateChildren(last, createNode(ev, last))
+            last.children += createNode(ev, last)
           }
           previousLevel = level
   
@@ -86,7 +87,7 @@ trait StructureBuilders {
           assert(!currentNodes.isEmpty,
                   "stack of current nodes cannot be empty on end of the block for " + ev + " " + ev.getClass)
           val top = currentNodes.pop()
-          updateChildren(top, createNode(ev, top))
+          top.children += createNode(ev, top)
         
         case _             =>
           ev match {
@@ -110,7 +111,7 @@ trait StructureBuilders {
   
           assert(!currentNodes.isEmpty)
           val top = currentNodes.top
-          updateChildren(top, createNode(ev, top))
+          top.children += createNode(ev, top)
       }
     }
   

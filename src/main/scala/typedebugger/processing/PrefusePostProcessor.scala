@@ -85,7 +85,8 @@ trait PrefusePostProcessors {
             } else false
         }
         if (toRemove.nonEmpty)
-          top.children = top.children.filterNot(toRemove contains)
+          top.children --= toRemove
+          //top.children = top.children.filterNot(toRemove contains)
       }
       
       def filterOutStructure(node: UINode[PrefuseEventNode]): Boolean = {

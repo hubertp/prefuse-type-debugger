@@ -21,7 +21,7 @@ trait PrefuseStructure {
 
   class PrefuseEventNode(val ev: global.EV.Event, val parent: Option[UINode[PrefuseEventNode]],
                          val pfuseNode: Node) extends UINode[PrefuseEventNode] {
-    var children = List[UINode[PrefuseEventNode]]()
+    val children = ListBuffer[UINode[PrefuseEventNode]]()
     var goal = false // for caching purposes so that we don't have to constantly
                      // check neighbors
     
