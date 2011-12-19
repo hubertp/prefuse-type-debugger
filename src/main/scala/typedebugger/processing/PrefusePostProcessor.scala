@@ -22,8 +22,8 @@ trait PrefusePostProcessors {
   
       // Dummy for class, not companion object
       nodes.addColumn(label, (new PrefuseEventNode(null, null, null)).getClass)
-      //new EventNodeProcessor1(prefuseTree, (ev: Event) => ev match {case _ => true}, errors, label).process(root)
-      new EventNodeProcessor1(prefuseTree, visibleNodes, errors, label).process(root)
+      val filterNodes:PartialFunction[Event, Boolean] = if (settings.fullTypechecking.value) (ev: Event) => ev match {case _ => true} else visibleNodes
+      new EventNodeProcessor1(prefuseTree, filterNodes, errors, label).process(root)
     }
     
     // partial function => list?

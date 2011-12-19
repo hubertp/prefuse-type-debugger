@@ -3,6 +3,8 @@ package scala.typedebugger
 import java.awt.{List => awtList, _}
 import java.awt.geom.{Point2D, Rectangle2D}
 import java.awt.event._
+
+import java.io.File
 import javax.swing.{Action => swingAction, _}
 import javax.swing.event.TreeModelListener
 
@@ -38,8 +40,7 @@ import prefuse.util.display.{DisplayLib}
 import prefuse.util.ui.{JFastLabel, JSearchPanel}
 import prefuse.render._
 
-
-import java.io.File
+import internal.TypeDebuggerSettings
 
 abstract class TypeBrowser extends AnyRef
                            with internal.CompilerInfo
@@ -1176,7 +1177,7 @@ abstract class TypeBrowser extends AnyRef
   }
 
   //TODO include settings
-  def buildStructure(srcs: List[String], settings: Settings, fxn: Filter, label: String) : (Tree, List[UINodeP]) = {
+  def buildStructure(srcs: List[String], settings: Settings with TypeDebuggerSettings, fxn: Filter, label: String) : (Tree, List[UINodeP]) = {
     val builder = new EventTreeStructureBuilder(srcs, label)
     builder(fxn)
     // provide prefuse-specific structure
@@ -1186,11 +1187,12 @@ abstract class TypeBrowser extends AnyRef
 
     //if (DEBUG)
     //  println("[errors] " + initial.map(_.ev))
-    (prefuseTree, initial)
+
+    if (settings.fullTypechecking.value) (prefuseTree, Nil) else (prefuseTree, initial)
   }
 
   class SwingViewer {
-    def browse(srcs: List[String], settings: Settings) {
+    def browse(srcs: List[String], settings: Settings with TypeDebuggerSettings) {
       val filtr =  Filter.and(Filter pf {
         // TODO shouldn't filter out accidentally the events 
         // that open/close blocks -> this can cause unexpected graphs
@@ -1200,6 +1202,7 @@ abstract class TypeBrowser extends AnyRef
 // TODO: re-enable        case _: ImplicitEvent               => true
         case _: ImplicitMethodTpeAdaptEvent => true
         case _: InferEvent                  => true
+        case _: ImplicitEvent               => true
         case _: AdaptToEvent                => true
         case _: DoTypedApplyEvent           => true
         case _: NamerEvent                  => true
@@ -1228,17 +1231,18 @@ abstract class TypeBrowser extends AnyRef
 object TypeDebuggerUI {
   def main(args: Array[String]) {
     // parse input: sources, cp, d
-    val settings = new Settings()
-    settings.Yrangepos.value = true // redundant?
-    settings.stopAfter.value = List("typer")
+    val settings0 = new Settings() with TypeDebuggerSettings
+    settings0.Yrangepos.value = true // redundant?
+    settings0.stopAfter.value = List("typer")
     
-    val command = new CompilerCommand(args.toList, settings)
+    val command = new CompilerCommand(args.toList, settings0)
     val tb = new TypeBrowser {
-      val global = new Global(settings, new ConsoleReporter(settings)) with interactive.RangePositions
-      val DEBUG = false
+      val global = new Global(settings0, new ConsoleReporter(settings0)) with interactive.RangePositions
+      val DEBUG = true
+      val settings = settings0
     }
     
     val b = new tb.SwingViewer()
-    b.browse(command.files, settings)
+    b.browse(command.files, settings0)
   }
 }
