@@ -22,7 +22,8 @@ trait PrefusePostProcessors {
   
       // Dummy for class, not companion object
       nodes.addColumn(label, (new PrefuseEventNode(null, null, null)).getClass)
-      val filterNodes:PartialFunction[Event, Boolean] = if (settings.fullTypechecking.value) (ev: Event) => ev match {case _ => true} else visibleNodes
+      val filterNodes:PartialFunction[Event, Boolean] =
+          if (settings.fullTypechecking.value) (ev: Event) => ev match {case _ => true} else visibleNodes
       new EventNodeProcessor1(prefuseTree, filterNodes, errors, label).process(root)
     }
     
@@ -44,10 +45,12 @@ trait PrefusePostProcessors {
          false
        case _: TyperDone =>
          false
-       case _: RecoveryEvents =>
-         false
        case _: AdaptDone =>
          false
+       case _: InferDone =>
+         false
+       case _: RecoveryEvent =>
+         false // we should be able to avoid this filter
     }
   
     private class EventNodeProcessor1(t: Tree, unvisible: PartialFunction[Event, Boolean], errorNodes0: List[BaseTreeNode[EventNode]], label: String) {
@@ -58,21 +61,53 @@ trait PrefusePostProcessors {
       
       def processChildren(parent: UINode[PrefuseEventNode], child: BaseTreeNode[EventNode]): Option[UINode[PrefuseEventNode]] = {
         val filter = child.children.nonEmpty && child.children.last.ev.isInstanceOf[DoneBlock] && filterOutStructure(parent)
+        def validEvent(ev: Event) = (!unvisible.isDefinedAt(ev) || unvisible(ev))
         // TODO use filter to abandon useless branches
         if (parent == null) {
           val root = new PrefuseEventNode(child.ev, None, t.addRoot())
           root.pfuseNode.set(label, root)
           root.children ++= child.children.map(processChildren(root, _)).flatten
           Some(root)
-        } else if (!unvisible.isDefinedAt(child.ev) || unvisible(child.ev)) {
+        } else if (validEvent(child.ev))  {
           //println("process-nonroot-child: " + child + " || " + parent.pfuseNode)
           val child1 = new PrefuseEventNode(child.ev, Some(parent), t.addChild(parent.pfuseNode))
           child1.pfuseNode.set(label, child1)
           child1.children ++= child.children.map(processChildren(child1, _)).flatten
           // mapping of error nodes
-          if (errorNodes0.contains(child))
+          if (errorNodes0.contains(child)) {
             errorNodes += child1
+          }
           Some(child1)
+        } else if (child.children.length > 0) {
+          // Get single child that is visible
+          def breadthFirstSearch[T](node: BaseTreeNode[T]): List[BaseTreeNode[T]] =
+            node.children.toList.flatMap(c => if (validEvent(c.ev)) List(c) else breadthFirstSearch(c))
+
+          breadthFirstSearch(child) match {
+            case single::Nil =>
+              val child1 = new PrefuseEventNode(single.ev, Some(parent), t.addChild(parent.pfuseNode))
+              child1.pfuseNode.set(label, child1)
+              child1.children ++= single.children.map(processChildren(child1, _)).flatten
+              // mapping of error nodes
+              if (errorNodes0.contains(single)) {
+                errorNodes += child1
+              }
+              Some(child1)
+              
+            case err@_::_ =>
+              // invalid structure generated, unable to recover?
+              println("Filtering node that contains more than one valid child event")
+              println("Note: This may cause some unexpected behaviour")
+              //println(err.map(_.ev.getClass).mkString("[", ",", "]"))
+              //println("In node: " + child.ev.getClass)
+              val skipped = err.map(processChildren(parent, _)).flatten
+              parent.children ++= skipped // TODO
+              None
+
+            case Nil =>
+              None
+              
+          }
         } else None
       }
       

@@ -21,7 +21,7 @@ trait StructureBuilders {
     private var errorNodes: List[BaseTreeNode[EventNode]] = Nil
     def initialGoals = errorNodes.reverse
 
-    
+    // List of nodes that are currently open
     private val currentNodes = new Stack[(BaseTreeNode[EventNode], Int)]()
     var previousLevel: Int = -1 // Start at root
     
@@ -54,10 +54,14 @@ trait StructureBuilders {
       implicit def onlyNode(a: Tuple2[BaseTreeNode[EventNode], Int]) = a._1
 
       ev match {
-        case _ if previousLevel < level => // instead use level indication
+        case _ if previousLevel < level =>
+          // Event that is already in an enclosed block
+          // This relies on the fact that blocks are correctly opened/closed
+          // and events that are opening blocks are not filtered (otherwise we can get some inconsistency)
+          // TODO: we need to remove the above problem (see RecoveryEvent)
           val top = currentNodes.top
-  
           if (top.children.isEmpty) {
+            // This is the first 
             top.children += createNode(ev, top)
           } else {
             val last = top.children.last
@@ -65,15 +69,16 @@ trait StructureBuilders {
               case _: DoneBlock =>
                 // Don't push if it is at the same time a done block
               case _            =>
-                currentNodes.push(nodeWithLevel(last))
+                currentNodes.push(last)
             }
-             
             //assert(last.evs == Nil, "Last is not Nil: " + last.evs.mkString(",") + " want to add " + ev + " " + ev.getClass)
             last.children += createNode(ev, last)
+            //top.children += createNode(ev, top)
           }
           previousLevel = level
   
         case rec: ExceptionRecoveryEvent =>
+          assert(false) // TODO for now
           assert(previousLevel == level, "recovering from an exception")
           // Exception occured, need to backtrack to some previous opening
           while (currentNodes.top._1.ev != rec.lastOpen)
@@ -84,7 +89,7 @@ trait StructureBuilders {
           hook.resetIndentation(baseLevel)
           
         case _: DoneBlock  =>
-          assert(!currentNodes.isEmpty,
+          assert(currentNodes.nonEmpty,
                   "stack of current nodes cannot be empty on end of the block for " + ev + " " + ev.getClass)
           val top = currentNodes.pop()
           top.children += createNode(ev, top)
@@ -93,6 +98,7 @@ trait StructureBuilders {
           ev match {
             // TODO: Not necessary anymore?
             case _: SecondTryTypedApplyStartTyper =>
+              assert(false)
               // rewind to TryTypedApplyTyper as we encountered error
               //val nStack = currentNodes.dropWhile(!_.ev.isInstanceOf[TryTypedApplyEvent])
   
@@ -108,7 +114,6 @@ trait StructureBuilders {
               previousLevel = level
           }
           // this also handles the case when we just parsed DoneBlock
-  
           assert(!currentNodes.isEmpty)
           val top = currentNodes.top
           top.children += createNode(ev, top)

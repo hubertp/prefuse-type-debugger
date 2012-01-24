@@ -219,7 +219,8 @@ abstract class TypeBrowser extends AnyRef
 
     // To have the whole tree expanded initially
     // comment out initial-goals
-    m_vis.run("initial-goals")
+    if (!settings.fullTypechecking.value)
+      m_vis.run("initial-goals")
     m_vis.run("filter")
 
     private def setOrientation(orientation0: Int) {
@@ -773,18 +774,6 @@ abstract class TypeBrowser extends AnyRef
         } else false
       }
     }
-
-    // TODO needed?
-    object InformationEdgePredicate extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean =
-        if (t.isInstanceOf[Edge]) {
-          val e = t.asInstanceOf[Edge]
-          if (e.getTargetNode.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
-            val n = e.getTargetNode.get(label).asInstanceOf[UINodeP]
-            !n.ev.blockStart
-          } else false
-        } else false
-    }
     
     // Predicate for checking if an edge is between the two goals
     class MainGoalPathEdgePredicate(goalsGroup:String) extends AbstractPredicate {
@@ -826,6 +815,19 @@ abstract class TypeBrowser extends AnyRef
     // string representation here in the type debugger rather than
     // redirecting to eventString in the compiler
     // val contextInfoArea = new JTextArea(30, 120) // TODO introduce more interactive widget
+    
+    private def fullEventInfo(ev: EV.Event) {
+      if (settings.debugTD.value && ev != null) {
+        println("----------------")
+        println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
+        ev match {
+          case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
+          case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
+          case _ =>
+        }
+        println("----------------")
+      }
+    }
 
     def createFrame(lock: Lock): Unit = {
       lock.acquire // keep the lock until the user closes the window
@@ -864,13 +866,18 @@ abstract class TypeBrowser extends AnyRef
         override def itemClicked(item: VisualItem, e: MouseEvent) {
           if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
             val node = item.get(label).asInstanceOf[UINodeP]
-            if (DEBUG && node.ev != null){
-              println("ITEM CLICKED " + node.ev.getClass + " <= " + node.ev.id)
+            if (e.isAltDown())
+              fullEventInfo(node.ev)
+            if (settings.debugTD.value && node.ev != null){
+              //println("CHILDREN: " + node.children.map(_.ev.getClass))
               if (node.ev.isInstanceOf[DoneBlock])
                 println("DONE BLOCK: " + node.ev.asInstanceOf[DoneBlock].originEvent)
             }
-            if (DEBUG && node.ev.isInstanceOf[TyperTyped] && node.ev != null) {
-              println("[TYPER-TYPED] : " + node.ev.asInstanceOf[TyperTyped].expl + " " + node.ev.asInstanceOf[TyperTyped].tree.getClass)
+            if (settings.debugTD.value && node.ev.isInstanceOf[TyperTyped] && node.ev != null) {
+              val nTyperTyped = node.ev.asInstanceOf[TyperTyped]
+              val expl = nTyperTyped.expl
+              println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " " +
+                      expl.getClass)
             }
 //            contextInfoArea.setText(node.fullInfo)
           }
@@ -1030,7 +1037,7 @@ abstract class TypeBrowser extends AnyRef
         val eNode = node.get(label).asInstanceOf[UINodeP]
         eNode.ev match {
           case e@IdentTyper(tree0) =>
-            if (DEBUG)
+            if (settings.debugTD.value)
               println("[Link] IdentTyper event " + tree0.symbol)
             val refId = tree0.symbol.previousHistoryEvent(e.id)
             if (refId != NoEvent.id) {
@@ -1185,8 +1192,8 @@ abstract class TypeBrowser extends AnyRef
     val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
                                                        builder.initialGoals, label)
 
-    //if (DEBUG)
-    //  println("[errors] " + initial.map(_.ev))
+    if (settings.debugTD.value)
+      println("[errors] " + initial.map(_.ev))
 
     if (settings.fullTypechecking.value) (prefuseTree, Nil) else (prefuseTree, initial)
   }
@@ -1213,6 +1220,10 @@ abstract class TypeBrowser extends AnyRef
 //        case _: NewContext                  => true
         case _: ErrorEvent                  => true
         case _: ContextTypeError            => true
+        case _: RecoveryEvent               => true // TODO need to remove that dependency
+                                                    // but then it brakes our indentation mechanism
+                                                    // indendation needs to be separated from filtering stuff
+                                                    // ATM opening/closing events cannot be filtered out at this point
       }, EVDSL.ph <= 4)
 
       val NODESLABEL = "event.node"  // TODO
