@@ -3,7 +3,11 @@ package processing
 
 import scala.tools.nsc.symtab
 
-trait StringOps {
+trait StringOps extends AnyRef
+                with TyperStringOps
+                with AdaptStringOps
+                with InferStringOps
+                with ImplicitsStringOps {
   self: internal.CompilerInfo =>
     
   import global.{Tree => STree, _}
@@ -38,12 +42,28 @@ trait StringOps {
   
   // TODO, provide full info as well
   object Events extends AnyRef
-                with ErrorEvents {
-    def apply(ev: Event, full: Boolean = false): String = ev match {
+                with ErrorEvents
+                with TyperEventsOps
+                with AdaptEventsOps
+                with InferEventsOps
+                with ImplicitsEventsOps {
+    def apply(e: Event, full: Boolean = false) = e match {
       case eEV: ContextTypeError =>
         explainError(eEV, full)
-      case _ =>
-        ev formattedString Formatting.fmt
+      case ev: TyperEvent        =>
+        explainTyperEvent(ev)
+      case ev: DoTypedApplyEvent =>
+        explainTyperEvent(ev)
+      case ev: AdaptToEvent      =>
+        explainTyperEvent(ev)
+      case ev: AdaptEvent        =>
+        explainAdaptEvent(ev)
+      case ev: InferEvent        =>
+        explainInferEvent(ev)
+      case ev: ImplicitEvent     =>
+        explainImplicitsEvent(ev)
+      case _                     =>
+        (e formattedString Formatting.fmt, e formattedString Formatting.fmtFull)
     }
   }
   
@@ -273,7 +293,7 @@ trait StringOps {
         "Typecheck return type of the method"
       
       case _: MethodReturnTypeAgain =>
-        "Typecheck return type of the method (again) in namer"
+        "Typecheck return type of the method (again) in Namer"
 
       case _: InferredMethodReturnType =>
         "Typecheck inferred return type of the method"
@@ -285,7 +305,8 @@ trait StringOps {
         "Typecheck bounds for the abstract type definition"
 
       case _: TypeValDefBody =>
-        "Typecheck body of the value/variable"
+        "Typecheck body of the value/variable\n" +
+        "to infer its type"
 
       case _: TypeMethodDefBody =>
         "Typecheck body of the method"
@@ -326,21 +347,21 @@ trait StringOps {
   
   // TODO, should be able to provide more details message
   trait ErrorEvents {
-    def explainError(ev: Event with ContextTypeError, fullInfo: Boolean): String = ev match {
+    def explainError(ev: Event with ContextTypeError, fullInfo: Boolean)= ev match {
       case ContextAmbiguousTypeErrorEvent(err, level) =>
-        level match {
+        (level match {
           case ErrorLevel.Hard => "Ambiguous type error"
           case ErrorLevel.Soft => "(possibly) Recoverable ambiguous type error"
-        }
+        }, "")
       
       case ContextTypeErrorEvent(err, level) =>
-        level match {
+        (level match {
           case ErrorLevel.Hard => "Type error"
           case ErrorLevel.Soft => "(possibly) Recoverable type error"
-        }
-        
+        }, "Error:\n" + err.errMsg)
+      
       case _ =>
-        ev formattedString Formatting.fmt
+        (ev formattedString Formatting.fmt, ev formattedString Formatting.fmtFull)
     }
   }
 }

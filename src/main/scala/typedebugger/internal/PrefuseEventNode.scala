@@ -32,7 +32,7 @@ trait PrefuseStructure {
           case tpchecker:TyperTyped =>
             Explanations(tpchecker)
           case _ =>
-            Events(ev)
+            Events(ev)._1
         }
       } else "Typecheck full tree" // root
         
@@ -51,11 +51,12 @@ trait PrefuseStructure {
             "Typechecking tree: \n " +
             evTyped.tree + "\n\n" +
             "\nExpected type: " + (if (evTyped.pt == WildcardType) "None" else anyString(evTyped.pt)) +
-            (if (tpe != null) "\nType of tree set to: " + anyString(tpe) else "Tree not yet typed")
+            (if (tpe != null) "\nType of tree set to: " + anyString(tpe) else " Tree not yet typed")
             //"\nTree class " + evTyped.tree.getClass + " pos " + evTyped.tree.pos
 
-          case _ => 
-            ev formattedString Formatting.fmtFull
+          case _ =>
+            Events(ev)._2
+            //ev formattedString Formatting.fmtFull
         }
       else "Typecheck full tree" // root
   }
