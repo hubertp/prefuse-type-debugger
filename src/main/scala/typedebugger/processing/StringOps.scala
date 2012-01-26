@@ -62,16 +62,26 @@ trait StringOps extends AnyRef
         explainInferEvent(ev)
       case ev: ImplicitEvent     =>
         explainImplicitsEvent(ev)
+      case ev: LubEvent          =>
+        explainLubGlbEvent(ev)
       case _                     =>
         (e formattedString Formatting.fmt, e formattedString Formatting.fmtFull)
     }
   }
   
+  private def printDebug(ev: Explanation) {
+    if (settings.debugTD.value)
+      println("No explanation for " + ev.getClass)
+  }
+  
   // TODO refactor
   trait TyperExplanations {
     def explainTyper(ev: Explanation with TyperExplanation): String = ev match {
+      case _: TypeUnit =>
+        "Typecheck unit"
+        
       case _: TypePackageQualifier =>
-        "Type package qualifier"
+        "Typecheck package qualifier"
         
       case _: TypePackageStatement =>
         "Typecheck package member"
@@ -131,7 +141,7 @@ trait StringOps extends AnyRef
         "Typecheck newly eta-expanded tree\n with expected type"
 
       //TypeApply
-      case _: TypeFunctionTypeApply => 
+      case _: TypeTypeConstructorTypeApply => 
         "Typecheck function\n in type application"
 
       case _: TypeHigherKindedTypeApplyWithExpectedKind =>
@@ -156,12 +166,12 @@ trait StringOps extends AnyRef
         //"Typecheck arguments without taking into account formal parameter types, for " +
         //"further adaption of the qualifier"
         //override def provide(a: Tree): Explanation = TypeArgStandalone(a)
-
-      //Do typed apply, try typed apply
-      case _: TypeArgStandalone =>
-        "Typecheck argument\n without expected type context"
-        //"Typecheck argument without taking into account formal parameter type, for " +
-        //"further adaption of the qualifier"
+        
+      case _: TypeArgForCorrectArgsNum =>
+        "Typecheck argument \nfor correct number of args in application"
+          
+      case expl: TypeArgWithLenientPt =>
+        "Typecheck argument \nwith lenient target type\n " + anyString(expl.pt)
 
       //Block
       case _: TypeStatementInBlock =>
@@ -201,9 +211,6 @@ trait StringOps extends AnyRef
         "Typecheck value's type"
 
       //Type constructor
-      case TypeTypeConstructor(tree: STree) =>
-        "Typecheck type constructor " + anyString(tree)
-
       case _: TypeTypeConstructorInNew =>
         "Typecheck type constructor for 'new'" // TODO
 
@@ -264,7 +271,7 @@ trait StringOps extends AnyRef
         "Typecheck higher-order type parameter"
 
       case _: TypeDefTypeParameter =>
-        "Typecheck def \n type-parameter" 
+        "Typecheck definition \n type parameter" 
         //"Type def type parameter"
 
       case TypeDefParameter(param) =>
@@ -283,7 +290,9 @@ trait StringOps extends AnyRef
         "Typecheck use-case statement"
         //"Type statement in the use case"
       
-      case _ => "Typecheck ?"
+      case _ =>
+        printDebug(ev)
+        "Typecheck ?"
     }
   }
   
@@ -312,6 +321,7 @@ trait StringOps extends AnyRef
         "Typecheck body of the method"
         
       case _ =>
+        printDebug(ev)
         "Typecheck ?"
     }
   }
@@ -340,6 +350,7 @@ trait StringOps extends AnyRef
         "Typecheck application of found implicit view"
       
       case _ =>
+        printDebug(ev)
         "Typecheck ?"
 
     }

@@ -13,7 +13,10 @@ scalaHome <<= baseDirectory { f =>
   val x = props.getProperty("scala.instrumented.home")
   if (x == null)
     sys.error("I need scala compiler version with instrumentation on. Define scala.instrumented.home in local.properties")
-  else Some(file(x))
+  else {
+    println("Using: " + x)
+    Some(file(x))
+  }
 }
 
 unmanagedJars in Compile <++= (scalaHome, baseDirectory) map { (sHome, base) =>

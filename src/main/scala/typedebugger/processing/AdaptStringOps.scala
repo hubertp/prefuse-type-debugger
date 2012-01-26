@@ -89,7 +89,7 @@ trait AdaptStringOps {
            
         case e:TreeAfterEtaExpansionMethodTpeAdapt =>
           ("Eta-expanded tree",
-           anyString(e.tree) + " has been eta-expanded to \n " + anyString(e.tree1))
+           anyString(e.tree) + "\nhas been eta-expanded to\n " + anyString(e.tree1))
            
         case e:InstantiateTParamsForEtaExpansionAdapt =>
           ("Instantiate type-parameters \n in eta expansion",

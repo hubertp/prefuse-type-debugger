@@ -457,6 +457,8 @@ abstract class TypeBrowser extends AnyRef
             ColorLib.rgba(255, 0, 0, 50)
           case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Soft =>
             ColorLib.rgba(255, 0, 0, 50)
+          case Some(ev: LubEvent) =>
+            ColorLib.rgba(255, 228, 181, 100)
           case _ =>
             // search currently not supported
             if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
@@ -823,6 +825,11 @@ abstract class TypeBrowser extends AnyRef
         ev match {
           case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
           case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
+          case _ =>
+        }
+        ev match {
+          case e0: SymbolReferencesEvent => println("References symbol: " + e0.references.map(_.pos))
+          case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
           case _ =>
         }
         println("----------------")
@@ -1213,13 +1220,14 @@ abstract class TypeBrowser extends AnyRef
         case _: AdaptToEvent                => true
         case _: DoTypedApplyEvent           => true
         case _: NamerEvent                  => true
-        case _: ValidateParentClassEvent    => true
+//        case _: ValidateParentClassEvent    => true
         //case _: TyperDone => true
         case _: AdaptEvent                  => true
         case _: TypingBlockEvent            => true
 //        case _: NewContext                  => true
         case _: ErrorEvent                  => true
         case _: ContextTypeError            => true
+        case _: LubEvent                    => true
         case _: RecoveryEvent               => true // TODO need to remove that dependency
                                                     // but then it brakes our indentation mechanism
                                                     // indendation needs to be separated from filtering stuff

@@ -45,7 +45,7 @@ trait InferStringOps {
            (if (!e.variance) "contravariant position" else ""))
            
         case e: InstantiateTypeConstraint =>
-          ("Set instantiation for type constraint because\n" + tvarSetInstExpl(e.reason),
+          ("Set instantiation for type constraint\n=> " + tvarSetInstExpl(e.reason),
            "")
            
         case e: InstantiateGlbOrLub =>
@@ -76,7 +76,7 @@ trait InferStringOps {
            "and expected type " + anyString(e.pt))
     
         case e:InferMethodInstance =>
-          ("Infer method instance \n using inferred arguments",
+          ("Infer method instance \n using inferred argument types",
            "Infer method instance for expression \n " +
            anyString(e.tree) + "\n" +
            "of type " + anyString(e.tree.tpe) + "\n" +
@@ -212,6 +212,52 @@ trait InferStringOps {
       }
     }
     
+    def explainLubGlbEvent(ev: Event with LubEvent): (String, String) = {
+      ev match {
+        case e: CalcLub =>
+          ("Calculate lub " + lubKindExpl1(e.kind),
+           "Calculating lub for types: " + e.tps.map(anyString).mkString("[", ",", "]"))
+        case e: CalcLubElimSubTypes =>
+          ("Calculate lub after eliminating subtypes " + lubKindExpl2(e.kind),
+           "Calculating lub for types: " + e.tps.map(anyString).mkString("[", ",", "]"))
+        case _ =>
+          DEFAULT
+      }
+    }
+    
+    def lubKindExpl1(v: LubKindEntry.Value): String = {
+      import LubKindEntry._
+      v match {
+        case Empty =>
+          "\nsolution: Maximize lub for empty bound"
+        case SingleElem =>
+          "\nsolution: Lub for a single type bound"
+        case NonTrivial =>
+          ""
+      }      
+    }
+    
+    
+    def lubKindExpl2(v: LubKindElimSubtypes.Value): String = {
+      import LubKindElimSubtypes._
+      v match {
+        case Empty =>
+          "\nsolution: Maximize lub for empty bound"
+        case SingleElem =>
+          "\nsolution: Lub for a single type bound"
+        case PolyTpe =>
+          "for Polymorphic type"
+        case MethodTpe =>
+          "for Method type"
+        case NullaryMethodTpe =>
+          "for Nullary method type"
+        case TpeBounds =>
+          "for Type bounds"
+        case NonTrivial =>
+          "\n solution: Refined type for lub"
+      }      
+    }
+    
     def tvarSetInstExpl(v: TVarSetInst.Value): String = v match {
       case ValidType =>
         ""
@@ -222,7 +268,7 @@ trait InferStringOps {
       case UpperSubLower =>
         "Upper bound is a subtype of a lower bound"
       case Solve =>
-        "Solve instantiation of the type variable dependning on the position"
+        "Solution dependent upon the co/contra/in-variant positon"
       case Relatable =>
         "Register type equality"
     }
