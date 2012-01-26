@@ -214,7 +214,7 @@ trait TyperStringOps {
         case e:FailedSecondTryTypedApplyTyper =>
           ("Failed adapting function to the arguments",
            (if (e.args1 eq null) "Failed typing arguments '"
-            else "Failed adapting qualifier to arguments '") + e.args1.map(anyString) + "'")
+            else "Failed adapting qualifier to arguments '") + e.args1.map(anyString).mkString("[", ",", "]") + "'")
 
         case e:FailedTryTypedApplyTyper =>
           ("Second attempt failed", "")
@@ -231,11 +231,11 @@ trait TyperStringOps {
           ("Type explicitly typed expression",
            "Expression to be typed: " + anyString(e.tree))
     
-        case e:TypedApplyTyper =>
+        case e: TypeApplyTyper =>
           ("Type type application", 
            "Type type application." + 
            "\nApply types: " + e.args.map(anyString) + 
-           "\n to function " + anyString(e.fun) + 
+           "\n to type constructor " + anyString(e.fun) + 
            "\n with expected type: " + anyString(e.pt))
            
         case e:TypedTypeApplySuccessTyper =>
@@ -255,22 +255,6 @@ trait TyperStringOps {
            "Function \n" + anyString(e.tree) + " \n" +
            "was typed as \n" + anyString(e.expectedFunPt) + "\n" +
            "in the context of expected type " + anyString(e.pt))
-        
-        case e:TypedApplyTryTyper =>
-          DEFAULT
-          
-        case e:TypedApplyForceTyper =>
-          DEFAULT
-          
-        case e:TypedApplyArrayApplyTyper =>
-          DEFAULT
-          
-        case e:TypedApplyErrorTyper =>
-          ("Exception encountered \nwhile typing application",
-           "Function that was currently typed is " + anyString(e.fun0))
-           
-        case e:TypedApplyQualifierTyper =>
-          DEFAULT
           
         case e:TypedApplyToAssignment =>
           DEFAULT
@@ -535,7 +519,7 @@ trait TyperStringOps {
           ("Method Type needs instantiation", "")
           
         case e:MethodTpeWithUndetTpeParamsDoTypedApply =>
-          ("Method Type with undetermined type parameters",
+          ("Method Type with undetermined type parameters.\nNeed to resolve them first.",
            "Expression \n" + anyString(e.tree) + "\n" +
            "with Method Type\n with undetermined type parameters: '" + e.tparams.map(anyString).mkString(",") + "'\n" +
            "and formal parameters: " + e.formals.map(anyString).mkString("[", ",", "]"))    
@@ -554,7 +538,7 @@ trait TyperStringOps {
            "\n and expected type " + anyString(e.pt))
            
         case e:DoTypedApplyDone =>
-          val short = if (e.tree.isErrorTyped) "Failed to type application" else "Applied arguments"
+          val short = if (e.tree.isErrorTyped) "Failed to type application" else "Typechecked application"
           (short,
            "Applied arguments in the tree \n " + anyString(e.tree) + "\n" + 
            "of type " + anyString(e.tree.tpe))

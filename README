@@ -14,11 +14,10 @@ How to start:
 1) build scala with instrumenting support ('topic/contexterrors-events--instrumenting' branch),
    in all other steps we assume that $SCALA_INSTRUMENTING_HOME to its directory
 2) create 'lib' directory
-3) ln -s $SCALA_INSTRUMENTING_HOME/build/pack/lib/scala-library.jar lib/scala-library.jar (or symlink)
-4) ln -s $SCALA_INSTRUMENTING_HOME/build/pack/lib/scala-compiler.jar lib/scala-compiler.jar (or symlink)
-5) build prefuse and put prefuse-core-x.x.jar into lib
-6) xsbt compile
-7) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
-8) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
+3) define local.properties with the following line: scala.instrumented.home=$SCALA_INSTRUMENTING_HOME/build/pack
+4) build prefuse and put prefuse-core-x.x.jar into lib
+5) xsbt compile
+6) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
+7) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
 
 In future I will provide binaries for convience.

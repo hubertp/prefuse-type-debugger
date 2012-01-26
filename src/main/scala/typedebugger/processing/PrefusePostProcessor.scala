@@ -49,6 +49,8 @@ trait PrefusePostProcessors {
          false
        case _: InferDone =>
          false
+       case _: LubGlbDone =>
+         false
        case _: RecoveryEvent =>
          false // we should be able to avoid this filter
     }
