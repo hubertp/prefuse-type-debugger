@@ -161,14 +161,14 @@ trait StringOps extends AnyRef
         "Typecheck function body"
 
       //Do typed apply, try typed apply
-      case _: TypeArgsStandalone =>
-        "Typecheck arguments\n without expected type context"
+      case _: TypeArgStandalone =>
+        "Typecheck argument\n without expected type context"
         //"Typecheck arguments without taking into account formal parameter types, for " +
         //"further adaption of the qualifier"
         //override def provide(a: Tree): Explanation = TypeArgStandalone(a)
         
       case _: TypeArgForCorrectArgsNum =>
-        "Typecheck argument \nfor correct number of args in application"
+        "Typecheck argument \n (when dealing with correct number of args in application)"
           
       case expl: TypeArgWithLenientPt =>
         "Typecheck argument \nwith lenient target type\n " + anyString(expl.pt)
@@ -368,7 +368,7 @@ trait StringOps extends AnyRef
       case ContextTypeErrorEvent(err, level) =>
         (level match {
           case ErrorLevel.Hard => "Type error"
-          case ErrorLevel.Soft => "(possibly) Recoverable type error"
+          case ErrorLevel.Soft => err.errMsg + "\n" + "(possibly) Recoverable type error"
         }, "Error:\n" + err.errMsg)
       
       case _ =>

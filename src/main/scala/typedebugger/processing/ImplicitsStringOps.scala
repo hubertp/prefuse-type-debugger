@@ -33,6 +33,13 @@ trait ImplicitsStringOps {
           (if (!e.undetParams.isEmpty) "\n and undetermined type parameters " + e.undetParams.map(anyString).mkString("[", ",", "]")
           else "")
        (descr, full)
+       
+      case e: ImprovesCompare =>
+        ("Compare two implicits",
+         "Comparing implicit:\n " + e.info1 + "\n vs. \n" + e.info2)
+         
+      case e: ImprovesResult =>
+        (if (e.res) "Implicit improves" else "No improvement exists", "")
 
       case e: VerifyImplicit =>
         ("Verify available implicit",

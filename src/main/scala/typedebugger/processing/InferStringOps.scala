@@ -38,16 +38,30 @@ trait InferStringOps {
           ("Instantiate type variables",
            "Instantiate type variables: " + e.tvars.map(tvar => anyString(tvar) + " => " + anyString(tvar.constr.inst)).mkString("[", ",", "]"))
            
+        case e: InstantiateTypeVar =>
+          ("Instantiate type variable " + e.tvar,
+           "Instantiate type variable: " + anyString(e.tvar) + " with constraint " + anyString(e.tvar.constr))
+           
         case e: SolveSingleTVar =>
           ("Solve type variable",
            "Solve: " + e.tvar + "\n" +
            //"In " + e.tvar.
            (if (!e.variance) "contravariant position" else ""))
            
-        case e: InstantiateTypeConstraint =>
+        case e: SetInstantiateTypeConstraint =>
           ("Set instantiation for type constraint\n=> " + tvarSetInstExpl(e.reason),
            "")
            
+        case e: WildcardLenientTArg =>
+          if (e.noInstance)
+            ("No instance of a typevariable " + e.tvar, "")
+          else
+            ("No type var constraint instance for " + e.tvar, "")
+            
+        case e: IncompatibleResultAndPrototype =>
+          ("Incompatible function result- and proto-type",
+           "Incompatible types:\n" + anyString(e.restpe) + "vs.\n" + anyString(e.pt))
+          
         case e: InstantiateGlbOrLub =>
           def instType = if (e.up) "greater lower bound (glb)" else "lower upper bound (lub)"
           def pos = if (e.up) "non-contravariant position" else "contravariant position"

@@ -883,7 +883,7 @@ abstract class TypeBrowser extends AnyRef
             if (settings.debugTD.value && node.ev.isInstanceOf[TyperTyped] && node.ev != null) {
               val nTyperTyped = node.ev.asInstanceOf[TyperTyped]
               val expl = nTyperTyped.expl
-              println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " " +
+              println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
                       expl.getClass)
             }
 //            contextInfoArea.setText(node.fullInfo)
