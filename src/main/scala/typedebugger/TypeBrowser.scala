@@ -78,6 +78,17 @@ abstract class TypeBrowser extends AnyRef
     
     val typerNodes = "tree.typer"
     val namerNodes = "tree.namer"
+      
+    // Search for visual item corresponding to node (i.e. Node ==> NodeItem)
+    class VisualItemSearchPred(search: Node, label: String) extends AbstractPredicate {
+      override def getBoolean(t: Tuple): Boolean = {
+        if (t.canGet(label, TypeDebuggerFrame.COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
+          // because we added nodeItem to the list, not visualItem which 't' is
+          val nodeItem = t.get(label).asInstanceOf[UINodeP]
+          nodeItem.pfuseNode == search
+        } else false
+      }
+    } 
   }
 
   class TreeDisplay(t: Tree, label: String, initialGoals: List[UINodeP])
@@ -283,17 +294,6 @@ abstract class TypeBrowser extends AnyRef
         }
       }
       
-      // Find respective visual NodeItem for the prefuse normal Node
-      class FirstNodeFallback(search: Node) extends AbstractPredicate {
-        override def getBoolean(t: Tuple): Boolean = {
-          if (t.canGet(label, COLUMN_PREFUSENODE_CLASS) && t.isInstanceOf[NodeItem]) {
-            // because we added nodeItem to the list, not visualItem which 't' is
-            val nodeItem = t.get(label).asInstanceOf[UINodeP]
-            nodeItem.pfuseNode == search
-          } else false
-        }
-      } 
-      
       // Anchor the layout root at the first error
       // or show the synthetic root
       // TODO expand to more errors
@@ -315,7 +315,7 @@ abstract class TypeBrowser extends AnyRef
             if (!allPNodeVisibleGoals.contains(eNode.pfuseNode)) {
               // we are dealing with a first (root) node
               // so try to find it manually
-              val first = m_vis.items(wholeTree, new FirstNodeFallback(head.pfuseNode))
+              val first = m_vis.items(wholeTree, new VisualItemSearchPred(head.pfuseNode, label))
               if (first.hasNext) first.next.asInstanceOf[NodeItem] else super.getLayoutRoot()
             } else {
               allPNodeVisibleGoals(eNode.pfuseNode) // get corresponding visualitem
@@ -392,12 +392,6 @@ abstract class TypeBrowser extends AnyRef
           activeTooltip.stopShowing()
       }
       
-      /*override def itemEntered(item: VisualItem, e: MouseEvent) {
-        if(item.isInstanceOf[NodeItem]) {
-          showNodeTooltip(item, e)
-        }
-      }*/
-      
       override def itemPressed(item: VisualItem, e: MouseEvent) {
         if(activeTooltip != null)
           activeTooltip.stopShowingImmediately()
@@ -463,6 +457,8 @@ abstract class TypeBrowser extends AnyRef
             // search currently not supported
             if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
               ColorLib.rgb(255,190,190)
+            else if ( m_vis.isInGroup(item, TreeDisplay.clickedNode))
+              ColorLib.rgb(198, 229, 250)
             else if ( m_vis.isInGroup(item, fixedNodes) )
               ColorLib.rgb(204, 255, 51)
             else if ( m_vis.isInGroup(item, Visualization.FOCUS_ITEMS) )
@@ -600,8 +596,6 @@ abstract class TypeBrowser extends AnyRef
         }
         
         for (item <- ts.tuples()) {
-          // Each of the goals
-          //println("show goal: " + item)
           PrefuseLib.updateVisible(item.asInstanceOf[VisualItem], true)
           item match {
             case item0: NodeItem =>
@@ -634,7 +628,6 @@ abstract class TypeBrowser extends AnyRef
       val toExpand = new ListBuffer[NodeItem]()
       
       object InitialGoalPredicate extends AbstractPredicate {
-        // TODO: snd is redundant?
         private def isInitialGoal(node: UINodeP) =
           if (initialGoals.contains(node)) {
             node.ev match {
@@ -803,14 +796,15 @@ abstract class TypeBrowser extends AnyRef
 
     val treeTransformedViewer = new JTextArea(30, 90)
     val treeGeneralViewer = new JTextArea(30, 30)
-    val treeHighlighter = treeGeneralViewer.getHighlighter()
-    
+    private val treeViewerHighlighter = treeGeneralViewer.getHighlighter()
     private val cleanupNodesAction = new CleanupAction(TreeDisplay.openGoalNodes,
                                                        TreeDisplay.nonGoalNodes,
                                                        TreeDisplay.toRemoveNodes,
                                                        TreeDisplay.linkGroupNodes)
+    val treeHighlighter = new HiglighterAndGeneralInfo()
     
     val treeView = new TreeDisplay(t, label, goals)
+    var lastClicked: Option[NodeItem] = None
 
     // Displays all info related to the specific event
     // TODO: we should customize it at this point, by building necessary
@@ -832,6 +826,15 @@ abstract class TypeBrowser extends AnyRef
           case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
           case _ =>
         }
+        
+        if (ev.isInstanceOf[DoneBlock])
+          println("DONE BLOCK: " + ev.asInstanceOf[DoneBlock].originEvent)
+        if (ev.isInstanceOf[TyperTyped]) {
+          val nTyperTyped = ev.asInstanceOf[TyperTyped]
+          val expl = nTyperTyped.expl
+          println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
+            expl.getClass)
+        }  
         println("----------------")
       }
     }
@@ -869,44 +872,53 @@ abstract class TypeBrowser extends AnyRef
 
 
       // Add listeners
-      treeView.addControlListener(new ControlAdapter() {
+      treeView.addControlListener(new HiglighterAndGeneralInfo())
+      
+      //treeView.addControlListener(new FocusOnNode(TreeView.fixedNodes))
+      treeView.addControlListener(new AddGoal())
+      treeView.addControlListener(new LinkNode(TreeDisplay.linkGroupNodes,
+                                               TreeDisplay.treeNodes,
+                                               TreeDisplay.nonGoalNodes,
+                                               TreeDisplay.openGoalNodes))
+      treeView.addControlListener(new FixedNode(TreeDisplay.fixedNodes,
+                                                TreeDisplay.nonGoalNodes,
+                                                TreeDisplay.toRemoveNodes))
+      treeView.addControlListener(new KeyPressAddGoal())
+
+      if (srcs.isEmpty)
+        println("[Warning] No files specified for debugging.")
+      loadFile(srcs.head)
+      frame.getContentPane().add(topPane)
+      frame.pack()
+      frame.setVisible(true)
+    }
+    
+    class HiglighterAndGeneralInfo() extends ControlAdapter {
         override def itemClicked(item: VisualItem, e: MouseEvent) {
           if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
             val node = item.get(label).asInstanceOf[UINodeP]
             if (e.isAltDown())
               fullEventInfo(node.ev)
-            if (settings.debugTD.value && node.ev != null){
-              //println("CHILDREN: " + node.children.map(_.ev.getClass))
-              if (node.ev.isInstanceOf[DoneBlock])
-                println("DONE BLOCK: " + node.ev.asInstanceOf[DoneBlock].originEvent)
-            }
-            if (settings.debugTD.value && node.ev.isInstanceOf[TyperTyped] && node.ev != null) {
-              val nTyperTyped = node.ev.asInstanceOf[TyperTyped]
-              val expl = nTyperTyped.expl
-              println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
-                      expl.getClass)
-            }
 //            contextInfoArea.setText(node.fullInfo)
           }
         }
 
         override def itemEntered(item: VisualItem, e: MouseEvent) {
+
           if (item.canGet(label, COLUMN_PREFUSENODE_CLASS)) {
+            clearHighlight()
             val node = item.get(label).asInstanceOf[UINodeP]
             node.ev match {
-	            case e:TreeEvent =>
+              case e:TreeEvent =>
                 val prettyTree = asString(e.tree)
                 treeTransformedViewer.setText(prettyTree)
-
-                //if (DEBUG)
-                //  println("[hightlight Tree] " + e.tree.pos)
                 highlight(e.tree.pos, TreeMainHighlighter)
-	            case e: SymEvent =>
-	              
-	              //if (DEBUG)
-  	            //  println("[hightlight Sym] " + e.sym.pos)
-	              highlight(e.sym.pos, TreeMainHighlighter)
+                
+              case e: SymEvent =>
+                highlight(e.sym.pos, TreeMainHighlighter)
+                
               case _ =>
+                
             }
             
             node.ev match {
@@ -918,43 +930,26 @@ abstract class TypeBrowser extends AnyRef
             }
           }
         }
-        override def itemExited(item: VisualItem, e: MouseEvent) {
+       override def itemExited(item: VisualItem, e: MouseEvent) {
           treeTransformedViewer.setText(null)
           clearHighlight()
         }
-      })
-      
-      //treeView.addControlListener(new FocusOnNode(TreeView.fixedNodes))
-      treeView.addControlListener(new AddGoal(TreeDisplay.openGoalNodes,
-                                              TreeDisplay.nonGoalNodes,
-                                              TreeDisplay.clickedNode))
-      treeView.addControlListener(new LinkNode(TreeDisplay.linkGroupNodes,
-                                               TreeDisplay.treeNodes,
-                                               TreeDisplay.nonGoalNodes,
-                                               TreeDisplay.openGoalNodes))
-      treeView.addControlListener(new FixedNode(TreeDisplay.fixedNodes,
-                                                TreeDisplay.nonGoalNodes,
-                                                TreeDisplay.toRemoveNodes))
-
-      if (srcs.isEmpty)
-        println("[Warning] No files specified for debugging.")
-      loadFile(srcs.head)
-      frame.getContentPane().add(topPane)
-      frame.pack()
-      frame.setVisible(true)
+        
+       private def highlight(pos: Position, colorSelection: DefaultHighlighter.DefaultHighlightPainter) {
+         if (pos.isRange) {
+           //clearHighlight()
+           treeViewerHighlighter.addHighlight(pos.start, pos.end, colorSelection)
+         }
+       }
+    
+       private def clearHighlight() {
+         treeViewerHighlighter.getHighlights.foreach(treeViewerHighlighter.removeHighlight(_))
+       }
+       
+       object TreeMainHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.red)
+       object TreeReferenceHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.green)
     }
 
-    private def highlight(pos: Position, colorSelection: DefaultHighlighter.DefaultHighlightPainter) {
-      if (pos.isRange) {
-        //clearHighlight()
-        treeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
-      }
-    }
-    
-    private def clearHighlight() {
-        treeHighlighter.getHighlights.foreach(treeHighlighter.removeHighlight(_))
-    }
-    
     private def loadFile(fName: String) {
       // at the moment we only ensure that there is only one
       val f = new File(fName)
@@ -963,9 +958,6 @@ abstract class TypeBrowser extends AnyRef
       } else "Source does not exist"
       treeGeneralViewer.setText(src)
     }
-
-    object TreeMainHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.red)
-    object TreeReferenceHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.green)
     
     // Handle action on the node of the graph.
     // Expand the node that was just clicked. Also cleanup all the intermediate nodes leading to it.
@@ -980,8 +972,10 @@ abstract class TypeBrowser extends AnyRef
           fGroup.removeTuple(item)
           (vis.getFocusGroup(toRemoveGroup)).addTuple(item.get(label).asInstanceOf[UINodeP].pfuseNode)
           cleanupLinkPath(item.asInstanceOf[NodeItem], vis)
-        } else
+        } else {
           fGroup.addTuple(item)
+        }
+        lastClicked = Some(item.asInstanceOf[NodeItem])
       }
       
       def cleanupLinkPath(starting: NodeItem, vis: Visualization) {
@@ -992,6 +986,83 @@ abstract class TypeBrowser extends AnyRef
           tsNonGoal.removeTuple(n.pfuseNode)
           tsRemove.addTuple(n.pfuseNode)
           n = n.parent.get
+        }
+      }
+    }
+    
+    class KeyPressAddGoal() extends ControlAdapter {
+      
+      val validKeys = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT)
+      override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
+      
+      override def keyPressed(k: KeyEvent) {
+        // pre-filter
+        val keyCode = k.getKeyCode
+        if (keyCode < 37 || keyCode > 40)
+          return
+          
+        val last: NodeItem = if (lastClicked.isDefined)
+            lastClicked.get
+          else {
+            // Find bottom most event
+            val vis = treeView.getVisualization
+            val ts = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+            val goals = vis.getFocusGroup(TreeDisplay.openGoalNodes)
+            ts.tuples().find(item =>
+              if (item.isInstanceOf[NodeItem]) {
+                val item1 = item.asInstanceOf[NodeItem].get(label).asInstanceOf[UINodeP]
+                if (item1.parent.isDefined && goals.containsTuple(item1.parent.get.pfuseNode)) false
+                else true
+              } else false) match {
+              case Some(top: NodeItem) =>
+                top.children.find(item =>
+                  item.asInstanceOf[NodeItem].get(label).asInstanceOf[UINodeP].goal)
+                 .get.asInstanceOf[NodeItem] // there is always a goal child
+              case None =>
+                treeView.treeLayout.getLayoutRoot()
+                return
+            }
+          }
+
+        val vis = last.getVisualization
+        val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+        
+        keyCode match {
+          case KeyEvent.VK_DOWN =>
+            // expand down (if necessary)
+            val n = last.get(label).asInstanceOf[UINodeP]
+            if (n.parent.isDefined)
+              navigate(n.parent.get.pfuseNode, vis)
+            
+          case KeyEvent.VK_LEFT =>
+            // expand left neighbour (if possible)
+            val prevSibling = last.getPreviousSibling()
+            if (prevSibling != null)
+              navigate(prevSibling.get(label).asInstanceOf[UINodeP].pfuseNode, vis)
+            
+          case KeyEvent.VK_RIGHT =>
+            // expand right neighbour (if possible)
+            val nextSibling = last.getNextSibling()
+            if (nextSibling != null)
+              navigate(nextSibling.get(label).asInstanceOf[UINodeP].pfuseNode, vis)
+
+          case KeyEvent.VK_UP =>
+            if (last.getChildCount() > 0)
+              navigate(last.getFirstChild().get(label).asInstanceOf[UINodeP].pfuseNode, vis)
+          case _ =>
+            
+        }
+      }
+      
+      def navigate(n: Node, vis: Visualization) {
+        vis.items(new TreeDisplay.VisualItemSearchPred(n, label)).toList match {
+          case List(first: VisualItem) =>
+            AddGoal.addClickedItem(first, vis)
+            treeHighlighter.itemEntered(first, null)
+            // need to schedule the action by hand since keycontrol doesn't do it
+            vis.run("filter")
+          case _ =>
+            println("incorrect search " + n)
         }
       }
     }
@@ -1071,17 +1142,23 @@ abstract class TypeBrowser extends AnyRef
     
     // 'Stick' node that was clicked with Shift & Ctrl.
     // It will be visible even if it is not on a path to a goal(errors etc).
-    class AddGoal(goalGroup: String, nonGoalGroup: String, clickedNode: String)
-      extends ControlAdapter {
+    class AddGoal() extends ControlAdapter {
+      import AddGoal._
       override def itemClicked(item: VisualItem, e: MouseEvent) {
         if (e.isControlDown() || e.isShiftDown() || !item.isInstanceOf[NodeItem])
           return
-        
+        println("itme clicked: " + item)
+        addClickedItem(item, item.getVisualization())
+      }
+    }
+    
+    object AddGoal {
+      def addClickedItem(item: VisualItem, vis: Visualization) {
         // Add or remove from focus group
         val vis = item.getVisualization
-        val ts1 = vis.getFocusGroup(goalGroup)
-        val ts2 = vis.getFocusGroup(nonGoalGroup)
-        val clicked = vis.getFocusGroup(clickedNode)
+        val ts1 = vis.getFocusGroup(TreeDisplay.openGoalNodes)
+        val ts2 = vis.getFocusGroup(TreeDisplay.nonGoalNodes)
+        val clicked = vis.getFocusGroup(TreeDisplay.clickedNode)
 
         cleanupNodesAction.clean(item)
         clicked.clear()
@@ -1107,7 +1184,7 @@ abstract class TypeBrowser extends AnyRef
             case None =>
           }
         } else {
-          // we are dealing we a non-direct goal
+          // we are dealing with a non-direct goal
           // expand its children which are non-goals
           var eNode0 = eNode
           // goals are all in, so we are fine 
@@ -1116,6 +1193,7 @@ abstract class TypeBrowser extends AnyRef
             eNode0 = eNode0.parent.get
           }
         }
+        lastClicked = Some(node)        
       }
     }
     
