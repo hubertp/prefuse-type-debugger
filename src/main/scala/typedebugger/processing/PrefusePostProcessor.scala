@@ -70,6 +70,9 @@ trait PrefusePostProcessors {
           root.pfuseNode.set(label, root)
           root.children ++= child.children.map(processChildren(root, _)).flatten
           Some(root)
+        } else if (advancedFilter(child)) {
+          // Ignore those considered to be more advanced/hidden
+          None
         } else if (validEvent(child.ev))  {
           //println("process-nonroot-child: " + child + " || " + parent.pfuseNode)
           val child1 = new PrefuseEventNode(child.ev, Some(parent), t.addChild(parent.pfuseNode))
@@ -148,6 +151,42 @@ trait PrefusePostProcessors {
         }
         // Also with adapt-typeTree
       }
+      
+      def advancedFilter(node: BaseTreeNode[_]): Boolean =
+        !settings.advancedDebug.value && (node.ev match {
+          case _: ConvertConstrBody =>
+            true
+
+          case e: ValidateParentClass =>
+            e.parent.symbol != null && (e.parent.symbol == definitions.ScalaObjectClass ||
+                                        e.parent.symbol == definitions.ObjectClass)
+
+          case e: TyperTyped =>
+            val res = e.tree match {
+              // Should make it more specific, i.e. search for synthetics 
+              case ddef: DefDef if ddef.name == nme.CONSTRUCTOR || (ddef.symbol != null && ddef.symbol.isSynthetic) =>
+                true
+              case _ =>
+                false
+            }
+            if (!res) {
+              e.expl match {
+                case e@TypeTemplateStatement(stat) =>
+                  if (stat.symbol != null) {
+                    stat.symbol.isSynthetic || stat.symbol.isGetter
+                  } else false
+                case _ =>
+                  false
+              }
+            } else true
+            
+          case e: ProtoTypeArgsDoTypedApply =>
+            true
+
+          case _ =>
+            false
+
+        })
     }
   }
 }

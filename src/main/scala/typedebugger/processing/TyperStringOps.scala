@@ -291,7 +291,7 @@ trait TyperStringOps {
           
         case e:SelectTreeTyper =>
          ("Type member selection", 
-          "Type qualifier \n" + anyString(e.tree) + "\ncalling member '" + e.name + "'")
+          "Type qualifier \n" + anyString(e.tree.asInstanceOf[Select].qualifier) + "\ncalling member '" + e.tree.asInstanceOf[Select].name + "'")
     
         case e:SelectConstrTyper =>
          ("Type super-constructor call", "")
@@ -527,7 +527,7 @@ trait TyperStringOps {
         case e:ProtoTypeArgsDoTypedApply =>
           ("Infer prototype arguments", 
            "Infer prototype arguments:\n" +
-           ((e.tparams zip e.lenient).map{subst => anyString(subst._1) + " ==> " + anyString(subst._2)}).mkString("\n"))
+           e.tparams.map(anyString).mkString("[", ",", "]") + " for " + anyString(e.resultTpe))
           
         case e:InstantiatedDoTypedApply =>
           ("Typecheck inferred instance\n in the application",

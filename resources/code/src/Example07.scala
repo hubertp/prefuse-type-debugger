@@ -6,12 +6,12 @@ object A {
    b.map(x => x)
    ()
  }
-
+*/
  def foo2 {
    val a = Array(1,2)
    a.toList.map(x => x)
    ()
- }*/
+ }
 
  def bar {
    val a = Array(1,2)
