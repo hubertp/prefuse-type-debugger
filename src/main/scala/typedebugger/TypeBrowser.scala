@@ -209,6 +209,7 @@ abstract class TypeBrowser extends AnyRef
     m_vis.putAction("initial-goals", initialNodes)
  
     val zoomToFit = new ZoomToFitControl()
+    val hoverController = new HoverTooltip()
     zoomToFit.setZoomOverItem(false)
     // initialize the display
     setSize(700,800)
@@ -217,7 +218,7 @@ abstract class TypeBrowser extends AnyRef
     addControlListener(new ZoomControl())
     addControlListener(new WheelZoomControl())
     addControlListener(new PanControl())
-    addControlListener(new HoverTooltip())
+    addControlListener(hoverController)
     addControlListener(new FocusControl(1, "filter"))
 
     setOrientation(orientation)
@@ -393,34 +394,42 @@ abstract class TypeBrowser extends AnyRef
       }
       
       override def itemPressed(item: VisualItem, e: MouseEvent) {
-        if(activeTooltip != null)
-          activeTooltip.stopShowingImmediately()
+        clearTooltip()
       }
       
       override def itemReleased(item: VisualItem, e: MouseEvent) {
         if(item.isInstanceOf[NodeItem] && e.getButton() == MouseEvent.BUTTON3)
-          showNodeTooltip(item, e)
+          showNodeTooltip(item, e.getX(), e.getY())
       }
       
-      protected def showNodeTooltip(item: VisualItem, e: MouseEvent) {
+      def showItemTooltip(item: VisualItem) {
+        showNodeTooltip(item, item.getX().toInt, item.getY().toInt)
+      }
+      
+      def clearTooltip() {
+        if(activeTooltip != null)
+          activeTooltip.stopShowingImmediately()
+      }
+      
+      protected def showNodeTooltip(item: VisualItem, coordX: Int, coordY: Int) {
         val v = item.getVisualization()
         val eNode = item.get(label).asInstanceOf[UINodeP]
         
         showTooltip(new NodeTooltip("Some name",
           eNode.fullInfo,
-          100, 100, e.getSource().asInstanceOf[Display]),
-            item, e)
+          100, 100, v.getDisplay(0)),
+            item, coordX, coordY)
       }
       
-      private def showTooltip(ptt: PrefuseTooltip, item: VisualItem, e: MouseEvent) {
+      private def showTooltip(ptt: PrefuseTooltip, item: VisualItem, coordX: Int, coordY: Int) {
         if(activeTooltip != null) {
           activeTooltip.stopShowingImmediately()
         }
         
         activeTooltip = ptt
-        activeTooltip.startShowing(e.getX() + 10, e.getY() + 5,
-            (getWidth()/2) < e.getX(),
-            (getHeight()/2) < e.getY())
+        activeTooltip.startShowing(coordX + 10, coordY + 5,
+            (getWidth()/2) < coordX,
+            (getHeight()/2) < coordY)
       }
     }
         
@@ -998,8 +1007,10 @@ abstract class TypeBrowser extends AnyRef
       override def keyPressed(k: KeyEvent) {
         // pre-filter
         val keyCode = k.getKeyCode
-        if (keyCode < 37 || keyCode > 40)
+        /*if (keyCode < 37 || keyCode > 40) {
+          controlKeyPressed(k)
           return
+        }*/
           
         val last: NodeItem = if (lastClicked.isDefined)
             lastClicked.get
@@ -1049,9 +1060,27 @@ abstract class TypeBrowser extends AnyRef
           case KeyEvent.VK_UP =>
             if (last.getChildCount() > 0)
               navigate(last.getFirstChild().get(label).asInstanceOf[UINodeP].pfuseNode, vis)
-          case _ =>
+              
+          case other =>
+            controlKeyPressed(other, last)
             
         }
+      }
+      
+      def controlKeyPressed(k: Int, node: NodeItem) = k match {
+        case KeyEvent.VK_ENTER =>
+          val pNode = node.get(label).asInstanceOf[UINodeP].pfuseNode
+          node.getVisualization.items(new TreeDisplay.VisualItemSearchPred(pNode, label)).toList match {
+            case List(single: VisualItem) =>
+              treeView.hoverController.showItemTooltip(single)
+            case _ =>
+          }
+          
+        case KeyEvent.VK_ESCAPE =>
+          treeView.hoverController.clearTooltip()
+        
+        case _ =>
+          
       }
       
       def navigate(n: Node, vis: Visualization) {
