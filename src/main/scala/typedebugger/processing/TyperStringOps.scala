@@ -27,7 +27,7 @@ trait TyperStringOps {
          ("Type tree", "Type tree " + anyString(e.tree) + "\nwith expected type: " + anyString(e.pt))
          
         case e: SymInitializeTyper =>
-          ("Initialize tree's symbol", "Initializing symbol will force its type to be resolved")
+          ("Initialize tree's symbol type", "Initializing symbol will force its lazy type to be resolved")
           
         case e: PackageTyper =>
           ("Type package", "Type package " + e.tree.asInstanceOf[RefTree].name.toString)
