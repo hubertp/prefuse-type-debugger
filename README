@@ -16,8 +16,12 @@ How to start:
 2) create 'lib' directory
 3) define local.properties with the following line: scala.instrumented.home=$SCALA_INSTRUMENTING_HOME/build/pack
 4) build prefuse and put prefuse-core-x.x.jar into lib
-5) xsbt compile
+5) xsbt compile (needs at least 0.11.2 version of sbt)
 6) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
 7) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
 
-In future I will provide binaries for convience.
+OR
+
+Use provided binaries with instrumented Scala library that are in resources/lib
+(point scala.instrumented.home at this directory). You have to make sure that type debugger and scala compiler
+have the same matching tags, otherwise you are likely to get some bugs.
