@@ -152,6 +152,8 @@ trait PrefusePostProcessors {
         // Also with adapt-typeTree
       }
       
+      
+      // Should split into proper advanced and synthetics
       def advancedFilter(node: BaseTreeNode[_]): Boolean =
         !settings.advancedDebug.value && (node.ev match {
           case _: ConvertConstrBody =>
@@ -182,7 +184,13 @@ trait PrefusePostProcessors {
             
           case e: ProtoTypeArgsDoTypedApply =>
             true
+            
+          case e: ImplicitsEligibility =>
+            true
 
+          case e: CheckTypesCompatibility =>
+            true
+            
           case _ =>
             false
 

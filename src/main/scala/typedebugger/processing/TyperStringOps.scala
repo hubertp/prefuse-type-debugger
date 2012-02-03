@@ -538,6 +538,7 @@ trait TyperStringOps {
            "\n and expected type " + anyString(e.pt))
            
         case e:DoTypedApplyDone =>
+          // TODO: should be errorevent somehow?
           val short = if (e.tree.isErrorTyped) "Failed to type application" else "Typechecked application"
           (short,
            "Applied arguments in the tree \n " + anyString(e.tree) + "\n" + 

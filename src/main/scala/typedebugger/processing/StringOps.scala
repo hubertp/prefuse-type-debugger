@@ -309,7 +309,7 @@ trait StringOps extends AnyRef
         "Typecheck return type of the method (again) in Namer"
 
       case _: InferredMethodReturnType =>
-        "Typecheck inferred return type of the method"
+        "Infer and typecheck result type of the method"
 
       case ValExplicitType(_, sym) =>
         "Typecheck type of a " + (if (sym.isMutable) "variable" else "value")

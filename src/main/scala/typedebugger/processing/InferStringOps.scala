@@ -150,7 +150,7 @@ trait InferStringOps {
         case e:TreeTypeSubstitution =>
           val tpSubst = (e.undet zip e.targs).map(subst => subst._1 + " => " + subst._2).mkString("\n")
           ("Type substitution map \n for inferred instance",
-           "Perform substitution to infer concreate instance:\n" + tpSubst + "\n" +
+           "Perform substitution to infer concrete instance:\n" + tpSubst + "\n" +
            "in " + e.tree)
            
         case e:IsApplicableInfer =>

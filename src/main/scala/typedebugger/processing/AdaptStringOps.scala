@@ -129,7 +129,7 @@ trait AdaptStringOps {
              case DefaultExplanation =>
                "Adapt by inferring concrete instance"
              case _ =>
-               "Infer concrete instance and \n " + e
+               "Infer concrete instance" //and \n " + explainNamer(e.e)
           }
           val long =
             "Instantiate undetermined paratemers " + e.tparams.map(anyString).mkString("[", ",", "]") + "\n" +

@@ -43,7 +43,7 @@ trait ImplicitsStringOps {
 
       case e: VerifyImplicit =>
         ("Verify available implicit",
-         "Try implicit " + e.implicitRep + // TODO 
+         "Try implicit " + e.info.name + // TODO 
          "\nfor tree: " + e.newTree + "\nwith expected type " + anyString(e.pt))
 
       case e: ImplicitSearchDone =>
@@ -71,6 +71,27 @@ trait ImplicitsStringOps {
         ("Search evidence for manifest",
          "Search implicit for the manifest for type " + anyString(e.tpe))
          
+      case e: AllEligibleImplicits =>
+        ("Filter all eligible implicits",
+         "Filter all eligible implicits for expected type " + anyString(e.pt0))
+      
+      case e: AllEligibleImplicitsDone =>
+        ("Filtered all eligible implicits","")
+        
+      case e: InfoEligibleTest =>
+        ("Test implicit eligibility", "Implicit: " + e.info.name)
+        
+      case e: InfoEligibleTestDone =>
+        val short = if (e.eligible) "Implicit eligible" else "Implicit not eligible"
+        (short, "")
+         
+      case e: CheckTypesCompatibility =>
+        ("Check types compatibility", "Check compatibility of types: " + anyString(e.tp0) + " vs. " + anyString(e.pt0))
+        
+      case e: CheckedTypesCompatibility =>
+        val short  = if (e.res) "Types compatible" else "Types not compatible"
+        (short, "")
+        
       case e: AmbiguousImplicitsError =>
         ("Ambiguous implicits", 
          "Cannot apply implicit conversion due to ambiguity of two implicits:\n" +
