@@ -403,7 +403,8 @@ abstract class TypeBrowser extends AnyRef
       }
       
       def showItemTooltip(item: VisualItem) {
-        showNodeTooltip(item, item.getX().toInt, item.getY().toInt)
+        //Use fixed coordinates as item can randomly fail to give sensible values
+        showNodeTooltip(item, 5, 5)
       }
       
       def clearTooltip() {
