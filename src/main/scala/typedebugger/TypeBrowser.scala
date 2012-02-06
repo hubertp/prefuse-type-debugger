@@ -453,6 +453,8 @@ abstract class TypeBrowser extends AnyRef
         val event = retrieveEvent(item)
         event match {
           // TODO
+          case _ if ( m_vis.isInGroup(item, TreeDisplay.clickedNode)) =>
+            ColorLib.rgb(198, 229, 250) // Make it always visible
           case Some(ev: HardErrorEvent) =>
             ColorLib.rgba(255, 0, 0, 150)
           case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Hard =>
@@ -463,12 +465,14 @@ abstract class TypeBrowser extends AnyRef
             ColorLib.rgba(255, 0, 0, 50)
           case Some(ev: LubEvent) =>
             ColorLib.rgba(255, 228, 181, 100)
+          case Some(ev: TypesEvent) =>
+            ColorLib.rgba(255, 228, 181, 100) // TODO change to a different one
           case _ =>
             // search currently not supported
             if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
               ColorLib.rgb(255,190,190)
-            else if ( m_vis.isInGroup(item, TreeDisplay.clickedNode))
-              ColorLib.rgb(198, 229, 250)
+            //else if ( m_vis.isInGroup(item, TreeDisplay.clickedNode))
+            //  ColorLib.rgb(198, 229, 250)
             else if ( m_vis.isInGroup(item, fixedNodes) )
               ColorLib.rgb(204, 255, 51)
             else if ( m_vis.isInGroup(item, Visualization.FOCUS_ITEMS) )
@@ -940,6 +944,7 @@ abstract class TypeBrowser extends AnyRef
             }
           }
         }
+        
        override def itemExited(item: VisualItem, e: MouseEvent) {
           treeTransformedViewer.setText(null)
           clearHighlight()
@@ -1038,7 +1043,8 @@ abstract class TypeBrowser extends AnyRef
 
         val vis = last.getVisualization
         val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-        
+
+        treeView.hoverController.clearTooltip()
         keyCode match {
           case KeyEvent.VK_DOWN =>
             // expand down (if necessary)
@@ -1336,6 +1342,7 @@ abstract class TypeBrowser extends AnyRef
         case _: ErrorEvent                  => true
         case _: ContextTypeError            => true
         case _: LubEvent                    => true
+        case _: TypesEvent                  => true
         case _: RecoveryEvent               => true // TODO need to remove that dependency
                                                     // but then it brakes our indentation mechanism
                                                     // indendation needs to be separated from filtering stuff

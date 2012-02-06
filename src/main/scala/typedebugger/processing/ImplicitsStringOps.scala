@@ -86,7 +86,7 @@ trait ImplicitsStringOps {
         (short, "")
          
       case e: CheckTypesCompatibility =>
-        ("Check types compatibility", "Check compatibility of types: " + anyString(e.tp0) + " vs. " + anyString(e.pt0))
+        ("Check types compatibility " + (if (e.fast) "(quick)" else ""), "Check compatibility of types: \n" + anyString(e.tp0) + " vs. " + anyString(e.pt0))
         
       case e: CheckedTypesCompatibility =>
         val short  = if (e.res) "Types compatible" else "Types not compatible"

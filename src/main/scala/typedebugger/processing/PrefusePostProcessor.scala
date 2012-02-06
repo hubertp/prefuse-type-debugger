@@ -49,6 +49,8 @@ trait PrefusePostProcessors {
          false
        case _: InferDone =>
          false
+       case _: TypesDone =>
+         false
        case _: LubGlbDone =>
          false
        case _: RecoveryEvent =>
@@ -189,6 +191,12 @@ trait PrefusePostProcessors {
             true
 
           case e: CheckTypesCompatibility =>
+            true
+            
+          case e: SubTypeCheck =>
+            true
+            
+          case e: Subtyping =>
             true
             
           case _ =>

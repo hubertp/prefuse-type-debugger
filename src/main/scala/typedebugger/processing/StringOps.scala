@@ -8,7 +8,8 @@ trait StringOps extends AnyRef
                 with AdaptStringOps
                 with InferStringOps
                 with ImplicitsStringOps
-                with NamerStringOps {
+                with NamerStringOps
+                with TypesStringOps {
   self: internal.CompilerInfo =>
     
   import global.{Tree => STree, _}
@@ -48,7 +49,8 @@ trait StringOps extends AnyRef
                 with AdaptEventsOps
                 with InferEventsOps
                 with ImplicitsEventsOps
-                with NamerEventsOps {
+                with NamerEventsOps
+                with TypesEventsOps {
     def apply(e: Event, full: Boolean = false) = e match {
       case eEV: ContextTypeError =>
         explainError(eEV, full)
@@ -68,6 +70,8 @@ trait StringOps extends AnyRef
         explainNamerEvent(ev)
       case ev: LubEvent          =>
         explainLubGlbEvent(ev)
+      case ev: TypesEvent        =>
+        explainTypesEvent(ev)
       case _                     =>
         (e formattedString Formatting.fmt, e formattedString Formatting.fmtFull)
     }
