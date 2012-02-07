@@ -1371,7 +1371,9 @@ object TypeDebuggerUI {
     
     val command = new CompilerCommand(args.toList, settings0)
     val tb = new TypeBrowser {
-      val global = new Global(settings0, new ConsoleReporter(settings0)) with interactive.RangePositions
+      val global = new Global(settings0, new ConsoleReporter(settings0)) with interactive.RangePositions {
+        override def instrumentingOn: Boolean = true
+      }
       val DEBUG = true
       val settings = settings0
     }

@@ -39,8 +39,8 @@ trait PrefusePostProcessors {
        case _: NamerDone => // bug in compiler? _:NamerDone.type crashes
          false
   // TODO re-enable
-  //          case _: ImplicitSearchDone =>
-  //            false
+       case _: ImplicitSearchDone =>
+         false
        case _: TyperTypedDone =>
          false
        case _: TyperDone =>
