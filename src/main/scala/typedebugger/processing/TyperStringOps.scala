@@ -69,7 +69,7 @@ trait TyperStringOps {
           ("Self-type is a subtype of parent type", detailed)
           
         case e: ValDefTyper =>
-          ("Type value definition", "Type value definition \n" + anyString(e.tree))
+          ("Type value definition" + safeTypePrint(e.valdef.symbol.tpe, "\n(typed as ", ")"), "Type value definition \n" + anyString(e.tree))
           
         case e: DefDefTyper =>
           ("Type definition", "Type definition \n" + anyString(e.tree))
@@ -195,7 +195,7 @@ trait TyperStringOps {
           ("Try typechecking application \n of function to arguments", long)
 
         case e:SuccessTryTypedApplyTyper =>
-          ("Successfully typed application", "")
+          ("Typed application", "")
           
         case e:SecondTryTypedApplyStartTyper =>
           val long = "Since first adapt at simply typing application of function\n" +
@@ -318,7 +318,7 @@ trait TyperStringOps {
           DEFAULT
 
         case e:IdentTyper =>
-          ("Type identifier:\n " + e.tree.asInstanceOf[Ident].name.toString, "")
+          ("Type identifier: " + e.tree.asInstanceOf[Ident].name + safeTypePrint(e.tree.symbol.tpe, "\n(typed as ", ")"), "")
           
         case e:LiteralTyper =>
           ("Type literal:\n" + anyString(e.tree),
@@ -443,7 +443,7 @@ trait TyperStringOps {
            "\nwith expected type: " + anyString(e.pt))
            
         case e:OverloadedSymDoTypedApply =>
-          ("Quick alternatives filter for overloaded-function",
+          ("Quick alternatives filter\n for overloaded function",
            "[Compiler optimization]\n Quickly filter-out alternatives for " +
            anyString(e.sym) + "\n" +
            "and argument types " + e.argTypes.map(anyString).mkString(","))
@@ -530,7 +530,7 @@ trait TyperStringOps {
            e.tparams.map(anyString).mkString("[", ",", "]") + " for " + anyString(e.resultTpe))
           
         case e:InstantiatedDoTypedApply =>
-          ("Typecheck inferred instance\n in the application",
+          ("Typecheck inferred instance" + safeTypePrint(e.fun.tpe, "\n", "\n") + " in the application",
            "Typecheck inferred instance for \n" +
            anyString(e.fun) + "\nwith type " + anyString(e.fun.tpe) +
            (if (!e.undet.isEmpty) "\n and still undetermined type parameters " +

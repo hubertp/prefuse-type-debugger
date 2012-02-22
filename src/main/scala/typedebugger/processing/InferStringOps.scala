@@ -31,7 +31,7 @@ trait InferStringOps {
            "Compatible types \n" +
            "Found:    " + anyString(e.found) + "\n" +
            "Required: " + anyString(e.pt) + "\n" +
-           "with fresh type parameters " + e.tparams.map(anyString).mkString(","))
+           "with type parameters " + e.tparams.map(anyString).mkString(","))
            
         case e: InstantiateTypeVars =>
           // TODO: list constraints for each
@@ -73,7 +73,7 @@ trait InferStringOps {
            
         case e: InstantiateGlbOrLubDone =>
           val instType = if (e.up) "glb" else "lub"
-          ("Calculated " + instType + " as \n" + anyString(e.tp),
+          ("Calculated " + instType + " as \n" + safeTypePrint(e.tp, truncate=false),
            "")
            
         case e: AddBoundTypeVar =>
@@ -154,7 +154,7 @@ trait InferStringOps {
            "in " + e.tree)
            
         case e:IsApplicableInfer =>
-          ("Is function applicable to\n arguments and expected-type", 
+          ("Is function applicable to\n arguments and expected type", 
            "Is function applicable to argument types and expected type " + anyString(e.pt))
            
         case e:IsApplicableFallbackInfer =>

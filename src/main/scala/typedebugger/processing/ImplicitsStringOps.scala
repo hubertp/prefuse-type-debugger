@@ -79,7 +79,7 @@ trait ImplicitsStringOps {
         ("Filtered all eligible implicits","")
         
       case e: InfoEligibleTest =>
-        ("Test implicit eligibility", "Implicit: " + e.info.name)
+        ("Test implicit eligibility\n" + e.info.name, "Implicit: " + e.info.name)
         
       case e: InfoEligibleTestDone =>
         val short = if (e.eligible) "Implicit eligible" else "Implicit not eligible"

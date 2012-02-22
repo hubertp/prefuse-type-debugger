@@ -20,6 +20,7 @@ trait StringOps extends AnyRef
     //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
     val fmtFull = "%ev"
     val fmt = "%ln"
+    val maxTypeLength = 50 // arbitrary const, used for UI reasons
   }
   
   object Explanations extends AnyRef
@@ -82,6 +83,31 @@ trait StringOps extends AnyRef
       println("No explanation for " + ev.getClass)
   }
   
+  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true): String =
+    if (tp != null && tp != NoType) {
+      val stringRep0 = anyString(tp)
+      // strip kind information
+      // todo remove once we move anyString functionality to StringOps
+      val ExactType = """\[[^:]*: (.*)\]""".r
+      val MethodTypeRegex = """\[MethodType: (.*)\]""".r
+      val ErrorType = """\[ErrorType: (.*)\]""".r
+      val stringRep = stringRep0 match {
+        //case MethodTypeRegex(tpe) => "(" + tpe // TODO fix
+        case ErrorType(_)         => ""
+        case ExactType(tpe)       => tpe
+        case _                    => stringRep0
+      }
+      if (truncate && (stringRep.length > Formatting.maxTypeLength || tp.isErroneous)) ""
+      else pre + stringRep + post
+    } else ""
+      
+  def truncateStringRep(v1: String, v2: String, join: String, pre: String) = {
+    val totalLength = v1.length + v2.length + join.length
+    if (totalLength > Formatting.maxTypeLength || v1 == "" || v2 == "") ""
+    else pre + v1 + join + v2
+  }
+  
+  
   // TODO refactor
   trait TyperExplanations {
     def explainTyper(ev: Explanation with TyperExplanation): String = ev match {
@@ -139,7 +165,7 @@ trait StringOps extends AnyRef
         // override def provide(a: Tree): Explanation = TypeArgInOverloadedApply(a)
 
       case _: TypeArgInOverloadedApply => 
-        "Typecheck argument without \n expected type \n in overloaded application"
+        "Typecheck argument \n without expected type \n in overloaded application"
 
       //Eta
       case _: TypeEtaExpandedTreeWithWildcard => 
@@ -179,7 +205,7 @@ trait StringOps extends AnyRef
         "Typecheck argument \n (when dealing with correct number of args in application)"
           
       case expl: TypeArgWithLenientPt =>
-        "Typecheck argument \nwith lenient target type\n " + anyString(expl.pt)
+        "Typecheck argument \nwith lenient target type\n " + safeTypePrint(expl.pt)
 
       //Block
       case _: TypeStatementInBlock =>
@@ -215,8 +241,8 @@ trait StringOps extends AnyRef
         "Typecheck application of inferred view\n that adapts qualifier"
 
       //ValDef
-      case _: TypeValType =>
-        "Typecheck value's type"
+      case expl: TypeValType =>
+        "Typecheck value's type" + safeTypePrint(expl.vdef.symbol.tpe, "\n")
 
       //Type constructor
       case _: TypeTypeConstructorInNew =>
@@ -321,9 +347,9 @@ trait StringOps extends AnyRef
       case _: TypeAbstractTpeBounds =>
         "Typecheck bounds for the abstract type definition"
 
-      case _: TypeValDefBody =>
-        "Typecheck body of the value/variable\n" +
-        "to infer its type"
+      case expl: TypeValDefBody =>
+        "Typecheck body of the value/variable" +
+        (if (!expl.expectedPt) " to infer its type" +safeTypePrint(expl.vdef.symbol.tpe, "\n(inferred as ", ")") else "")
 
       case _: TypeMethodDefBody =>
         "Typecheck body of the method"
@@ -370,13 +396,13 @@ trait StringOps extends AnyRef
       case ContextAmbiguousTypeErrorEvent(err, level) =>
         (level match {
           case ErrorLevel.Hard => "Ambiguous type error"
-          case ErrorLevel.Soft => "(possibly) Recoverable ambiguous type error"
+          case ErrorLevel.Soft => "Recoverable ambiguous type error"
         }, "")
       
       case ContextTypeErrorEvent(err, level) =>
         (level match {
           case ErrorLevel.Hard => "Type error"
-          case ErrorLevel.Soft => err.errMsg + "\n" + "(possibly) Recoverable type error"
+          case ErrorLevel.Soft => err.errMsg + "\n" + "Recoverable type error"
         }, "Error:\n" + err.errMsg)
       
       case _ =>

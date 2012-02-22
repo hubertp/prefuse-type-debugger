@@ -199,6 +199,12 @@ trait PrefusePostProcessors {
           case e: Subtyping =>
             true
             
+          case e: OverloadedSymDoTypedApply =>
+            true
+            
+          case e: ImprovesAlternativesCheck =>
+            true
+            
           case _ =>
             false
 

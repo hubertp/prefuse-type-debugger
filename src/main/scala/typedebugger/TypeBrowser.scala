@@ -464,9 +464,9 @@ abstract class TypeBrowser extends AnyRef
           case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Soft =>
             ColorLib.rgba(255, 0, 0, 50)
           case Some(ev: LubEvent) =>
-            ColorLib.rgba(255, 228, 181, 100)
+            ColorLib.rgba(238, 102, 34, 100)
           case Some(ev: TypesEvent) =>
-            ColorLib.rgba(255, 228, 181, 100) // TODO change to a different one
+            ColorLib.rgba(238, 102, 34, 100) // TODO change to a different one
           case _ =>
             // search currently not supported
             if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
@@ -923,16 +923,37 @@ abstract class TypeBrowser extends AnyRef
             clearHighlight()
             val node = item.get(label).asInstanceOf[UINodeP]
             node.ev match {
-              case e:TreeEvent =>
+              case e:TreeEvent if e.tree.pos.isRange =>
                 val prettyTree = asString(e.tree)
                 treeTransformedViewer.setText(prettyTree)
                 highlight(e.tree.pos, TreeMainHighlighter)
                 
-              case e: SymEvent =>
+              case e: SymEvent if e.sym.pos.isRange =>
                 highlight(e.sym.pos, TreeMainHighlighter)
                 
               case _ =>
+                if (settings.debugTD.value)
+                  println("No precise position for " + node + ". Trying parents.")
+                // Fallback try to find the closest parent that has positions set
+                def canHighlight(n: UINodeP) = n.ev match {
+                  case e: TreeEvent if e.tree.pos.isRange => true
+                  case e: SymEvent if e.sym.pos.isRange => true
+                  case _ => false
+                }
                 
+                var nodeWithPos: Option[UINodeP] = node.parent
+                while (nodeWithPos.isDefined && !canHighlight(nodeWithPos.get)) {
+                  nodeWithPos = nodeWithPos.get.parent
+                }
+                
+                // TODO duplicate code
+                if (nodeWithPos.isDefined) {
+                  nodeWithPos.get.ev match {
+                    case e: TreeEvent => highlight(e.tree.pos, TreeMainHighlighter)
+                    case e: SymEvent  => highlight(e.sym.pos, TreeMainHighlighter)
+                    case _            => ()
+                  }
+                }
             }
             
             node.ev match {
@@ -1183,7 +1204,6 @@ abstract class TypeBrowser extends AnyRef
       override def itemClicked(item: VisualItem, e: MouseEvent) {
         if (e.isControlDown() || e.isShiftDown() || !item.isInstanceOf[NodeItem])
           return
-        println("itme clicked: " + item)
         addClickedItem(item, item.getVisualization())
       }
     }

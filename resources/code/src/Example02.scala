@@ -1,8 +1,5 @@
 class A {
-
-  def foo[T](a: Int)(b: T): T = {
-    b
-  }
+  def foo[T >: Int](a: Int)(b: T): T = b
 
   def bar {
     val a = foo(10) _

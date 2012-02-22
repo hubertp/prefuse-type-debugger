@@ -15,7 +15,7 @@ trait AdaptStringOps {
       ev match {
         case e:AdaptStart =>
           val short = if (e.pt == WildcardType) "Adapt expression \nwith no expected type" 
-                      else "Adapt to the expected type:\n" + anyString(e.pt)
+                      else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
           val long = "Adapt expression's type (if necessary) to the expected type.\n" + 
                      "Found:    " + anyString(e.tree.tpe) + "\n" + 
                      "Expected: " + anyString(e.pt)
@@ -66,7 +66,7 @@ trait AdaptStringOps {
            anyString(e.tree) + "\n" + "with type " + anyString(e.tpe))
            
         case e:InferImplicitForParamAdapt =>
-          ("Infer implicit for parameter", 
+          ("Infer implicit for parameter " + safeTypePrint(e.param.tpe, "\nof type: ", ""), 
            "Infer implicit for parameter '" + anyString(e.param) + "': " + anyString(e.param.tpe))
            
         case e:InferDivergentImplicitValueNotFound =>
@@ -152,8 +152,8 @@ trait AdaptStringOps {
           ("Subtype constraint for constants\n satisfied", "")
           
         case e:NotASubtypeAdapt => 
-          ("Adapt expression's type\nto satisfy\n" +
-           anyString(e.tpe) + " <: " + anyString(e.pt), 
+          ("Adapt expression's type to satisfy\n" +
+           safeTypePrint(e.tpe, truncate=false) + " <: " + safeTypePrint(e.pt, truncate=false), 
            "FAILED subtype constraint:\n " +
            anyString(e.tpe) + " <: " + anyString(e.pt))
 

@@ -12,7 +12,8 @@ trait TypesStringOps {
     
     def explainTypesEvent(ev: Event with TypesEvent) = ev match {
       case e: SubTypeCheck =>
-        ("Subtyping check", "Subtype check for\n" + anyString(e.value1) + " <:< " + anyString(e.value2))
+        ("Subtyping check" + truncateStringRep(safeTypePrint(e.value1, truncate=false),safeTypePrint(e.value2, truncate=false), " <: ", "\n"),
+         "Subtype check for\n" + anyString(e.value1) + " <: " + anyString(e.value2))
 
       case e: SubTypeCheckRes =>
         (if (e.res) "Succeeded" else "Failed", "")
@@ -22,7 +23,7 @@ trait TypesStringOps {
           if (e.variance > 0) "covariant"
           else if (e.variance < 0) "contravariant"
           else "invariant"
-        ("Compare type arguments in the " + varianceInfo + " position", "")
+        ("Compare type arguments\n in the " + varianceInfo + " position", "")
 
       case e: CompareTypes =>
         (explainSubtyping(e.compType, e.which),
@@ -45,7 +46,7 @@ trait TypesStringOps {
     
     def explainSubtyping(kind: SubCompare.Value, which: Side.Value): String = kind match {
       case CTypeRef if which == Both =>
-        "Subtyping check between type referenes"
+        "Subtyping check between type references"
       case CTypeRef =>
         "Subtyping check with type reference" + explainSide(which)
       case CAnnotated =>
