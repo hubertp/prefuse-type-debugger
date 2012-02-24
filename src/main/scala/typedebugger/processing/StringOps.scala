@@ -83,16 +83,19 @@ trait StringOps extends AnyRef
       println("No explanation for " + ev.getClass)
   }
   
+  // TODO incorporate into our string converter when
+  // we move anyString directly to prefuse
   def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true): String =
     if (tp != null && tp != NoType) {
       val stringRep0 = anyString(tp)
       // strip kind information
-      // todo remove once we move anyString functionality to StringOps
       val ExactType = """\[[^:]*: (.*)\]""".r
       val MethodTypeRegex = """\[MethodType: (.*)\]""".r
       val ErrorType = """\[ErrorType: (.*)\]""".r
+      val WildcardType = """\[WildcardType: (.*)\]""".r
       val stringRep = stringRep0 match {
         //case MethodTypeRegex(tpe) => "(" + tpe // TODO fix
+        case WildcardType(_)      => "?"
         case ErrorType(_)         => ""
         case ExactType(tpe)       => tpe
         case _                    => stringRep0
@@ -105,6 +108,11 @@ trait StringOps extends AnyRef
     val totalLength = v1.length + v2.length + join.length
     if (totalLength > Formatting.maxTypeLength || v1 == "" || v2 == "") ""
     else pre + v1 + join + v2
+  }
+  
+  def snapshotAnyString(x: Any, c: Clock): String = x match {
+    case t: STree => anyString(atClock(t, c)) 
+    case _ => anyString(x)
   }
   
   

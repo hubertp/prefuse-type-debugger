@@ -84,8 +84,8 @@ trait InferStringOps {
         case e:InferExprInstance =>
           ("Infer expression instance",
            "Infer expression instance for tree \n" +
-           anyString(e.tree) + "\n" +
-           " of type '" + anyString(e.tree) + "' \n" +
+           snapshotAnyString(e.tree, e.time) + "\n" +
+           " of type '" + anyString(e.tree.tpe) + "' \n" +
            "with undetermined typeparams '" + e.tparams.map(anyString).mkString(",") + "' \n" +
            "and expected type " + anyString(e.pt))
     
