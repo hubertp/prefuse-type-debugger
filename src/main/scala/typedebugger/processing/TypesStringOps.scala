@@ -26,8 +26,9 @@ trait TypesStringOps {
         ("Compare type arguments\n in the " + varianceInfo + " position", "")
 
       case e: CompareTypes =>
+        val moreInfo = " " + e.tp1 + " YES?"
         (explainSubtyping(e.compType, e.which),
-         "Subtyping check for:\n " + anyString(e.tp1) + " <:< " + anyString(e.tp2))
+         "Subtyping check for:\n " + anyString(e.tp1) + " <:< " + anyString(e.tp2) + moreInfo)
       
       case e: CompareDone =>
         (if (e.subtypes) "Succeeded" else "Failed", "")

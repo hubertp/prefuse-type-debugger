@@ -27,9 +27,11 @@ trait InferStringOps {
           DEFAULT
           
         case e:CompatibleTypes =>
+          val foundSnapshot = TypeSnapshot(e.found, e.time)
+          println("SNAPSHOT: " + anyString(foundSnapshot) + " vs copy " + anyString(e.foundTmp))
           ("Compatible types,\ntry to solve any type variables",
            "Compatible types \n" +
-           "Found:    " + anyString(e.found) + "\n" +
+           "Found:    " + anyString(foundSnapshot) + "\n" +
            "Required: " + anyString(e.pt) + "\n" +
            "with type parameters " + e.tparams.map(anyString).mkString(","))
            
@@ -82,10 +84,11 @@ trait InferStringOps {
            "")
 
         case e:InferExprInstance =>
+          val snapshotTree = atClock(e.tree, e.time)
           ("Infer expression instance",
            "Infer expression instance for tree \n" +
-           snapshotAnyString(e.tree, e.time) + "\n" +
-           " of type '" + anyString(e.tree.tpe) + "' \n" +
+           anyString(snapshotTree) + "\n" +
+           " of type '" + anyString(snapshotTree.tpe) + "' \n" +
            "with undetermined typeparams '" + e.tparams.map(anyString).mkString(",") + "' \n" +
            "and expected type " + anyString(e.pt))
     
