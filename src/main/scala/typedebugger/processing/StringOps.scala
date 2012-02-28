@@ -44,6 +44,7 @@ trait StringOps extends AnyRef
   }
   
   // TODO, provide full info as well
+  // todo: cache results
   object Events extends AnyRef
                 with ErrorEvents
                 with TyperEventsOps

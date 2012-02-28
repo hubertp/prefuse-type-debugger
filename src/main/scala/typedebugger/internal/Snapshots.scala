@@ -41,10 +41,8 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       case TypeRef(pre, sym, args) =>
         val pre1 = this(pre, time)
         val sym1 = SymbolSnapshot(sym, time)
-        println("ARGS: " + args)
         val args1 = args.mapConserve(this(_, time))
-        if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args))
-          tp
+        if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args)) tp
         else TypeRef(pre1, sym1, args1)
       case ThisType(sym) =>
         val sym1 = SymbolSnapshot(sym, time)
@@ -59,7 +57,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         val params1 = params.mapConserve(SymbolSnapshot(_, time))
         //println("Method Type: " + restpe.getClass + " params: " + params.map(_.getClass))
         val restpe1 = this(restpe, time)
-        //println("METHOD TYPE SNAPSHOT: " + (((params1 eq params) && (restpe1 eq restpe))))
+        //println("METHOD TYPE SNAPSHOT: " + (params1 eq params) + " && " + (restpe1 eq restpe))
         if ((params1 eq params) && (restpe1 eq restpe)) tp
         else MethodType(params1, restpe1)
       case PolyType(tparams, restpe) =>
@@ -71,10 +69,10 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         val result1 = this(result, time)
         if (result1 == result) tp
         else NullaryMethodType(result1)
-/*      case ConstantType(const) => // todo fix
+/*      case ConstantType(const) => // todo
         val constTpe = this(const.tpe, time)
         if (constTpe eq const.tpe) tp
-        else ConstantType(constTpe) */
+        else ... */
       case SuperType(thistp, supertp) =>
         val thistp1 = this(thistp, time)
         val supertp1 = this(supertp, time)
@@ -91,7 +89,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         else BoundedWildcardType(bounds1.asInstanceOf[TypeBounds])
       case RefinedType(parents, decls) =>
         val parents1 = parents.mapConserve(this(_, time))
-        // handle decs
+        // todo: handle decls
         if (parents1 eq parents) tp
         else RefinedType(parents1, decls)
       case ExistentialType(tparams, result) =>
@@ -100,7 +98,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         if ((tparams1 eq tparams) && (result1 eq result)) tp
         else ExistentialType(tparams1, result1)
       case AnnotatedType(annots, atp, selfsym) =>
-        // ignore annotations for a moment
+        // todo: support annotations
         val atp1 = this(atp, time)
         val selfsym1 = SymbolSnapshot(selfsym, time)
         if ((atp1 eq atp) && (selfsym1 eq selfsym)) tp
@@ -115,9 +113,9 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         if (result1 eq result) tp
         else NotNullType(result1)
       case tv@TypeVar(_, _) =>
-        
+        // primary source of differences
         val tv1 = typeVarAt(tv, time)
-        //println("TYPEVAR RESULT: " + (tv1 eq tv))
+        //println("TYPEVAR RESULT: " + (tv1 eq tv) + " for " + tv1 + " vs " + tv)
         if (tv1 eq tv) tp
         else tv1 
       // handle antipolytype
@@ -130,16 +128,14 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       def condTypeVarConstraint(constr0: TypeConstraint): TypeVar = {
         val constr1 = typeConstraintAt(constr0, time)
         if (constr1 eq constr0) tv
-        else TypeVar.typeVarFactory(tv, constr1)
+        else typeVarFactory(tv, constr1)
       }
+      //println("type-var-at ["+time+"]: " + tv + " with snapshots " + tv.snapshot)
       
       if (tv.snapshot == null || tv.snapshot.clock < time) {
-        println("typevar " + tv.snapshot)
         condTypeVarConstraint(tv.constr)
       } else {
-        println("Collect proper constraint")
         var typevar0 = tv.snapshot
-        
         while (typevar0 != null && time < typevar0.clock)
           typevar0 = typevar0.prev
 
@@ -150,19 +146,25 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       }
     }
     
-    def typeConstraintAt(tc: TypeConstraint, time: Clock): TypeConstraint = {
-      //println("TYpe CONSTRAINT : " + tc.constrSnapshot + " time " + time)
+    private def typeVarFactory(tv: TypeVar, constr: TypeConstraint) = tv match {
+      case hktv: HKTypeVar => TypeVar(tv.origin, constr, Nil, hktv.params)
+      case apptv: AppliedTypeVar => TypeVar(tv.origin, constr, apptv.typeArgs, apptv.params)
+      case _ => TypeVar(tv.origin, constr)
+    }
+    
+    private def typeConstraintAt(tc: TypeConstraint, time: Clock): TypeConstraint = {
+      //println("type-constraint-at ["+time+"]: " + tc)
        
       // short-cut if clock points to the current type constraint
       if (tc.constrSnapshot == null) tc // todo should map also the init bounds
       else {
-        //println("DETECT CORRECT SNAPSHOT")
         var upTo = tc.constrSnapshot
         while (upTo != null && time < upTo.clock)
           upTo = upTo.prev
           
         // apply all the bounds in the reverse order
         // TODO: we should apply snapshots to each of the types as well
+        // especially because init is a lazy val
         val newConstraint = new TypeConstraint(tc.init.lo, tc.init.hi, tc.init.numlo, tc.init.numhi)
         def applyChange(change: ConstrChange) { 
           if (change == null) () else {
@@ -178,21 +180,17 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             }
           }
         }
+        applyChange(upTo)
         newConstraint
       }
     }
   }
 
-  
-  // should only check info, or go directly inside the symbol ?
   object SymbolSnapshot extends ((Symbol, Clock)  => Symbol) {
     def apply(sym: Symbol, time: Clock): Symbol = {
       if (sym == null)
-        println("SYMBOL IS NULL")
+        println("warn: symbol is null")
       val info1 = infoAt(sym, time)
-      // todo, do we need to run TypeSnapshot on info1 as well?
-      //println(sym + "] INFO: " + info1)
-      //println("OTHER: " + TypeSnapshot(info1, time))
       if (info1 eq sym.info) sym
       else sym.cloneSymbol.setInfoNoLog(info1)
     }
@@ -204,10 +202,6 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         
       if (snapshot0 == null) NoType
       else TypeSnapshot(snapshot0.info, at)
-      /*else {
-        why is this not correct?
-        snapshot0.prev.info
-      }*/
     }
   }
 
