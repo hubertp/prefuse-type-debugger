@@ -201,7 +201,21 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         snapshot0 = snapshot0.prev
         
       if (snapshot0 == null) NoType
-      else TypeSnapshot(snapshot0.info, at)
+      else {
+        if (!snapshot0.info.isComplete) {
+          // if not complete, this can create bootstrapping issues 
+          // where we for example we create Unit symbols that differ with info
+          snapshot0 = sym.snapshot
+          if (!snapshot0.info.isComplete) sym.info
+          else {
+            while (snapshot0.prev != null && snapshot0.prev.info.isComplete && at < snapshot0.clock)
+              snapshot0 = snapshot0.prev
+            // todo: convert with TypeSnapshot?
+            snapshot0.info
+          }
+        } else 
+          TypeSnapshot(snapshot0.info, at)
+      }
     }
   }
 

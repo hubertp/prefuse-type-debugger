@@ -12,8 +12,10 @@ trait TypesStringOps {
     
     def explainTypesEvent(ev: Event with TypesEvent) = ev match {
       case e: SubTypeCheck =>
-        ("Subtyping check" + truncateStringRep(safeTypePrint(e.value1, truncate=false),safeTypePrint(e.value2, truncate=false), " <: ", "\n"),
-         "Subtype check for\n" + anyString(e.value1) + " <: " + anyString(e.value2))
+        val value1 = TypeSnapshot(e.lhs, e.time)
+        val value2 = TypeSnapshot(e.rhs, e.time)
+        ("Subtyping check" + truncateStringRep(safeTypePrint(value1, truncate=false),safeTypePrint(value2, truncate=false), " <: ", "\n"),
+         "Subtype check for\n" + anyString(value1) + " <: " + anyString(value2))
 
       case e: SubTypeCheckRes =>
         (if (e.res) "Succeeded" else "Failed", "")
@@ -26,9 +28,8 @@ trait TypesStringOps {
         ("Compare type arguments\n in the " + varianceInfo + " position", "")
 
       case e: CompareTypes =>
-        val moreInfo = " " + e.tp1 + " YES?"
         (explainSubtyping(e.compType, e.which),
-         "Subtyping check for:\n " + anyString(e.tp1) + " <:< " + anyString(e.tp2) + moreInfo)
+         "Subtyping check for:\n " + anyString(TypeSnapshot(e.tp1, e.time)) + " <:< " + anyString(TypeSnapshot(e.tp2, e.time)))
       
       case e: CompareDone =>
         (if (e.subtypes) "Succeeded" else "Failed", "")
