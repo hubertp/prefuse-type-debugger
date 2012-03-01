@@ -53,6 +53,8 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         case None        => t1
         case Some(attrs) =>
           // strict copy the tree (outer layer only)
+          
+          // todo: attributes need to be passed to type/sym-snapshot as well
           val t2 = t1.shallowDuplicate
           t2.setTypeNoLog(attrs._1)
           if (tree.hasSymbol) t2.setSymbolNoLog(attrs._2)

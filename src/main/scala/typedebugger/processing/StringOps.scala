@@ -31,9 +31,9 @@ trait StringOps extends AnyRef
       case DefaultExplanation =>
         ev formattedString Formatting.fmt
       case tEV: TyperExplanation =>
-        explainTyper(tEV)
+        explainTyper(tEV)(ev.time)
       case nEV: NamerExplanation =>
-        explainNamer(nEV)
+        explainNamer(nEV)(ev.time)
       case aEV: AdaptExplanation =>
         explainAdapt(aEV)
       case iEV: InferExplanation =>
@@ -85,10 +85,10 @@ trait StringOps extends AnyRef
   }
   
   // TODO incorporate into our string converter when
-  // we move anyString directly to prefuse
-  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true): String =
+  // we move snapshotAnyString directly to prefuse
+  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true)(implicit time: Clock): String =
     if (tp != null && tp != NoType) {
-      val stringRep0 = anyString(tp)
+      val stringRep0 = snapshotAnyString(tp)
       // strip kind information
       val ExactType = """\[[^:]*: (.*)\]""".r
       val MethodTypeRegex = """\[MethodType: (.*)\]""".r
@@ -111,15 +111,17 @@ trait StringOps extends AnyRef
     else pre + v1 + join + v2
   }
   
-  def snapshotAnyString(x: Any, c: Clock): String = x match {
-    case t: STree => anyString(treeAt(t, c)) 
+  def snapshotAnyString(x: Any)(implicit c: Clock): String = x match {
+    case t: STree    => anyString(treeAt(t, c))
+    case tp: Type    => anyString(TypeSnapshot(tp, c))
+    case sym: Symbol => anyString(SymbolSnapshot(sym, c)) 
     case _ => anyString(x)
   }
   
   
   // TODO refactor
   trait TyperExplanations {
-    def explainTyper(ev: Explanation with TyperExplanation): String = ev match {
+    def explainTyper(ev: Explanation with TyperExplanation)(implicit time: Clock): String = ev match {
       case _: TypeUnit =>
         "Typecheck unit"
         
@@ -145,7 +147,7 @@ trait StringOps extends AnyRef
         //"Typecheck member in template"
 
       case TypeExplicitTreeReturnType(_, tpe) =>
-        //"Typecheck return type " + anyString(tpe) + " of the function"
+        //"Typecheck return type " + snapshotAnyString(tpe) + " of the function"
         "Typecheck explicit return type"
 
       case _: TypeDefConstr => 
@@ -340,7 +342,7 @@ trait StringOps extends AnyRef
   }
   
   trait NamerExplanations {
-    def explainNamer(ev: Explanation with NamerExplanation): String = ev match {
+    def explainNamer(ev: Explanation with NamerExplanation)(implicit time: Clock): String = ev match {
       case _: MethodReturnType =>
         "Typecheck return type of the method"
       
@@ -378,6 +380,7 @@ trait StringOps extends AnyRef
         "Eta-expansion adaptation"
     
       case NotASubtypeInferView(treetp, pt) =>
+        // TODO fix printing
         "Infer view to satisfy \n" + anyString(treetp) + " <: " + anyString(pt)
 
       case _: FirstTryTypeTreeWithAppliedImplicitArgs => 

@@ -10,7 +10,7 @@ trait ImplicitsStringOps {
   trait ImplicitsEventsOps {
     private val DEFAULT = ("(implicits| not-implemented)", "(implicits| not-implemented)")
     
-    def explainImplicitsEvent(ev: Event with ImplicitEvent) = ev match {
+    def explainImplicitsEvent(ev: Event with ImplicitEvent)(implicit time: Clock = ev.time) = ev match {
       case e: ImplicitDone =>
         val short = e.coercion match {
           case EmptyTree =>
@@ -27,10 +27,10 @@ trait ImplicitsStringOps {
       case e: InferImplicit =>
         val descr = (if (e.byName) "By-name implicits" else "Implicits") + " search"
         val full = 
-          "Implicits search for tree " + anyString(e.tree) +
-          "\nwith type " + anyString(e.tree.tpe) +
-          "\nWith expected type " + anyString(e.pt) +
-          (if (!e.undetParams.isEmpty) "\n and undetermined type parameters " + e.undetParams.map(anyString).mkString("[", ",", "]")
+          "Implicits search for tree " + snapshotAnyString(e.tree) +
+          "\nwith type " + snapshotAnyString(e.tree.tpe) +
+          "\nWith expected type " + snapshotAnyString(e.pt) +
+          (if (!e.undetParams.isEmpty) "\n and undetermined type parameters " + e.undetParams.map(snapshotAnyString).mkString("[", ",", "]")
           else "")
        (descr, full)
        
@@ -44,36 +44,36 @@ trait ImplicitsStringOps {
       case e: VerifyImplicit =>
         ("Verify available implicit",
          "Try implicit " + e.info.name + // TODO 
-         "\nfor tree: " + e.newTree + "\nwith expected type " + anyString(e.pt))
+         "\nfor tree: " + e.newTree + "\nwith expected type " + snapshotAnyString(e.pt))
 
       case e: ImplicitSearchDone =>
         DEFAULT
 
       case e: SearchContextImplicits =>
-        val implicits = e.allImplicits.map(_.map(info => anyString(info.sym)).mkString("[", ",", "]")).mkString("\n")
+        val implicits = e.allImplicits.map(_.map(info => snapshotAnyString(info.sym)).mkString("[", ",", "]")).mkString("\n")
         ("Search for applicable implicits\nin the scope",
          "Search appropriate implicits in the current scope\n" + 
-         "For tree " + anyString(e.tree) + "\n" +
+         "For tree " + snapshotAnyString(e.tree) + "\n" +
          "All available implicits in the context:\n" + implicits)
          
       case e: ManifestAndExpectedTpeImplicits =>
         ("Implicit manifests or expected type",
-         "Search appropriate manifest evidence or implicit for the expected type " + anyString(e.pt))
+         "Search appropriate manifest evidence or implicit for the expected type " + snapshotAnyString(e.pt))
          
       case e: SearchExpectedTypeImplicits =>
         ("Search for implicits based on\nexpected type",
          "Search implicits based on\n" +
-         "expected type '" + anyString(e.pt) + "'.\n" +
+         "expected type '" + snapshotAnyString(e.pt) + "'.\n" +
          "These are all implicits found in companion objects of classes C\n" +
          "such that some part of expected type has C as of its super-classes.")
          
       case e: SearchManifestImplicits =>
         ("Search evidence for manifest",
-         "Search implicit for the manifest for type " + anyString(e.tpe))
+         "Search implicit for the manifest for type " + snapshotAnyString(e.tpe))
          
       case e: AllEligibleImplicits =>
         ("Filter all eligible implicits",
-         "Filter all eligible implicits for expected type " + anyString(e.pt0))
+         "Filter all eligible implicits for expected type " + snapshotAnyString(e.pt))
       
       case e: AllEligibleImplicitsDone =>
         ("Filtered all eligible implicits","")
@@ -86,7 +86,8 @@ trait ImplicitsStringOps {
         (short, "")
          
       case e: CheckTypesCompatibility =>
-        ("Check types compatibility " + (if (e.fast) "(quick)" else ""), "Check compatibility of types: \n" + anyString(e.tp0) + " vs. " + anyString(e.pt0))
+        ("Check types compatibility " + (if (e.fast) "(quick)" else ""),
+         "Check compatibility of types: \n" + snapshotAnyString(e.tp) + " vs. " + snapshotAnyString(e.pt))
         
       case e: CheckedTypesCompatibility =>
         val short  = if (e.res) "Types compatible" else "Types not compatible"
@@ -95,16 +96,16 @@ trait ImplicitsStringOps {
       case e: AmbiguousImplicitsError =>
         ("Ambiguous implicits", 
          "Cannot apply implicit conversion due to ambiguity of two implicits:\n" +
-         anyString(e.info1Sym) + " of type " + anyString(e.info1Tpe) + " and\n" + 
-         anyString(e.info2Sym) + " of type " + anyString(e.info2Tpe))
+         snapshotAnyString(e.info1Sym) + " of type " + snapshotAnyString(e.info1Tpe) + " and\n" + 
+         snapshotAnyString(e.info2Sym) + " of type " + snapshotAnyString(e.info2Tpe))
 
       case e: PossiblyValidImplicit =>
         val prefix = if (e.result) "Valid" else "Invalid"
         val fullDescr =
           if (e.result)
-            "Typechecked valid implicit converstion:\n" + anyString(e.sym) + " of type " + anyString(e.tpe)
+            "Typechecked valid implicit converstion:\n" + snapshotAnyString(e.sym) + " of type " + snapshotAnyString(e.tpe)
           else 
-            "Invalid implicit converstion:\n" + anyString(e.sym) + " of type " + anyString(e.tpe) 
+            "Invalid implicit converstion:\n" + snapshotAnyString(e.sym) + " of type " + snapshotAnyString(e.tpe) 
         (prefix + " implicit", fullDescr)
 
       case e: CyclicReferenceInImplicitsImprove =>
