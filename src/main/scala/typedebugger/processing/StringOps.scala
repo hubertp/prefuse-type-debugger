@@ -112,7 +112,7 @@ trait StringOps extends AnyRef
   }
   
   def snapshotAnyString(x: Any, c: Clock): String = x match {
-    case t: STree => anyString(atClock(t, c)) 
+    case t: STree => anyString(treeAt(t, c)) 
     case _ => anyString(x)
   }
   

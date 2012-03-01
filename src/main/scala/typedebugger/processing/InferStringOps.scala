@@ -84,7 +84,7 @@ trait InferStringOps {
            "")
 
         case e:InferExprInstance =>
-          val snapshotTree = atClock(e.tree, e.time)
+          val snapshotTree = treeAt(e.tree, e.time)
           ("Infer expression instance",
            "Infer expression instance for tree \n" +
            anyString(snapshotTree) + "\n" +

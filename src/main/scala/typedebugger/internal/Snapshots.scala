@@ -3,19 +3,46 @@ package internal
 
 trait Snapshots { self: scala.reflect.internal.SymbolTable =>
   
-  def atClock(tree: Tree, clock: Clock): Tree = {
-    new TreeSnapshot(clock).transform(tree) 
+  def treeAt(tree: Tree, time: Clock): Tree = {
+    new TreeSnapshot(time).transform(tree) 
   }
   
   class TreeSnapshot(time: Clock) extends Transformer {
     lazy val strictCopier = newStrictTreeCopier
     
-    def snapshot(tree: Tree): Option[AttributesHistory] = {
-      if (tree != null) {
-        val attrs = tree.attributes(time)
-        val currentAttrs = tree.currentAttributes()
+    private def attributesAt(tree: Tree): (Type, Symbol) = {      
+      def findMissingAttr[T](startElem: AttributesHistory, default: T): T = {
+        // assert startElem != null
+        var treeAttr = startElem.prev
+        while (treeAttr != null && treeAttr.m <:< startElem.m) // this assumes that we only deal with 
+          treeAttr = treeAttr.prev
+        
+        if (treeAttr == null) default
+        else treeAttr.v.asInstanceOf[T]
+      }
       
-        if (attrs == currentAttrs) None else Some(attrs)
+      var attr0 = tree.attributes
+      // find the last change (either sym or tpe)
+      // and then find the missing bit (either sym or tpe)
+      while (attr0 != null && time < attr0.clock) {
+        attr0 = attr0.prev
+      }
+      
+      if (attr0 == null) (NoType, NoSymbol)
+      else attr0 match {
+        case TreeTpeChange(_, tpe, _) =>
+          (tpe, findMissingAttr(attr0, NoSymbol))
+        case TreeSymChange(_, sym, _) =>
+          (findMissingAttr(attr0, NoType), sym)
+      }
+    }
+    
+    def snapshot(tree: Tree): Option[(Type, Symbol)] = {
+      if (tree != null) {
+        val (tp0, sym0) = attributesAt(tree)
+      
+        if ((tp0 eq tree.tpe) && (sym0 eq tree.symbol)) None
+        else Some((tp0, sym0))
       } else None
     }
     
@@ -27,8 +54,8 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         case Some(attrs) =>
           // strict copy the tree (outer layer only)
           val t2 = t1.shallowDuplicate
-          t2.setTypeNoLog(attrs.tpe)
-          if (tree.hasSymbol) t2.setSymbolNoLog(attrs.sym)
+          t2.setTypeNoLog(attrs._1)
+          if (tree.hasSymbol) t2.setSymbolNoLog(attrs._2)
           t2
       }
       t setPos makeTransparent(tree.pos)
