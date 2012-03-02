@@ -16,8 +16,9 @@ trait AdaptStringOps {
         case e:AdaptStart =>
           val short = if (e.pt == WildcardType) "Adapt expression \nwith no expected type" 
                       else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
+          val tree1 = treeAt(e.tree)
           val long = "Adapt expression's type (if necessary) to the expected type.\n" + 
-                     "Found:    " + snapshotAnyString(e.tree.tpe) + "\n" + 
+                     "Found:    " + snapshotAnyString(tree1.tpe) + "\n" + 
                      "Expected: " + snapshotAnyString(e.pt)
           (short, long)
           
@@ -52,9 +53,10 @@ trait AdaptStringOps {
            "\nFor type tree: " + snapshotAnyString(e.typeTree) + " undetermined context type-parameters: " + e.undetTParams)
 
         case e:ImplicitMethodTpeAdapt =>
+          val tree1 = treeAt(e.tree)
           ("Adapt expression with method type\n and implicit parameter(s)",
-           "Adapt expression \n" + snapshotAnyString(e.tree) + "\n" +
-           "having method type and implicit parameters " + snapshotAnyString(e.tree.tpe) + "\n" +
+           "Adapt expression \n" + anyString(tree1) + "\n" +
+           "having method type and implicit parameters " + snapshotAnyString(tree1.tpe) + "\n" +
            "Needs to find implicit argument in the context and apply it")
            
         case e:UndetParamsMethodTpeAdapt =>
@@ -66,18 +68,21 @@ trait AdaptStringOps {
            snapshotAnyString(e.tree) + "\n" + "with type " + snapshotAnyString(e.tpe))
            
         case e:InferImplicitForParamAdapt =>
-          ("Infer implicit for parameter " + safeTypePrint(e.param.tpe, "\nof type: ", ""), 
-           "Infer implicit for parameter '" + snapshotAnyString(e.param) + "': " + snapshotAnyString(e.param.tpe))
+          val param1 = SymbolSnapshot(e.param)
+          ("Infer implicit for parameter " + safeTypePrint(param1.tpe, "\nof type: ", ""), 
+           "Infer implicit for parameter '" + anyString(param1) + "': " + snapshotAnyString(param1.tpe))
            
         case e:InferDivergentImplicitValueNotFound =>
+          val param1 = SymbolSnapshot(e.param)
           ("Implicit value not found",
-           "Could not find implicit value for evidence parameter \n" + e.param.name + 
-           "\nof type " + snapshotAnyString(e.param.tpe))
+           "Could not find implicit value for evidence parameter \n" + param1.name + 
+           "\nof type " + snapshotAnyString(param1.tpe))
            
         case e:InferImplicitValueNotFound =>
+          val param1 = SymbolSnapshot(e.param)
           ("Implicit value not found",
-           "Could not find implicit value for evidence parameter \n" + e.param.name + 
-           "\nof type " + snapshotAnyString(e.param.tpe))
+           "Could not find implicit value for evidence parameter \n" + param1.name + 
+           "\nof type " + snapshotAnyString(param1.tpe))
            
         case e:InferredImplicitAdapt =>
           ("Finished applying inferred \n implicit argument (if any)", "")
@@ -92,8 +97,9 @@ trait AdaptStringOps {
            snapshotAnyString(e.tree) + "\nhas been eta-expanded to\n " + snapshotAnyString(e.tree1))
            
         case e:InstantiateTParamsForEtaExpansionAdapt =>
+          val tree1 = treeAt(e.tree)
           ("Instantiate type-parameters \n in eta expansion",
-           snapshotAnyString(e.tree) + " with type " + snapshotAnyString(e.tree.tpe) +
+           anyString(tree1) + " with type " + snapshotAnyString(tree1.tpe) +
            "\nTree's symbol " + snapshotAnyString(e.meth) + " with type parameters '" +
            e.tparams.map(snapshotAnyString) + "' to instantiate")
            
@@ -188,7 +194,5 @@ trait AdaptStringOps {
           DEFAULT
       }
     }
-      
-      
   }
 }

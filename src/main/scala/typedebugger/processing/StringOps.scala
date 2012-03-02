@@ -112,10 +112,27 @@ trait StringOps extends AnyRef
   }
   
   def snapshotAnyString(x: Any)(implicit c: Clock): String = x match {
-    case t: STree    => anyString(treeAt(t, c))
-    case tp: Type    => anyString(TypeSnapshot(tp, c))
-    case sym: Symbol => anyString(SymbolSnapshot(sym, c)) 
+    case t: STree    => anyString(treeAt(t))
+    case tp: Type    => anyString(TypeSnapshot(tp))
+    case sym: Symbol => anyString(SymbolSnapshot(sym)) 
     case _ => anyString(x)
+  }
+  
+  // not efficient if we are getting the snapshot of x as well in the event 
+  def combinedSnapshotAnyString[T, U](x: T)(y: T => U)(implicit c: Clock): String = {
+    x match {
+      case t: STree =>
+        // bug with [T <: Tree] and expecting T?
+        val t1 = treeAt(t).asInstanceOf[T]
+        snapshotAnyString(y(t1))
+      case tp: Type => 
+        val tp1 = TypeSnapshot(tp).asInstanceOf[T]
+        snapshotAnyString(y(tp1))
+      case sym: Symbol =>
+        val sym1 = SymbolSnapshot(sym).asInstanceOf[T]
+        snapshotAnyString(y(sym1))
+      case _ => snapshotAnyString(y(x))
+    }
   }
   
   

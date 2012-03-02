@@ -45,8 +45,9 @@ trait TyperStringOps {
           ("Determine parents' types", "Parents: " + e.parents.map(snapshotAnyString))
         
         case e: TypeInitialSuperTpeTyper =>
+          val t = treeAt(e.tree)
           ("Type first parent\n as supertype",
-           "Preliminary super-type: " + snapshotAnyString(e.tree) + " with type " + snapshotAnyString(e.tree.tpe))
+           "Preliminary super-type: " + anyString(t) + " with type " + snapshotAnyString(t.tpe))
            
         case e: NewSuperTpePossiblyClass =>
           ("Replace non-class supertype", "Replace current non-class " +
@@ -69,7 +70,9 @@ trait TyperStringOps {
           ("Self-type is a subtype of parent type", detailed)
           
         case e: ValDefTyper =>
-          ("Type value definition" + safeTypePrint(e.valdef.symbol.tpe, "\n(typed as ", ")"), "Type value definition \n" + snapshotAnyString(e.tree))
+          val tree = treeAt(e.valdef)
+          val sym = SymbolSnapshot(tree.symbol)
+          ("Type value definition" + safeTypePrint(sym.tpe, "\n(typed as ", ")"), "Type value definition \n" + anyString(tree))
           
         case e: DefDefTyper =>
           ("Type definition", "Type definition \n" + snapshotAnyString(e.tree))
@@ -177,19 +180,22 @@ trait TyperStringOps {
           DEFAULT
     
         case e:EtaMethodTypeTyper =>
+          val t = treeAt(e.tree)
+          
           ("Perform eta-expansion adaption for method",
-           "Eta-expand " + snapshotAnyString(e.tree) + "\n" + 
-           "with type " + snapshotAnyString(e.tree.tpe) + "\n" +
+           "Eta-expand " + anyString(t) + "\n" + 
+           "with type " + snapshotAnyString(t.tpe) + "\n" +
            "and params: " + e.params.map(snapshotAnyString))
            
         case e:TryTypedArgsTyper =>
           ("Typecheck arguments individually first", "")
           
         case e:TryTypedApplyTyper =>
+          val t = treeAt(e.tree)
           val long = "Typecheck application of function to the arguments.\n" +
                      "If that fails adapt function to the arguments.\n" +
-                     "Function: " + snapshotAnyString(e.tree) + "\n" +
-                     "of type: " + snapshotAnyString(e.tree.tpe) + "\n" +
+                     "Function: " + anyString(t) + "\n" +
+                     "of type: " + snapshotAnyString(t.tpe) + "\n" +
                      "arguments: " + e.args.mkString("(", ",", ")") + "\n" + 
                      "with expected type " + snapshotAnyString(e.pt)
           ("Try typechecking application \n of function to arguments", long)
@@ -223,9 +229,11 @@ trait TyperStringOps {
           DEFAULT
           
         case e:TypedEtaTyper =>
+          val expr  = treeAt(e.expr)
+          val exprTpe = TypeSnapshot(expr.tpe)
           ("Type expression and \n eta-expand it", 
-           "Eta-expansion on expression " + snapshotAnyString(e.expr) + 
-             (if (e.expr.tpe != null) "\n of type " + snapshotAnyString(e.expr.tpe) else ""))
+           "Eta-expansion on expression " + anyString(expr) + 
+             (if (exprTpe != null) "\n of type " + anyString(exprTpe) else ""))
         
         case e: TypedTypedExprTyper =>
           ("Type explicitly typed expression",
@@ -263,9 +271,10 @@ trait TyperStringOps {
           ("Type block application", "")
           
         case e:ApplyTyper =>
+          val app1 = treeAt(e.app)
           val long = "Type application of function \n" +
-                     snapshotAnyString(e.app.fun) + "\n" +
-                     "to arguments " + e.app.args.map(a => snapshotAnyString(a) + ":" + snapshotAnyString(a.tpe)).mkString("(", ",", ")") +
+                     snapshotAnyString(app1.fun) + "\n" +
+                     "to arguments " + app1.args.map(a => {val a0 = treeAt(a); anyString(a0) + ":" + snapshotAnyString(a0.tpe)}).mkString("(", ",", ")") +
                      (e.e match {
                         case DefaultExplanation => ""
                         case _ => "\n" + e.toString + (if (settings.debugTD.value) " expl: " + e.e.getClass else "")
@@ -282,15 +291,16 @@ trait TyperStringOps {
           ("Type 'this'", "")
 
         case e:SelectTyper =>
+          val qual1 = treeAt(e.qual)
           val long =
             "Type selection of \n" +
             snapshotAnyString(e.qual) + ".'" + e.name + "'\n" +
-            "with qualifier of type \n" + snapshotAnyString(e.qual.tpe) + "\n" +
+            "with qualifier of type \n" + snapshotAnyString(qual1.tpe) + "\n" +
             "and expected type " + snapshotAnyString(e.pt)
           ("Type member selection \n given correct qualifier", long)
           
         case e:SelectTreeTyper =>
-         ("Type member selection", 
+         ("Type member selection",
           "Type qualifier \n" + snapshotAnyString(e.tree.asInstanceOf[Select].qualifier) + "\ncalling member '" + e.tree.asInstanceOf[Select].name + "'")
     
         case e:SelectConstrTyper =>
@@ -300,12 +310,13 @@ trait TyperStringOps {
           DEFAULT
     
         case e:SymSelectTyper =>
+          val sym1 = SymbolSnapshot(e.sym)
           val short = (if (e.sym == NoSymbol) "No symbol found corresponding to\n the member qualifier" else "Found symbol corresponding to the member \nof the qualifier")
           val long = 
             "Result of finding symbol corresponding to the member '" + snapshotAnyString(e.member) + "' of qualifier: \n" +
             snapshotAnyString(e.qual) + "\n" +
             (if (e.sym == NoSymbol) "Symbol not found "
-            else (" Found symbol " + snapshotAnyString(e.sym) + "\n with type " + snapshotAnyString(e.sym.tpe)))
+            else (" Found symbol " + anyString(sym1) + "\n with type " + snapshotAnyString(sym1.tpe)))
          (short, long)
          
         case e:SymExistsSelectTyper =>
@@ -321,8 +332,9 @@ trait TyperStringOps {
           ("Type identifier: " + e.tree.asInstanceOf[Ident].name + safeTypePrint(e.tree.symbol.tpe, "\n(typed as ", ")"), "")
           
         case e:LiteralTyper =>
-          ("Type literal:\n" + snapshotAnyString(e.tree),
-           "Typing " + e.tree.asInstanceOf[Literal].value + (if (e.tree.tpe != null) "of type " + snapshotAnyString(e.tree.tpe) else "") + "\n" +
+          val tree1 = treeAt(e.tree)
+          ("Type literal:\n" + anyString(tree1),
+           "Typing " + e.tree.asInstanceOf[Literal].value + (if (tree1.tpe != null) "of type " + snapshotAnyString(tree1.tpe) else "") + "\n" +
            "with expected type " + snapshotAnyString(e.pt))
            
         case e:SingletonTypeTreeTyper =>
@@ -369,7 +381,7 @@ trait TyperStringOps {
 
           val long =
             snapshotAnyString(e.templ) + " \n with parents: " +
-            e.parents.map(p => snapshotAnyString(p) + ": " + p.tpe).mkString(",") + " for " + snapshotAnyString(e.clazz)
+            e.parents.map(p => { val p0 = treeAt(p); anyString(p0) + ": " + p0.tpe}).mkString(",") + " for " + snapshotAnyString(e.clazz)
           (short, long)
 
         case e:SelfTpeRefinedType =>
@@ -433,9 +445,9 @@ trait TyperStringOps {
            "Expected type: " + snapshotAnyString(e.value2))
            
         case e:DoTypedApplyTyper =>
-          def argsToString(args0: List[Tree]) = args0.map(a =>
-            snapshotAnyString(a) + ": " + (if (a.tpe == null) "?" else snapshotAnyString(a.tpe))
-           ).mkString("(", ",", ")")
+          def argsToString(args0: List[Tree]) = args0.map(a => { val a0 = treeAt(a)
+            anyString(a0) + ": " + (if (a0.tpe == null) "?" else snapshotAnyString(a0.tpe))
+           }).mkString("(", ",", ")")
 
           ("Typecheck application of\n function to arguments", 
            "Typecheck application of function: '" + snapshotAnyString(e.fun) + "'" + 
@@ -461,9 +473,10 @@ trait TyperStringOps {
            "is " + isApplicable)
            
         case e:FilteredDoTypedApply =>
+          val funSym1 = SymbolSnapshot(e.funSym)
           ("Filtered-out alternatives", 
            "Initial filter out for symbol alernatives for tree " + snapshotAnyString(e.tree) +
-           " results in symbol " + snapshotAnyString(e.funSym) + " of type " + snapshotAnyString(e.funSym.tpe))
+           " results in symbol " + anyString(funSym1) + " of type " + snapshotAnyString(funSym1.tpe))
            
         case e:OverloadedTpeDoTypedApply =>
           ("Typecheck application \n for overloaded method",
@@ -474,17 +487,19 @@ trait TyperStringOps {
            "")
     
         case e:AdaptInferredMethodAlternativeDoTypedApply =>
+          val fun1 = treeAt(e.fun)
           ("Adapt inferred method alternative",             
-           "Adapt inferred " + snapshotAnyString(e.fun) + " of type " + snapshotAnyString(e.fun.tpe)) 
+           "Adapt inferred " + anyString(fun1) + " of type " + snapshotAnyString(fun1.tpe)) 
         
         case e:InferredMethodDoTypedApply =>
+          val fun1 = treeAt(e.fun)
           ("Typecheck arguments application \nfor the inferred method",
-           "Do typed apply on an inferred and adapted method " + snapshotAnyString(e.fun) + " of type " + snapshotAnyString(e.fun.tpe)) 
+           "Do typed apply on an inferred and adapted method " + anyString(fun1) + " of type " + snapshotAnyString(fun1.tpe)) 
            
         case e:MethodTpeDoTypedApply =>
           ("Function with Method Type", 
            "parameter symbols: '" + e.params.map(snapshotAnyString) +
-           "' and their types: '" + e.params.map(p => snapshotAnyString(p.tpe)) + "'")
+           "' and their types: '" + e.params.map(p => combinedSnapshotAnyString(p)(_.tpe)) + "'")
 
         case e:TryTupleApplyDoTypedApply =>
           DEFAULT
@@ -511,9 +526,10 @@ trait TyperStringOps {
            snapshotAnyString(e.tree))
 
         case e:ApplyTreeDoneDoTypedApply =>
+          val tree1 = treeAt(e.tree)
           ("Successfully typed application",
-           "Type application in \n" + snapshotAnyString(e.tree) + "\n" +
-           "as " + snapshotAnyString(e.tree.tpe))
+           "Type application in \n" + anyString(tree1) + "\n" +
+           "as " + snapshotAnyString(tree1.tpe))
            
         case e:NeedsInstantiationDoTypedApply =>
           ("Method Type needs instantiation", "")
@@ -530,9 +546,10 @@ trait TyperStringOps {
            e.tparams.map(snapshotAnyString).mkString("[", ",", "]") + " for " + snapshotAnyString(e.resultTpe))
           
         case e:InstantiatedDoTypedApply =>
-          ("Typecheck inferred instance" + safeTypePrint(e.fun.tpe, "\n", "\n") + " in the application",
+          val fun1 = treeAt(e.fun)
+          ("Typecheck inferred instance" + safeTypePrint(fun1.tpe, "\n", "\n") + " in the application",
            "Typecheck inferred instance for \n" +
-           snapshotAnyString(e.fun) + "\nwith type " + snapshotAnyString(e.fun.tpe) +
+           snapshotAnyString(e.fun) + "\nwith type " + snapshotAnyString(fun1.tpe) +
            (if (!e.undet.isEmpty) "\n and still undetermined type parameters " +
                e.undet.map(snapshotAnyString).mkString(",") else "") +
            "\n and expected type " + snapshotAnyString(e.pt))
@@ -540,9 +557,10 @@ trait TyperStringOps {
         case e:DoTypedApplyDone =>
           // TODO: should be errorevent somehow?
           val short = if (e.tree.isErrorTyped) "Failed to type application" else "Typechecked application"
+          val tree1 = treeAt(e.tree)
           (short,
-           "Applied arguments in the tree \n " + snapshotAnyString(e.tree) + "\n" + 
-           "of type " + snapshotAnyString(e.tree.tpe))
+           "Applied arguments in the tree \n " + snapshotAnyString(tree1) + "\n" + 
+           "of type " + snapshotAnyString(tree1.tpe))
 
         case e:SingleTpeDoTypedApply =>
           DEFAULT

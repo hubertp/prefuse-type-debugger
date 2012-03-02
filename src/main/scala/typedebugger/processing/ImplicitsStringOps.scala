@@ -26,9 +26,10 @@ trait ImplicitsStringOps {
     
       case e: InferImplicit =>
         val descr = (if (e.byName) "By-name implicits" else "Implicits") + " search"
+        val tree1 = treeAt(e.tree)
         val full = 
-          "Implicits search for tree " + snapshotAnyString(e.tree) +
-          "\nwith type " + snapshotAnyString(e.tree.tpe) +
+          "Implicits search for tree " + anyString(tree1) +
+          "\nwith type " + snapshotAnyString(tree1.tpe) +
           "\nWith expected type " + snapshotAnyString(e.pt) +
           (if (!e.undetParams.isEmpty) "\n and undetermined type parameters " + e.undetParams.map(snapshotAnyString).mkString("[", ",", "]")
           else "")
@@ -44,7 +45,7 @@ trait ImplicitsStringOps {
       case e: VerifyImplicit =>
         ("Verify available implicit",
          "Try implicit " + e.info.name + // TODO 
-         "\nfor tree: " + e.newTree + "\nwith expected type " + snapshotAnyString(e.pt))
+         "\nfor tree: " + snapshotAnyString(e.newTree) + "\nwith expected type " + snapshotAnyString(e.pt))
 
       case e: ImplicitSearchDone =>
         DEFAULT

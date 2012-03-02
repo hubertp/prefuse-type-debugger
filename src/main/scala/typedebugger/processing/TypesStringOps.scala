@@ -27,7 +27,7 @@ trait TypesStringOps {
 
       case e: CompareTypes =>
         (explainSubtyping(e.compType, e.which),
-         "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot(e.tp1, e.time)) + " <:< " + snapshotAnyString(TypeSnapshot(e.tp2, e.time)))
+         "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot(e.tp1)) + " <:< " + snapshotAnyString(TypeSnapshot(e.tp2)))
       
       case e: CompareDone =>
         (if (e.subtypes) "Succeeded" else "Failed", "")
