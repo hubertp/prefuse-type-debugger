@@ -10,7 +10,7 @@ Dependencies:
 
 Both available in my repositories. You will also need xsbt for convenient compiling of type debugger.
 
-How to start:
+How to start (the hard way):
 1) build scala with instrumenting support ('topic/contexterrors-events--instrumenting' branch),
    in all other steps we assume that $SCALA_INSTRUMENTING_HOME to its directory
 2) create 'lib' directory
@@ -20,8 +20,13 @@ How to start:
 6) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
 7) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
 
-OR
+or (the easier way for building)
 
 Use provided binaries with instrumented Scala library that are in resources/lib
 (point scala.instrumented.home at this directory). You have to make sure that type debugger and scala compiler
 have the same matching tags, otherwise you are likely to get some bugs.
+
+or (the easiest for using)
+
+java -Xbootclasspath/a:resources/lib/scala-library.jar:resources/lib/scala-compiler.jar scala.tools.nsc.MainGenericRunner -classpath lib/prefuse-core-0.21.jar:resources/lib/type-debugger-snapshot.jar scala.typedebugger.TypeDebuggerUI resources/code/src/paper/Example01.scala
+
