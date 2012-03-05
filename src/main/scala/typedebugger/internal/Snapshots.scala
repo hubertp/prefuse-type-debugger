@@ -7,9 +7,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
     new TreeSnapshot(time).transform(tree).asInstanceOf[T]
   }
   
-  class TreeSnapshot(time: Clock) extends Transformer {
-    lazy val strictCopier = newStrictTreeCopier
-    
+  private class TreeSnapshot(time: Clock) extends Transformer {
     private def attributesAt(tree: Tree): (Type, Symbol) = {      
       def findMissingAttr[T](startElem: AttributesHistory, default: T): T = {
         // assert startElem != null
@@ -146,7 +144,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       case tv@TypeVar(_, _) =>
         // primary source of differences
         val tv1 = typeVarAt(tv, time)
-        //println("TYPEVAR RESULT: " + (tv1 eq tv) + " for " + tv1 + " vs " + tv)
+        //println("type var: " + (tv1 eq tv) + " for " + tv1 + " vs " + tv)
         if (tv1 eq tv) tp
         else tv1 
       // handle antipolytype

@@ -14,9 +14,6 @@ import scala.concurrent.Lock
 import scala.collection.mutable.{ ListBuffer, Stack, HashMap }
 import scala.collection.JavaConversions._
 
-import scala.tools.nsc.{ Global, CompilerCommand, Settings, io, interactive }
-import scala.tools.nsc.reporters.{ ConsoleReporter }
-
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
 import prefuse.data.tuple.{TupleSet, DefaultTupleSet}
 import prefuse.data.io.TreeMLReader
@@ -40,7 +37,7 @@ import prefuse.util.display.{DisplayLib}
 import prefuse.util.ui.{JFastLabel, JSearchPanel}
 import prefuse.render._
 
-import internal.TypeDebuggerSettings
+import scala.tools.nsc.io.{File => ScalaFile}
 
 abstract class TypeBrowser extends AnyRef
                            with internal.CompilerInfo
@@ -990,7 +987,7 @@ abstract class TypeBrowser extends AnyRef
       // at the moment we only ensure that there is only one
       val f = new File(fName)
       val src = if (f.exists) {
-       io.File(fName).slurp 
+       ScalaFile(fName).slurp 
       } else "Source does not exist"
       treeGeneralViewer.setText(src)
     }
@@ -1054,8 +1051,14 @@ abstract class TypeBrowser extends AnyRef
               } else false) match {
               case Some(top: NodeItem) =>
                 top.children.find(item =>
-                  item.asInstanceOf[NodeItem].get(label).asInstanceOf[UINodeP].goal)
-                 .get.asInstanceOf[NodeItem] // there is always a goal child
+                  item.asInstanceOf[NodeItem].get(label).asInstanceOf[UINodeP].goal) match {
+                  case Some(v:NodeItem) =>
+                    v // there is always a goal child
+                  case _ =>
+                    println("[warning] cannot navigate, found bug")
+                    // bug
+                    return
+                }
               case None =>
                 treeView.treeLayout.getLayoutRoot()
                 return
@@ -1325,7 +1328,7 @@ abstract class TypeBrowser extends AnyRef
   }
 
   //TODO include settings
-  def buildStructure(srcs: List[String], settings: Settings with TypeDebuggerSettings, fxn: Filter, label: String) : (Tree, List[UINodeP]) = {
+  def buildStructure(srcs: List[String], settings: TypeDebuggerSettings, fxn: Filter, label: String) : (Tree, List[UINodeP]) = {
     val builder = new EventTreeStructureBuilder(srcs, label)
     builder(fxn)
     // provide prefuse-specific structure
@@ -1340,14 +1343,13 @@ abstract class TypeBrowser extends AnyRef
   }
 
   class SwingViewer {
-    def browse(srcs: List[String], settings: Settings with TypeDebuggerSettings) {
+    def browse(srcs: List[String], settings: TypeDebuggerSettings) {
       val filtr =  Filter.and(Filter pf {
         // TODO shouldn't filter out accidentally the events 
         // that open/close blocks -> this can cause unexpected graphs
         case _: TyperTypeSet                => false
         case _: DebugEvent                  => false
         case _: TyperEvent                  => true
-// TODO: re-enable        case _: ImplicitEvent               => true
         case _: ImplicitMethodTpeAdaptEvent => true
         case _: InferEvent                  => true
         case _: ImplicitEvent               => true
@@ -1379,26 +1381,4 @@ abstract class TypeBrowser extends AnyRef
     }
   }
 
-}
-
-
-object TypeDebuggerUI {
-  def main(args: Array[String]) {
-    // parse input: sources, cp, d
-    val settings0 = new Settings() with TypeDebuggerSettings
-    settings0.Yrangepos.value = true // redundant?
-    settings0.stopAfter.value = List("typer")
-    
-    val command = new CompilerCommand(args.toList, settings0)
-    val tb = new TypeBrowser {
-      val global = new Global(settings0, new ConsoleReporter(settings0)) with interactive.RangePositions with internal.Snapshots {
-        override def instrumentingOn: Boolean = true
-      }
-      val DEBUG = true
-      val settings = settings0
-    }
-    
-    val b = new tb.SwingViewer()
-    b.browse(command.files, settings0)
-  }
 }
