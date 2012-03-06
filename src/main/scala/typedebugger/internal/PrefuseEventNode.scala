@@ -5,11 +5,13 @@ import prefuse.data.Node
 import scala.collection.mutable
 import mutable.{ ListBuffer }
 
-trait PrefuseStructure {
-  self: CompilerInfo with IStructure with processing.StringOps =>
+trait PrefuseStructure extends IStructure {
+  self: CompilerInfo with processing.StringOps =>
     
   import global._
   import EV._
+  
+  val COLUMN_PREFUSENODE_CLASS = (new PrefuseEventNode(null, null, null)).getClass
   
   trait UINodeLike[T, Container[X]] extends BaseTreeNodeLike[T, Container] {
     val pfuseNode: Node
@@ -19,7 +21,7 @@ trait PrefuseStructure {
   
   trait UINode[T] extends UINodeLike[T, UINode]
 
-  class PrefuseEventNode(val ev: global.EV.Event,
+  class PrefuseEventNode(val ev: Event,
                          val parent: Option[UINode[PrefuseEventNode]],
                          val pfuseNode: Node) extends UINode[PrefuseEventNode] {
     val children = ListBuffer[UINode[PrefuseEventNode]]()

@@ -26,6 +26,7 @@ unmanagedJars in Compile <++= (scalaHome, baseDirectory) map { (sHome, base) =>
   allJars.classpath
 }
 
+scalacOptions in Compile += "-unchecked"
 
 scalaVersion := "2.10.0-SNAPSHOT"
 

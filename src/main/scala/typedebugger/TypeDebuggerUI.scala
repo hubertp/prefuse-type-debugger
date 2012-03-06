@@ -17,7 +17,6 @@ object TypeDebuggerUI {
       val settings = settings0
     }
     
-    val b = new tb.SwingViewer()
-    b.browse(command.files, settings0)
+    tb.compileAndShow(command.files, settings0)
   }
 }
