@@ -46,8 +46,8 @@ abstract class TypeBrowser extends AnyRef
                            with internal.StructureBuilders
                            with processing.PrefusePostProcessors
                            with processing.StringOps
-                           with ui.PrefuseController
-                           with ui.SwingController
+                           with ui.controllers.PrefuseControllers
+                           with ui.controllers.SwingControllers
                            with ui.UIUtils{
   import global.EV
   import EV._

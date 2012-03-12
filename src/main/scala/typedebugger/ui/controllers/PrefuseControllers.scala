@@ -1,5 +1,6 @@
 package scala.typedebugger
 package ui
+package controllers
 
 import prefuse.{Constants, Display, Visualization}
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
@@ -17,7 +18,7 @@ import scala.collection.mutable
 import UIConfig.{nodesLabel => label} // todo: remove
 
 
-trait PrefuseController {
+trait PrefuseControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure =>
     
   import PrefuseComponent._

@@ -1,5 +1,6 @@
 package scala.typedebugger
 package ui
+package controllers
 
 import prefuse.Visualization
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
@@ -14,7 +15,7 @@ import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 
 import scala.collection.JavaConversions._
 
-trait SwingController {
+trait SwingControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure =>
     
   import global.{Tree => STree, _}
