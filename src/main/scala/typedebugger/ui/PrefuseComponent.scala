@@ -62,7 +62,7 @@ import UIConfig.{nodesLabel => label} // todo: remove
 
 // TODO possible to get rid of that?
 trait ToExpandInfo {
-  def check(t: Tuple): (Boolean, Boolean)
+  def isGoalOrSibling(t: VisualItem): (Boolean, Boolean)
 }
 
 trait PrefuseControl {
@@ -81,6 +81,7 @@ trait PrefuseControl {
 
 abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips with PrefuseControl {
   import PrefuseComponent._
+  import PrefusePimping._
     
           
   setBackground(backgroundColor)
@@ -113,7 +114,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   val edgeColorAction = new ColorAction(treeEdges,
               VisualItem.STROKECOLOR, ColorLib.rgb(194, 194, 194))
   
-  edgeColorAction.add(MainGoalPathEdgePredicate,
+  edgeColorAction.add(IsEdgeOnGoalPath,
     new ColorAction(treeEdges, VisualItem.STROKECOLOR, ColorLib.rgb(0,0,0)))
   val edgeColor:ItemAction = edgeColorAction
 
@@ -294,7 +295,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
             ybias = -m_bias
         }
 
-        val vi = ts.tuples().next().asInstanceOf[VisualItem]
+        val vi:VisualItem = ts.next()
         m_cur.setLocation(getWidth()/2, getHeight()/2)
         getAbsoluteCoordinate(m_cur, m_start)
         m_end.setLocation(vi.getX()+xbias, vi.getY()+ybias)
@@ -305,8 +306,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       }
     }
   }
-      
-  // TOOLTIPS    
+
   class HoverTooltip extends ControlAdapter {
     var activeTooltip: PrefuseTooltip = _
   
@@ -323,19 +323,19 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
         showNodeTooltip(item, e.getX(), e.getY())
     }
     
+    def clearTooltip(): Unit = if(activeTooltip != null) activeTooltip.stopShowingImmediately()
+    
     def showItemTooltip(item: VisualItem) {
       //Use fixed coordinates as item can randomly fail to give sensible values
       showNodeTooltip(item, 5, 5)
     }
     
-    def clearTooltip(): Unit = if(activeTooltip != null) activeTooltip.stopShowingImmediately()
-    
     protected def showNodeTooltip(item: VisualItem, coordX: Int, coordY: Int) {
       val v = item.getVisualization()
       val info = eventInfo(item)
       
-      showTooltip(new NodeTooltip("Some name",
-        info, 100, 100, v.getDisplay(0)), item, coordX, coordY)
+      showTooltip(new NodeTooltip("Some name", eventInfo(item), 100, 100, v.getDisplay(0)),
+                  item, coordX, coordY)
     }
     
     private def showTooltip(ptt: PrefuseTooltip, item: VisualItem, coordX: Int, coordY: Int) {
@@ -361,8 +361,8 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     def run(frac: Double) {
       val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
       if (ts != null)
-        for (item <- m_vis.items(predicate)) {
-          ts.addTuple(item.asInstanceOf[Tuple])
+        for (item <- m_vis.items_[Tuple](predicate)) {
+          ts.addTuple(item)
         }
     }
   }
@@ -386,20 +386,17 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     lazy val pred = new ToRemovePred
 
     def run(frac: Double) {
-      val items = m_vis.items(pred)
       val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
       if (ts != null) {
-        for (item <- items) {
-          val item0 = item.asInstanceOf[NodeItem]
-          PrefuseLib.updateVisible(item0, false)
-          item0.setExpanded(false)
-          item0.childEdges().foreach(edge => PrefuseLib.updateVisible(edge.asInstanceOf[VisualItem], false))
-          item0.outNeighbors().foreach(node => PrefuseLib.updateVisible(node.asInstanceOf[VisualItem], false))
-          ts.removeTuple(item0)
+        for (item <- m_vis.items_[NodeItem](pred)) {
+          PrefuseLib.updateVisible(item, false)
+          item.setExpanded(false)
+          item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
+          item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
+          ts.removeTuple(item)
         }
       }
-      val toRemove = m_vis.getFocusGroup(toRemoveNodes)
-      toRemove.clear()
+      m_vis.getFocusGroup(toRemoveNodes).clear()
     }
   }
   
@@ -426,13 +423,13 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
           case item: NodeItem =>
             PrefuseLib.updateVisible(item, true)
             item.setExpanded(true)
-            item.childEdges().foreach { case i: VisualItem => PrefuseLib.updateVisible(i, true) }
+            item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
             // neighbors should be added to separate group
-            item.outNeighbors().foreach { case i: VisualItem => PrefuseLib.updateVisible(i, true) }
+            item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
             
             // If this is not a goal, then expand all the incoming edges as well
             if (!isGoal(item))
-              item.inEdges().foreach { case i: VisualItem => PrefuseLib.updateVisible(i, true) }
+              item.inEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
           case vItem: VisualItem =>
             PrefuseLib.updateVisible(vItem, true)
           case _ =>
@@ -445,8 +442,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   class CollapseTree(openGoalsGroup: String, clickedNode: String)
     extends Action {
     
+    lazy val minimumVisibleNodes = findLeastCommonSpanningTree(allInitialGoals)
+    lazy val predicate           = initialGoalPredicate()
+    
     private def findLeastCommonSpanningTree(nodes: List[Node]): List[Node] = {
-      
       //assert(nodes.length > 1)
       if (nodes.length == 1)
         nodes
@@ -480,36 +479,32 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       }
     }
     
-    private def allInitialGoals: List[Node] = {
-      m_vis.getFocusGroup(openGoalsGroup).tuples().toList.map(_.asInstanceOf[Node])
-    }
+    private def allInitialGoals: List[Node] =  m_vis.getFocusGroup(openGoalsGroup).toList
     
-    lazy val minimumVisibleNodes: List[Node] = findLeastCommonSpanningTree(allInitialGoals)
-    lazy val predicate = initialGoalPredicate()
-
     def run(frac: Double) {
-      val items = m_vis.items(Visualization.ALL_ITEMS)
+      val items = m_vis.items_[VisualItem](Visualization.ALL_ITEMS)
       val ts = m_vis.getFocusGroup(openGoalsGroup)
       for (item <- items) {
-        val item0 = item.asInstanceOf[VisualItem]
-        
-        val (visible, sibling) = predicate.check(item0)
-        if (!visible) {
+        val (visibleGoal, sibling) = predicate.isGoalOrSibling(item)
+        if (!visibleGoal) {
           if (sibling) {
             // add to goals group
-            ts.addTuple(extractPrefuseNode(item0))
+            ts.addTuple(extractPrefuseNode(item))
           } else {
-            if (item0.isInstanceOf[NodeItem])
-              item0.asInstanceOf[NodeItem].setExpanded(false)
+            item match {
+              case item0: NodeItem =>
+                item0.setExpanded(false)
+              case _ =>
+            }
           }
-          PrefuseLib.updateVisible(item0, sibling)
+          PrefuseLib.updateVisible(item, sibling)
         } else {
           // Goal
           val panTs = m_vis.getFocusGroup(clickedNode)
-          panTs.addTuple(item0)
-          if (isNode(item0)) {
-            setGoalPath(item0)
-            ts.addTuple(extractPrefuseNode(item0))
+          panTs.addTuple(item)
+          if (isNode(item)) {
+            setGoalPath(item)
+            ts.addTuple(extractPrefuseNode(item))
           }
         }
       }
@@ -528,24 +523,21 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   // Predicate returning true for goal and nongoal groups
   class IsNodeOnGoalPath(openGoalsGroup: String, nonGoalsGroup: String) extends AbstractPredicate {
     override def getBoolean(t: Tuple): Boolean = {
-      if (isNode(t)) {
+      isNode(t) && {
         val ts = m_vis.getFocusGroup(openGoalsGroup)
         // because we added nodeItem to the list, not visualItem which 't' is
         val nodeItem = extractPrefuseNode(t)
-        val res0 = ts != null && ts.containsTuple(nodeItem)
-        if (res0)
-          true
-        else {
-          // try non goal group
+        (ts != null && ts.containsTuple(nodeItem)) || {
+          // fallback, try non goal group
           val ts2 = m_vis.getFocusGroup(nonGoalsGroup)
           ts2 != null && ts2.containsTuple(nodeItem)
         }
-      } else false
+      }
     }
   }
   
   // Predicate for checking if an edge is between the two goals
-  object MainGoalPathEdgePredicate extends AbstractPredicate {
+  object IsEdgeOnGoalPath extends AbstractPredicate {
     override def getBoolean(t: Tuple): Boolean = t match {
       case edge: EdgeItem if isNode(edge.getSourceNode) =>
         isGoal(edge.getTargetNode) && isGoal(edge.getSourceNode)

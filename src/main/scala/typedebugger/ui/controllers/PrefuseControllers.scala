@@ -22,6 +22,7 @@ trait PrefuseControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure =>
     
   import PrefuseComponent._
+  import PrefusePimping._
    
   import global.{Tree => STree, _}
   import EV._
@@ -66,11 +67,8 @@ trait PrefuseControllers {
     // or show the synthetic root
     // whenever we expand the type tree we update the root
     override def getLayoutRoot() = {
-      val allVisibleGoals = m_vis.items(visGroup, GoalNode)
-      val allPNodeVisibleGoals = allVisibleGoals.map(t => {
-        val t0 = t.asInstanceOf[NodeItem]
-        (asDataNode(t0).pfuseNode, t0)
-      }).toMap
+      val allVisibleGoals = m_vis.items_[NodeItem](visGroup, GoalNode)
+      val allPNodeVisibleGoals = allVisibleGoals.map(t => (asDataNode(t).pfuseNode, t)).toMap
       
       initialGoals match {
         case head::_ =>
@@ -85,8 +83,8 @@ trait PrefuseControllers {
           if (!allPNodeVisibleGoals.contains(eNode.pfuseNode)) {
             // we are dealing with a first (root) node
             // so try to find it manually
-            val first = m_vis.items(tree, new VisualItemSearchPred(head.pfuseNode))
-            if (first.hasNext) first.next.asInstanceOf[NodeItem] else super.getLayoutRoot()
+            val first = m_vis.items_[NodeItem](tree, new VisualItemSearchPred(head.pfuseNode))
+            if (first.hasNext) first.next else super.getLayoutRoot()
           } else {
             allPNodeVisibleGoals(eNode.pfuseNode) // get corresponding visualitem
           }
@@ -174,7 +172,7 @@ trait PrefuseControllers {
         }
       } else false
       
-    def check(t: Tuple) = t match {
+    def isGoalOrSibling(t: VisualItem) = t match {
       case node: NodeItem if containsDataNode(node) =>
         val eNode = asDataNode(node)
         // Apart from expanding the error node
@@ -192,7 +190,7 @@ trait PrefuseControllers {
     
     override def run(frac: Double) {
       val target = m_vis.getFocusGroup(fixedGroup)
-      target.tuples().foreach(n => addLinkPath(n.asInstanceOf[NodeItem]))
+      target.foreach(addLinkPath)
     }
     
     def addLinkPath(starting: NodeItem) {

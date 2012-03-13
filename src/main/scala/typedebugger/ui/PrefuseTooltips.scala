@@ -13,17 +13,12 @@ trait PrefuseTooltips {
       owner: JComponent, var sticky: Boolean) {
       
     protected var popup: JPanel = _
-
     
-    class ShowTimerAction(showTimer: Boolean)
-      extends ActionListener
-    {
-      override def actionPerformed(e: ActionEvent ) {
-        if(showTimer)
-          startShowingImmediately()
-        else
-          stopShowingImmediately()
-      }
+    protected def getContents(): java.awt.Component
+    
+    class ShowTimerAction(showTimer: Boolean) extends ActionListener {
+      override def actionPerformed(e: ActionEvent ) =
+        if(showTimer) startShowingImmediately() else stopShowingImmediately()
     }
     
     val startShowingTimer = new Timer(startDelay, new ShowTimerAction(true))
@@ -50,12 +45,8 @@ trait PrefuseTooltips {
       startShowingTimer.start()
     }
     
-    def stopShowing() {
-      if(popup.isVisible() && !sticky)
-        stopShowingTimer.start()
-      else
-        startShowingTimer.stop()
-    }
+    def stopShowing() =
+      if(popup.isVisible() && !sticky) stopShowingTimer.start() else startShowingTimer.stop()
     
     def startShowingImmediately() {
       stopShowingTimer.stop()
@@ -74,13 +65,7 @@ trait PrefuseTooltips {
       }
     }
     
-    def bringToFront() {
-      popup.getParent().setComponentZOrder(popup, 0)
-    }
-    
-    protected def getContents(): java.awt.Component
-    
-   
+    def bringToFront() =  popup.getParent().setComponentZOrder(popup, 0)
     
     class PrefuseTooltipListener extends MouseAdapter {
       override def mouseEntered(e: MouseEvent) {

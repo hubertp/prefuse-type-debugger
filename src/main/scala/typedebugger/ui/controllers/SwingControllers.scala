@@ -22,6 +22,8 @@ trait SwingControllers {
   import EV._
   import UIConfig.{nodesLabel => label}
   
+  import PrefusePimping._
+  
   class TypeDebuggerController(val frame: SwingFrame) {
     var lastClicked: Option[NodeItem] = None
     
@@ -172,9 +174,9 @@ trait SwingControllers {
 	              !item1.parent.isDefined || !goals.containsTuple(item1.parent.get.pfuseNode)
 	            case _ => false } match {
 	            case Some(top: NodeItem) =>
-	              top.children.find { case item: NodeItem => asDataNode(item).goal } match {
-	                case Some(v:NodeItem) =>
-	                  v
+	              top.children_[NodeItem].find (asDataNode(_).goal) match {
+	                case Some(child) =>
+	                  child
 	                case _ =>
 	                  println("[warning] cannot navigate, found bug")
 	                  // bug
@@ -299,14 +301,14 @@ trait SwingControllers {
 			          if (refId != NoEvent.id) {
 			              // Find corresponding event and node in the tree
 			              //println("Found info in the history: " + refId)
-			              val ts2 = vis.items(treeNodes, new FindNode(refId))
+			              val ts2= vis.items_[NodeItem](treeNodes, new FindNode(refId))
 			              val tsTarget = vis.getFocusGroup(linkGroup)
 			              // will ts2 return NodeItem or Node
 			              ts2.foreach(n => {
-			                tsTarget.addTuple(n.asInstanceOf[Tuple])
+			                tsTarget.addTuple(n)
 			                // need to find common root with the currently visible tree
 			                // go until you find goal
-			                addLinkPath(n.asInstanceOf[NodeItem], vis)               
+			                addLinkPath(n, vis)               
 			              })
 			          }
 			        case _ =>
@@ -351,18 +353,16 @@ trait SwingControllers {
 	      val eNode = asDataNode(node)
 	      
 	      // is any of its children a goal
-	      val hasGoalChild = node.outNeighbors().exists(n =>
-	       {
-	         val node0 = asDataNode(n.asInstanceOf[NodeItem])
-	         node0.goal // it has to be already expanded, so this is valid
-	       }) || eNode.goal
+	      val hasGoalChild = node.outNeighbors_[NodeItem]().exists(n =>
+	        // it has to be already expanded, so this is valid
+	        asDataNode(n).goal || eNode.goal)
 	      if (hasGoalChild) {
 	        // we are dealing with a goal or its parent
 	        eNode.parent match {
 	          case Some(parent) =>
 	            // expand its parent
 	            parent.goal = true
-	            ts1.addTuple(parent.pfuseNode.asInstanceOf[Tuple])
+	            ts1.addTuple(parent.pfuseNode)
 	          case None =>
 	        }
 	      } else {
@@ -371,7 +371,7 @@ trait SwingControllers {
 	        var eNode0 = eNode
 	        // goals are all in, so we are fine 
 	        while (!eNode0.goal && eNode0.parent.isDefined) {
-	          ts2.addTuple(eNode0.pfuseNode.asInstanceOf[Tuple])
+	          ts2.addTuple(eNode0.pfuseNode)
 	          eNode0 = eNode0.parent.get
 	        }
 	      }
@@ -391,7 +391,7 @@ trait SwingControllers {
 	        List(openGoalNodes, nonGoalNodes, linkGroupNodes, toRemoveNodes).map(vis.getFocusGroup(_))
 	      
 	      // Remove all the link nodes
-	      ts3.tuples().foreach(n => tsRemove.addTuple(n.asInstanceOf[Tuple]))
+	      ts3.foreach(tsRemove.addTuple)
 	      ts3.clear()
 	      
 	      if (eNode.goal) {
@@ -412,12 +412,12 @@ trait SwingControllers {
 	        }
 	        
 	        // also collapse non-goals
-	        ts2.tuples().foreach(t => tsRemove.addTuple(t.asInstanceOf[Tuple]))
+	        ts2.foreach(tsRemove.addTuple)
 	        ts2.clear()
 	      } else {
 	        // Remove all the other non-essential non-goals
 	        // apart from those leading to this node
-	        ts2.tuples().foreach(t => tsRemove.addTuple(t.asInstanceOf[Tuple]))
+	        ts2.foreach(tsRemove.addTuple)
 	        ts2.clear()
 	        var eNode0 = eNode
 	        while(eNode0.parent.isDefined && !ts1.containsTuple(eNode0.parent.get.pfuseNode)) {
