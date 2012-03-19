@@ -4,7 +4,7 @@ package internal
 import scala.collection.mutable.ListBuffer
 
 trait IStructure {
-  self: CompilerInfo =>
+  outer: CompilerInfo =>
 
   // TODO: +T
   trait BaseTreeNodeLike[T, Container[X]] {

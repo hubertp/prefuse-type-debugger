@@ -53,6 +53,8 @@ trait PrefusePostProcessors {
          false
        case _: LubGlbDone =>
          false
+       case e: InstantiateTypeParams => // produces too much noise currently if (e.formals.isEmpty) =>
+         false
        case _: RecoveryEvent =>
          false // we should be able to avoid this filter
     }

@@ -31,9 +31,9 @@ trait StringOps extends AnyRef
       case DefaultExplanation =>
         ev formattedString Formatting.fmt
       case tEV: TyperExplanation =>
-        explainTyper(tEV)
+        explainTyper(tEV)(ev.time)
       case nEV: NamerExplanation =>
-        explainNamer(nEV)
+        explainNamer(nEV)(ev.time)
       case aEV: AdaptExplanation =>
         explainAdapt(aEV)
       case iEV: InferExplanation =>
@@ -44,6 +44,7 @@ trait StringOps extends AnyRef
   }
   
   // TODO, provide full info as well
+  // todo: cache results
   object Events extends AnyRef
                 with ErrorEvents
                 with TyperEventsOps
@@ -83,21 +84,24 @@ trait StringOps extends AnyRef
       println("No explanation for " + ev.getClass)
   }
   
-  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true): String =
+  // TODO incorporate into our string converter when
+  // we move snapshotAnyString directly to prefuse
+  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true)(implicit time: Clock): String =
     if (tp != null && tp != NoType) {
-      val stringRep0 = anyString(tp)
+      val stringRep0 = snapshotAnyString(tp)
       // strip kind information
-      // todo remove once we move anyString functionality to StringOps
       val ExactType = """\[[^:]*: (.*)\]""".r
       val MethodTypeRegex = """\[MethodType: (.*)\]""".r
       val ErrorType = """\[ErrorType: (.*)\]""".r
+      val WildcardType = """\[WildcardType: (.*)\]""".r
       val stringRep = stringRep0 match {
         //case MethodTypeRegex(tpe) => "(" + tpe // TODO fix
+        case WildcardType(_)      => "?"
         case ErrorType(_)         => ""
         case ExactType(tpe)       => tpe
         case _                    => stringRep0
       }
-      if (truncate && (stringRep.length > Formatting.maxTypeLength || tp.isErroneous)) ""
+      if (truncate && (stringRep.length > Formatting.maxTypeLength)) ""// || tp.isErroneous)) ""
       else pre + stringRep + post
     } else ""
       
@@ -107,10 +111,34 @@ trait StringOps extends AnyRef
     else pre + v1 + join + v2
   }
   
+  def snapshotAnyString(x: Any)(implicit c: Clock): String = x match {
+    case t: STree    => anyString(treeAt(t))
+    case tp: Type    => anyString(TypeSnapshot(tp))
+    case sym: Symbol => anyString(SymbolSnapshot(sym)) 
+    case _ => anyString(x)
+  }
+  
+  // not efficient if we are getting the snapshot of x as well in the event 
+  def combinedSnapshotAnyString[T, U](x: T)(y: T => U)(implicit c: Clock): String = {
+    x match {
+      case t: STree =>
+        // bug with [T <: Tree] and expecting T?
+        val t1 = treeAt(t).asInstanceOf[T]
+        snapshotAnyString(y(t1))
+      case tp: Type => 
+        val tp1 = TypeSnapshot(tp).asInstanceOf[T]
+        snapshotAnyString(y(tp1))
+      case sym: Symbol =>
+        val sym1 = SymbolSnapshot(sym).asInstanceOf[T]
+        snapshotAnyString(y(sym1))
+      case _ => snapshotAnyString(y(x))
+    }
+  }
+  
   
   // TODO refactor
   trait TyperExplanations {
-    def explainTyper(ev: Explanation with TyperExplanation): String = ev match {
+    def explainTyper(ev: Explanation with TyperExplanation)(implicit time: Clock): String = ev match {
       case _: TypeUnit =>
         "Typecheck unit"
         
@@ -136,7 +164,7 @@ trait StringOps extends AnyRef
         //"Typecheck member in template"
 
       case TypeExplicitTreeReturnType(_, tpe) =>
-        //"Typecheck return type " + anyString(tpe) + " of the function"
+        //"Typecheck return type " + snapshotAnyString(tpe) + " of the function"
         "Typecheck explicit return type"
 
       case _: TypeDefConstr => 
@@ -331,7 +359,7 @@ trait StringOps extends AnyRef
   }
   
   trait NamerExplanations {
-    def explainNamer(ev: Explanation with NamerExplanation): String = ev match {
+    def explainNamer(ev: Explanation with NamerExplanation)(implicit time: Clock): String = ev match {
       case _: MethodReturnType =>
         "Typecheck return type of the method"
       
@@ -369,6 +397,7 @@ trait StringOps extends AnyRef
         "Eta-expansion adaptation"
     
       case NotASubtypeInferView(treetp, pt) =>
+        // TODO fix printing
         "Infer view to satisfy \n" + anyString(treetp) + " <: " + anyString(pt)
 
       case _: FirstTryTypeTreeWithAppliedImplicitArgs => 

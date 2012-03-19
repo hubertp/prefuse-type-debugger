@@ -9,7 +9,7 @@ trait StructureBuilders {
 
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
-  class EventTreeStructureBuilder(srcs: List[String], nodesLabel: String) {
+  class CompilerRunWithEvents(srcs: List[String], nodesLabel: String) {
     import global.EV
     import EV._
     
@@ -120,8 +120,8 @@ trait StructureBuilders {
       }
     }
   
-    def pf(fxn: Event =>? Boolean): Unit = apply(Filter pf fxn)
-    def apply(filt: Filter): Unit = {
+    //def pf(fxn: Event =>? Boolean): Unit = apply(Filter pf fxn)
+    def run(filt: Filter): Boolean = {
       EV.resetEventsCounter()
       // reset the intermediate structure
       _root = createNode(null, null)

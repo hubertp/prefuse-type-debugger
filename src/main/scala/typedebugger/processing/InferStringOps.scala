@@ -11,14 +11,14 @@ trait InferStringOps {
     import TVarSetInst._
     private val DEFAULT = ("(infer| not-implemented)", "(infer| not-implemented)")
     
-    def explainInferEvent(ev: Event with InferEvent): (String, String) = {
+    def explainInferEvent(ev: Event with InferEvent)(implicit time: Clock = ev.time): (String, String) = {
       ev match {
         case e:InferDone =>
           ("Finished inference", "")
           
         case e:InferInstanceDone =>
           ("Inferred concrete instance", 
-           anyString(e.tree))
+           snapshotAnyString(e.tree))
            
         case e:MethodInfer =>
           DEFAULT
@@ -29,22 +29,23 @@ trait InferStringOps {
         case e:CompatibleTypes =>
           ("Compatible types,\ntry to solve any type variables",
            "Compatible types \n" +
-           "Found:    " + anyString(e.found) + "\n" +
-           "Required: " + anyString(e.pt) + "\n" +
-           "with type parameters " + e.tparams.map(anyString).mkString(","))
+           "Found:    " + snapshotAnyString(e.found) + "\n" +
+           "Required: " + snapshotAnyString(e.pt) + "\n" +
+           "with type parameters " + e.tparams.map(snapshotAnyString).mkString(","))
            
         case e: InstantiateTypeVars =>
           // TODO: list constraints for each
           ("Instantiate type variables",
-           "Instantiate type variables: " + e.tvars.map(tvar => anyString(tvar) + " => " + anyString(tvar.constr.inst)).mkString("[", ",", "]"))
+           "Instantiate type variables: " + e.tvars.map(tvar => {val tvar0 = TypeSnapshot(tvar); anyString(tvar0) + " => " + snapshotAnyString(tvar0.constr.inst)}).mkString("[", ",", "]"))
            
         case e: InstantiateTypeVar =>
-          ("Instantiate type variable " + e.tvar,
-           "Instantiate type variable: " + anyString(e.tvar) + " with constraint " + anyString(e.tvar.constr))
+          val tvar1 = TypeSnapshot(e.tvar)
+          ("Instantiate type variable " + anyString(tvar1),
+           "Instantiate type variable: " + anyString(tvar1) + " with constraint " + snapshotAnyString(tvar1.constr))
            
         case e: SolveSingleTVar =>
           ("Solve type variable",
-           "Solve: " + e.tvar + "\n" +
+           "Solve: " + snapshotAnyString(e.tvar) + "\n" +
            //"In " + e.tvar.
            (if (!e.variance) "contravariant position" else ""))
            
@@ -54,20 +55,21 @@ trait InferStringOps {
            
         case e: WildcardLenientTArg =>
           if (e.noInstance)
-            ("No instance of a typevariable " + e.tvar, "")
+            ("No instance of a typevariable " + snapshotAnyString(e.tvar), "")
           else
-            ("No type var constraint instance for " + e.tvar, "")
+            ("No type var constraint instance for " + snapshotAnyString(e.tvar), "")
             
         case e: IncompatibleResultAndPrototype =>
           ("Incompatible function result- and proto-type",
-           "Incompatible types:\n" + anyString(e.restpe) + "vs.\n" + anyString(e.pt))
+           "Incompatible types:\n" + snapshotAnyString(e.restpe) + "vs.\n" + snapshotAnyString(e.pt))
           
         case e: InstantiateGlbOrLub =>
           def instType = if (e.up) "greater lower bound (glb)" else "lower upper bound (lub)"
           def pos = if (e.up) "non-contravariant position" else "contravariant position"
-          lazy val bounds = if (e.up) e.tvar.constr.hiBounds else e.tvar.constr.loBounds
+          lazy val tvar1 = TypeSnapshot(e.tvar)
+          lazy val bounds = if (e.up) tvar1.constr.hiBounds else tvar1.constr.loBounds
           def boundsString(bs: List[Type]) = 
-            if (bs.isEmpty) "empty bounds" else bs.map(anyString).mkString("[", ",", "]")
+            if (bs.isEmpty) "empty bounds" else bs.map(snapshotAnyString).mkString("[", ",", "]")
           ("Calculate " + instType + "\nbecause type parameter is in\n" + pos,
            "Calculate " + instType + " for " + boundsString(bounds))
            
@@ -78,124 +80,129 @@ trait InferStringOps {
            
         case e: AddBoundTypeVar =>
           val boundType = if (e.upperBound) "upper" else "lower"
-          ("Register " + boundType + " bound\nof type " + anyString(e.bound),
+          ("Register " + boundType + " bound\nof type " + snapshotAnyString(e.bound),
            "")
 
         case e:InferExprInstance =>
+          val snapshotTree = treeAt(e.tree)
           ("Infer expression instance",
            "Infer expression instance for tree \n" +
-           anyString(e.tree) + "\n" +
-           " of type '" + anyString(e.tree) + "' \n" +
-           "with undetermined typeparams '" + e.tparams.map(anyString).mkString(",") + "' \n" +
-           "and expected type " + anyString(e.pt))
+           snapshotAnyString(snapshotTree) + "\n" +
+//           " of type '" + snapshotAnyString(snapshotTree.tpe) + "' \n" +
+           "with undetermined typeparams '" + e.tparams.map(snapshotAnyString).mkString(",") + "' \n" +
+           "and expected type " + snapshotAnyString(e.pt))
     
         case e:InferMethodInstance =>
+          val snapshotTree = treeAt(e.tree)
           ("Infer method instance \n using inferred argument types",
            "Infer method instance for expression \n " +
-           anyString(e.tree) + "\n" +
-           "of type " + anyString(e.tree.tpe) + "\n" +
-           "Given arguments with types are " + e.args.map(a => anyString(a.tpe)).mkString(",") + "\n" +
-           "and the expected type " + anyString(e.pt) +
-           "Try to find substitution for type-parameter(s) " + e.undetparams.map(anyString).mkString(",") + "\n" +
-           "so that the result type of the application is compatible with the expected type" + anyString(e.pt))
+           anyString(snapshotTree) + "\n" +
+           "of type " + snapshotAnyString(snapshotTree.tpe) + "\n" +
+           "Given arguments with types are " + e.args.map(a => {val a0 = treeAt(a); snapshotAnyString(a0.tpe)}).mkString(",") + "\n" +
+           "and the expected type " + snapshotAnyString(e.pt) + "\n" +
+           "Try to find substitution for type-parameter(s) " + e.undetparams.map(snapshotAnyString).mkString(",") + "\n" +
+           "so that the result type of the application is compatible with the expected type" + snapshotAnyString(e.pt))
 
         case e:InferredMethodInstance =>
           ("Inferrred method instance",
            "Inferred method instance \n" + 
-           anyString(e.tree) + "\n" +
+           snapshotAnyString(e.tree) + "\n" +
            "in application of arguments: \n" +
-           e.args.map(arg => anyString(arg) + ":" + anyString(arg.tpe)).mkString("(", ",", ")"))
+           e.args.map(arg => {val arg0 = treeAt(arg); anyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")"))
 
         case e:NoInstanceForMethodTypeParameters =>
           ("Cannot infer method instance \n as there is no instance \n for type parameter(s)",
            "No instance exists for type parameters for \n" +
-           anyString(e.tree) + "\n" +
-           "exist so that it can be applied to arguments: \n" +
-           e.args.map(arg => anyString(arg) + ":" + anyString(arg.tpe)).mkString("(", ",", ")") + "\n" +
+           snapshotAnyString(e.tree) + "\n" +
+           "exist so that it can be applied to \n" +
+           e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")") + "\n" +
            "because " + e.exMsg)
            
         case e:MethTypeArgsSolve =>
           ("MethTypeArgsDebug",
-           "Meth type args is: " + e.tparams.map(anyString).mkString(","))
+           "Meth type args is: " + e.tparams.map(snapshotAnyString).mkString(","))
            
         case e:SolvedTypes =>
           ("Solved Types",
-           "Solved types: " + e.solvedtypes.map(anyString).mkString(","))
+           "Solved types: " + e.solvedtypes.map(snapshotAnyString).mkString(","))
            
         case e:InferMethodInstanceTypeError =>
           ("Cannot infer method instance \n as encountered type error",
            "Type error \n" + e.exMsg + "\n" +
-           "when inferring methods instance for \n" + anyString(e.tree) + "\n" +
+           "when inferring methods instance for \n" + snapshotAnyString(e.tree) + "\n" +
            " and arguments: \n" +
-           e.args.map(arg => anyString(arg) + ":" + anyString(arg.tpe)).mkString("(", ",", ")"))
+           e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")"))
 
         case e:FailedTypeCompatibilityInInferExprTypeArgs =>
           ("Incompatible types failure",
-           "Type " + anyString(e.tpe) + "\n" +
-           "Expected " + anyString(e.pt))
+           "Type " + snapshotAnyString(e.tpe) + "\n" +
+           "Expected " + snapshotAnyString(e.pt))
 
         case e:SubstituteTParamsInfer =>
           ("Substitute type parameters",
-           "Substitute " + e.tparams.map(anyString) + " with " + e.targs.map(anyString) +
+           "Substitute " + e.tparams.map(snapshotAnyString) + " with " + e.targs.map(snapshotAnyString) +
              (if (e.adjust) " with " else " without ") + "type arguments adjustment")
              
         case e:PolyTypeInstantiationError =>
           ("Cannot instantiate polymorhpic type \n to the expected type",
-           "Polymorphic expression \n " + anyString(e.tree) + "\n" +
+           "Polymorphic expression \n " + snapshotAnyString(e.tree) + "\n" +
            "cannot be instantiated to the expected type.\n" +
-           "Found:    " + anyString(e.polytype) + "\n" +
-           "Expected: " + anyString(e.pt) + "\n" +
-           "Undetermined type-parameters: " + e.tparams.map(anyString).mkString(","))
+           "Found:    " + snapshotAnyString(e.polytype) + "\n" +
+           "Expected: " + snapshotAnyString(e.pt) + "\n" +
+           "Undetermined type-parameters: " + e.tparams.map(snapshotAnyString).mkString(","))
            
         case e:TreeTypeSubstitution =>
-          val tpSubst = (e.undet zip e.targs).map(subst => subst._1 + " => " + subst._2).mkString("\n")
+          val tpSubst = (e.undet zip e.targs).map(subst => snapshotAnyString(subst._1) + " => " + snapshotAnyString(subst._2)).mkString("\n")
           ("Type substitution map \n for inferred instance",
            "Perform substitution to infer concrete instance:\n" + tpSubst + "\n" +
-           "in " + e.tree)
+           "in " + snapshotAnyString(e.tree))
            
         case e:IsApplicableInfer =>
           ("Is function applicable to\n arguments and expected type", 
-           "Is function applicable to argument types and expected type " + anyString(e.pt))
+           "Is function applicable to argument types and expected type " + snapshotAnyString(e.pt))
            
         case e:IsApplicableFallbackInfer =>
           ("Fallback: Is function applicable to\n arguments and no expected type",
-           "Is applicable check failed with expected type " + anyString(e.pt) +
+           "Is applicable check failed with expected type " + snapshotAnyString(e.pt) +
            " so try with no expected type")
            
         case e:AdjustedTypeArgs =>
           DEFAULT
           
         case e:InferMethodAlternative =>
+          // TODO: remove once we apply snapshots automatically to tree (during its snapshot recovery)
+          //val snapshotTree = treeAt(e.tree, e.time)
+          
           ("Infer method \n with alternatives\n [" + (if (e.implicits) "with implicits" else "without implicits")+ "]",
-           "In " + anyString(e.tree) + " with overloaded type\n " +
-           anyString(e.tree.tpe) + "\n" +
-           "we infer the correct, single method from alternatives suitable for " + e.argsTpes.map(anyString) +
+           "In " + snapshotAnyString(e.tree) + " with overloaded type\n " +
+           combinedSnapshotAnyString(e.tree)(_.tpe) + "\n" +
+           "we infer the correct, single method from alternatives suitable for " + e.argsTpes.map(snapshotAnyString) +
            " with undetermined type parameters " + e.tparams +
-           "\nand expected final type " + anyString(e.pt))
+           "\nand expected final type " + snapshotAnyString(e.pt))
            
         case e:NoBestAlternativeTryWithWildcard =>
           ("No single best implict was found.\n Try searching without expected type",
-           "Couldn't find best alternative for " + anyString(e.tree) + ".\n" + 
+           "Couldn't find best alternative for " + snapshotAnyString(e.tree) + ".\n" + 
              (if (!e.competing.isEmpty) "Conflict in " + e.competing else "") +
               ", will attempt to infer best alternative without pt.\n" +
              (if (!e.applicable.isEmpty) "Some applicable implicits are: " + e.applicable else "")) 
              
         case e:AmbiguousAlternatives =>
           ("Ambiguous alternatives for method",
-           anyString(e.tree) + "\n has ambigous alternatives. All applicable alternatives are:\n" +
+           snapshotAnyString(e.tree) + "\n has ambigous alternatives. All applicable alternatives are:\n" +
            e.applicable + " of which the conflicting ones are\n" + e.competing)
            
         case e:VerifyMethodAlternative =>
           ("Verify alternative",
-           "Check if method alternative " + e.alternative + " of type " + anyString(e.alternative.tpe) +
-           " is applicable for arguments' types " + e.argsTypes.map(anyString) +
-           "\nand conforms to the actual expected type " + anyString(e.pt))
+           "Check if method alternative " + e.alternative + " of type " + combinedSnapshotAnyString(e.alternative)(_.tpe) +
+           " is applicable for arguments' types " + e.argsTypes.map(snapshotAnyString) +
+           "\nand conforms to the actual expected type " + snapshotAnyString(e.pt))
            
         case e:PossiblyValidAlternative =>
           val result = if (e.result) "Valid" else "Invalid"
           (result + " alternative",
-          "Alternative " + anyString(e.alternative) + " with type " +
-          anyString(e.alternative.tpe) + " is " + result)
+          "Alternative " + snapshotAnyString(e.alternative) + " with type " +
+          combinedSnapshotAnyString(e.alternative)(_.tpe) + " is " + result)
           
         case e:MethodTypeApplicableDebug =>
           DEFAULT
@@ -210,13 +217,14 @@ trait InferStringOps {
           DEFAULT
           
         case e:InferExprAlternative =>
+          val snapshotTree = treeAt(e.tree)
           ("Infer expression \n with alternatives \n[" + (if (e.implicits) "with implicits" else "without implicits")+ "]",
-           "In " + anyString(e.tree) + " with overloaded type " + anyString(e.tree.tpe) +
-           " we infer the alternative for type " + anyString(e.pt))
+           "In " + anyString(snapshotTree) + " with overloaded type " + snapshotAnyString(snapshotTree.tpe) +
+           " we infer the alternative for type " + snapshotAnyString(e.pt))
            
         case e:ImprovesAlternativesCheck =>
           ("Compare conflicting alternatives", 
-           "Compare conflicting, both applicable alternatives\nfor " + anyString(e.tree))
+           "Compare conflicting, both applicable alternatives\nfor " + snapshotAnyString(e.tree))
            
         case e:AlternativesCheck =>
           (if (e.check) "Alternative improved" else "Alternatives are comparable", "")
@@ -226,14 +234,14 @@ trait InferStringOps {
       }
     }
     
-    def explainLubGlbEvent(ev: Event with LubEvent): (String, String) = {
+    def explainLubGlbEvent(ev: Event with LubEvent)(implicit time: Clock = ev.time): (String, String) = {
       ev match {
         case e: CalcLub =>
           ("Calculate lub " + lubKindExpl1(e.kind),
-           "Calculating lub for types: " + e.tps.map(anyString).mkString("[", ",", "]"))
+           "Calculating lub for types: " + e.tps.map(snapshotAnyString(_)).mkString("[", ",", "]"))
         case e: CalcLubElimSubTypes =>
           ("Calculate lub after eliminating subtypes " + lubKindExpl2(e.kind),
-           "Calculating lub for types: " + e.tps.map(anyString).mkString("[", ",", "]"))
+           "Calculating lub for types: " + e.tps.map(snapshotAnyString(_)).mkString("[", ",", "]"))
         case _ =>
           DEFAULT
       }

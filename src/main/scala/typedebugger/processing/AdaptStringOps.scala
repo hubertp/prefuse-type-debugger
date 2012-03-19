@@ -11,14 +11,15 @@ trait AdaptStringOps {
     private val DEFAULT = ("(adapt| not-implemented)", "(adapt| not-implemented)")
       
       
-   def explainAdaptEvent(ev: Event with AdaptEvent): (String, String) = {
+   def explainAdaptEvent(ev: Event with AdaptEvent)(implicit time: Clock = ev.time): (String, String) = {
       ev match {
         case e:AdaptStart =>
           val short = if (e.pt == WildcardType) "Adapt expression \nwith no expected type" 
                       else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
+          val tree1 = treeAt(e.tree)
           val long = "Adapt expression's type (if necessary) to the expected type.\n" + 
-                     "Found:    " + anyString(e.tree.tpe) + "\n" + 
-                     "Expected: " + anyString(e.pt)
+                     "Found:    " + snapshotAnyString(tree1.tpe) + "\n" + 
+                     "Expected: " + snapshotAnyString(e.pt)
           (short, long)
           
         case e:AdaptDone =>
@@ -47,14 +48,15 @@ trait AdaptStringOps {
          
         case e:PolyTpeAdapt =>
           ("Adapt polymorphic type", 
-           "\nType-parameters: '" + anyString(e.tparams) + "' " + 
-           "\nResult type: '" + anyString(e.tpe) + "'" +
-           "\nFor type tree: " + anyString(e.typeTree) + " undetermined context type-parameters: " + e.undetTParams)
+           "\nType-parameters: '" + snapshotAnyString(e.tparams) + "' " + 
+           "\nResult type: '" + snapshotAnyString(e.tpe) + "'" +
+           "\nFor type tree: " + snapshotAnyString(e.typeTree) + " undetermined context type-parameters: " + e.undetTParams)
 
         case e:ImplicitMethodTpeAdapt =>
+          val tree1 = treeAt(e.tree)
           ("Adapt expression with method type\n and implicit parameter(s)",
-           "Adapt expression \n" + anyString(e.tree) + "\n" +
-           "having method type and implicit parameters " + anyString(e.tree.tpe) + "\n" +
+           "Adapt expression \n" + anyString(tree1) + "\n" +
+           "having method type and implicit parameters " + snapshotAnyString(tree1.tpe) + "\n" +
            "Needs to find implicit argument in the context and apply it")
            
         case e:UndetParamsMethodTpeAdapt =>
@@ -63,48 +65,52 @@ trait AdaptStringOps {
         case e:SuccessSilentMethodTpeAdapt =>
           ("Successfully typed application\n of (inferred) implicit arguments",
            "Typed successfully application of inferred arguments for \n" +
-           anyString(e.tree) + "\n" + "with type " + anyString(e.tpe))
+           snapshotAnyString(e.tree) + "\n" + "with type " + snapshotAnyString(e.tpe))
            
         case e:InferImplicitForParamAdapt =>
-          ("Infer implicit for parameter " + safeTypePrint(e.param.tpe, "\nof type: ", ""), 
-           "Infer implicit for parameter '" + anyString(e.param) + "': " + anyString(e.param.tpe))
+          val param1 = SymbolSnapshot(e.param)
+          ("Infer implicit for parameter " + safeTypePrint(param1.tpe, "\nof type: ", ""), 
+           "Infer implicit for parameter '" + anyString(param1) + "': " + snapshotAnyString(param1.tpe))
            
         case e:InferDivergentImplicitValueNotFound =>
+          val param1 = SymbolSnapshot(e.param)
           ("Implicit value not found",
-           "Could not find implicit value for evidence parameter \n" + e.param.name + 
-           "\nof type " + anyString(e.param.tpe))
+           "Could not find implicit value for evidence parameter \n" + param1.name + 
+           "\nof type " + snapshotAnyString(param1.tpe))
            
         case e:InferImplicitValueNotFound =>
+          val param1 = SymbolSnapshot(e.param)
           ("Implicit value not found",
-           "Could not find implicit value for evidence parameter \n" + e.param.name + 
-           "\nof type " + anyString(e.param.tpe))
+           "Could not find implicit value for evidence parameter \n" + param1.name + 
+           "\nof type " + snapshotAnyString(param1.tpe))
            
         case e:InferredImplicitAdapt =>
           ("Finished applying inferred \n implicit argument (if any)", "")
           
         case e:EtaMethodTpeAdapt =>
           ("Eta expansion",
-           "Eta expansion of tree " + anyString(e.tree) +
-           " with expected type: " + anyString(e.pt))
+           "Eta expansion of tree " + snapshotAnyString(e.tree) +
+           " with expected type: " + snapshotAnyString(e.pt))
            
         case e:TreeAfterEtaExpansionMethodTpeAdapt =>
           ("Eta-expanded tree",
-           anyString(e.tree) + "\nhas been eta-expanded to\n " + anyString(e.tree1))
+           snapshotAnyString(e.tree) + "\nhas been eta-expanded to\n " + snapshotAnyString(e.tree1))
            
         case e:InstantiateTParamsForEtaExpansionAdapt =>
+          val tree1 = treeAt(e.tree)
           ("Instantiate type-parameters \n in eta expansion",
-           anyString(e.tree) + " with type " + anyString(e.tree.tpe) +
-           "\nTree's symbol " + anyString(e.meth) + " with type parameters '" +
-           e.tparams.map(anyString) + "' to instantiate")
+           anyString(tree1) + " with type " + snapshotAnyString(tree1.tpe) +
+           "\nTree's symbol " + snapshotAnyString(e.meth) + " with type parameters '" +
+           e.tparams.map(snapshotAnyString) + "' to instantiate")
            
         case e:InferExprFailed =>
           ("Failed to infer expression instance",
-           anyString(e.tree) + " with expected type " +
-           anyString(e.pt) + "\nFailed with type error " + e.e)
+           snapshotAnyString(e.tree) + " with expected type " +
+           snapshotAnyString(e.pt) + "\nFailed with type error " + e.e)
            
         case e:ApplyNullaryMethodAdapt =>
           ("Apply nullary method",
-           anyString(e.tree) + ": " + anyString(e.methTpe))
+           snapshotAnyString(e.tree) + ": " + snapshotAnyString(e.methTpe))
            
         case e:TypeTreeAdapt =>
           ("Adapt type tree", "")
@@ -132,21 +138,21 @@ trait AdaptStringOps {
                "Infer concrete instance" //and \n " + explainNamer(e.e)
           }
           val long =
-            "Instantiate undetermined paratemers " + e.tparams.map(anyString).mkString("[", ",", "]") + "\n" +
+            "Instantiate undetermined paratemers " + e.tparams.map(snapshotAnyString).mkString("[", ",", "]") + "\n" +
             (e.e match {
               case DefaultExplanation =>
                 " and adapt by inferring concrete instance"
               case _ =>
                 e.e // TODO
              }) + "\n" +
-           "in expression \n" + anyString(e.tree) + "\n" + 
-           "with expected type: " + anyString(e.pt)
+           "in expression \n" + snapshotAnyString(e.tree) + "\n" + 
+           "with expected type: " + snapshotAnyString(e.pt)
          (short, long)
 
         case e:SuccessSubTypeAdapt =>
           ("Subtype constraint satisfied",
-           "Constraint satisfied \n" + anyString(e.value1) +
-           " <:< " + anyString(e.value2) + "\n in tree " + anyString(e.tree))
+           "Constraint satisfied \n" + snapshotAnyString(e.value1) +
+           " <:< " + snapshotAnyString(e.value2) + "\n in tree " + snapshotAnyString(e.tree))
            
         case e:ConstantFoldSubTypeAdapt =>
           ("Subtype constraint for constants\n satisfied", "")
@@ -155,10 +161,10 @@ trait AdaptStringOps {
           ("Adapt expression's type to satisfy\n" +
            safeTypePrint(e.tpe, truncate=false) + " <: " + safeTypePrint(e.pt, truncate=false), 
            "FAILED subtype constraint:\n " +
-           anyString(e.tpe) + " <: " + anyString(e.pt))
+           snapshotAnyString(e.tpe) + " <: " + snapshotAnyString(e.pt))
 
         case e:AdaptToUnitAdapt =>
-          ("Adapt to Unit", "Adapt to Unit type \n " + anyString(e.tpe))
+          ("Adapt to Unit", "Adapt to Unit type \n " + snapshotAnyString(e.tpe))
           
         case e:WeakConformanceAdapt =>
           ("Weak conformance adapt\n (numeric values)", "")
@@ -176,19 +182,17 @@ trait AdaptStringOps {
           
         case e:ApplyViewAdapt =>
           ("Apply (found) applicable view", 
-           "Found view \n " + anyString(e.coercion) + "\n" +
+           "Found view \n " + snapshotAnyString(e.coercion) + "\n" +
            "which is applicable for the original argument")
            
         case e:NoViewFound =>
           ("No applicable view was found",
-           "No view was found for tree\n" + anyString(e.tree) + "\n" +
-           "of type " + anyString(e.tree.tpe) +
-           " that conforms to the expected type " + anyString(e.pt))
+           "No view was found for tree\n" + snapshotAnyString(e.tree) + "\n" +
+           "of type " + snapshotAnyString(e.tree.tpe) +
+           " that conforms to the expected type " + snapshotAnyString(e.pt))
         case _ =>
           DEFAULT
       }
     }
-      
-      
   }
 }

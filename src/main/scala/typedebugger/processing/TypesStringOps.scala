@@ -10,10 +10,10 @@ trait TypesStringOps {
   trait TypesEventsOps extends AnyRef with SubtypingInfo {
     private val DEFAULT = ("(types| not-implemented)", "(types| not-implemented)")
     
-    def explainTypesEvent(ev: Event with TypesEvent) = ev match {
+    def explainTypesEvent(ev: Event with TypesEvent)(implicit time: Clock = ev.time) = ev match {
       case e: SubTypeCheck =>
-        ("Subtyping check" + truncateStringRep(safeTypePrint(e.value1, truncate=false),safeTypePrint(e.value2, truncate=false), " <: ", "\n"),
-         "Subtype check for\n" + anyString(e.value1) + " <: " + anyString(e.value2))
+        ("Subtyping check" + truncateStringRep(safeTypePrint(e.lhs, truncate=false),safeTypePrint(e.rhs, truncate=false), " <: ", "\n"),
+         "Subtype check for\n" + snapshotAnyString(e.lhs) + " <: " + snapshotAnyString(e.rhs))
 
       case e: SubTypeCheckRes =>
         (if (e.res) "Succeeded" else "Failed", "")
@@ -27,13 +27,17 @@ trait TypesStringOps {
 
       case e: CompareTypes =>
         (explainSubtyping(e.compType, e.which),
-         "Subtyping check for:\n " + anyString(e.tp1) + " <:< " + anyString(e.tp2))
+         "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot(e.tp1)) + " <:< " + snapshotAnyString(TypeSnapshot(e.tp2)))
       
       case e: CompareDone =>
         (if (e.subtypes) "Succeeded" else "Failed", "")
         
       case e: FailedSubtyping =>
-        ("Types are not subtypes", anyString(e.tp1) + " <:/< " + anyString(e.tp2))
+        ("Types are not subtypes", snapshotAnyString(e.tp1) + " <:/< " + snapshotAnyString(e.tp2))
+        
+      case e: InstantiateTypeParams =>
+        ("Instantiate type parameters",
+         "Instantiating: " + e.formals.zip(e.actuals).map(subst => snapshotAnyString(subst._1) + " ==> " + snapshotAnyString(subst._2)).mkString("\n"))
 
       case _ => DEFAULT
       
