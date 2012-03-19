@@ -101,7 +101,7 @@ trait StringOps extends AnyRef
         case ExactType(tpe)       => tpe
         case _                    => stringRep0
       }
-      if (truncate && (stringRep.length > Formatting.maxTypeLength || tp.isErroneous)) ""
+      if (truncate && (stringRep.length > Formatting.maxTypeLength)) ""// || tp.isErroneous)) ""
       else pre + stringRep + post
     } else ""
       

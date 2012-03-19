@@ -32,8 +32,9 @@ trait NamerStringOps {
          "Missing parameter type for " + snapshotAnyString(e.tree))
        
       case e: TypeDefSigNamer =>
-        ("Typing of\n abstract type's signature",
-         "Completing abstract type definition " + snapshotAnyString(e.tpsym) + " with type params: " + e.tparams.map(snapshotAnyString) +
+        // TODO: distinguish type parameter from type member description
+        ("Typing of\n type's signature",
+         "Completing type parameter/member definition " + snapshotAnyString(e.tpsym) + " with type params: " + e.tparams.map(snapshotAnyString) +
         "\n" + snapshotAnyString(e.rhs))
        
       case e: ModuleSigNamer =>

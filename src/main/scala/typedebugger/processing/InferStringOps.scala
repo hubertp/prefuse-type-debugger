@@ -45,7 +45,7 @@ trait InferStringOps {
            
         case e: SolveSingleTVar =>
           ("Solve type variable",
-           "Solve: " + e.tvar + "\n" +
+           "Solve: " + snapshotAnyString(e.tvar) + "\n" +
            //"In " + e.tvar.
            (if (!e.variance) "contravariant position" else ""))
            
@@ -99,7 +99,7 @@ trait InferStringOps {
            anyString(snapshotTree) + "\n" +
            "of type " + snapshotAnyString(snapshotTree.tpe) + "\n" +
            "Given arguments with types are " + e.args.map(a => {val a0 = treeAt(a); snapshotAnyString(a0.tpe)}).mkString(",") + "\n" +
-           "and the expected type " + snapshotAnyString(e.pt) +
+           "and the expected type " + snapshotAnyString(e.pt) + "\n" +
            "Try to find substitution for type-parameter(s) " + e.undetparams.map(snapshotAnyString).mkString(",") + "\n" +
            "so that the result type of the application is compatible with the expected type" + snapshotAnyString(e.pt))
 
@@ -114,7 +114,7 @@ trait InferStringOps {
           ("Cannot infer method instance \n as there is no instance \n for type parameter(s)",
            "No instance exists for type parameters for \n" +
            snapshotAnyString(e.tree) + "\n" +
-           "exist so that it can be applied to arguments: \n" +
+           "exist so that it can be applied to \n" +
            e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")") + "\n" +
            "because " + e.exMsg)
            

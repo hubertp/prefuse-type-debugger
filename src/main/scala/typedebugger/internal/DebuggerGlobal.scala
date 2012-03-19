@@ -14,7 +14,7 @@ trait DebuggerGlobal extends EventsGlobal {
     // TODO provide custom printing
     abstract override protected def anyStringInternal(x: Any): String = x match {
       case x: Tree => super.treeString(x)
-      case _ => super.anyStringInternal(x)
+      case _       => super.anyStringInternal(x)
     }
   }
   
