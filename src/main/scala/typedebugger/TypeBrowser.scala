@@ -13,6 +13,8 @@ import javax.swing.event.TreeModelListener
 import scala.concurrent.Lock
 import scala.collection.mutable.{ ListBuffer, Stack, HashMap }
 import scala.collection.JavaConversions._
+import scala.tools.nsc.io
+import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
 import prefuse.data.tuple.{TupleSet, DefaultTupleSet}
@@ -44,6 +46,7 @@ abstract class TypeBrowser extends AnyRef
                            with internal.CompilerInfo
                            with internal.PrefuseStructure
                            with internal.StructureBuilders
+                           with internal.Tools
                            with processing.PrefusePostProcessors
                            with processing.StringOps
                            with ui.controllers.PrefuseControllers
@@ -53,20 +56,59 @@ abstract class TypeBrowser extends AnyRef
   import EV._
   
   import UIConfig.{nodesLabel => label}
+  
+  private var builder: InstrumentedCompiler{
+    def root: BaseTreeNode[EventNode]
+    def initialGoals: List[BaseTreeNode[EventNode]]} = _
+    
+  private val prefuseTree = new Tree()
+  private var prefuseController: PrefuseController = _
 
-  def buildStructure(srcs: List[String], settings: TypeDebuggerSettings, fxn: Filter, nodesLabel: String) = {
-    val builder = new CompilerRunWithEvents(srcs, nodesLabel)
+  def compileFullAndProcess(srcs: List[io.AbstractFile], settings: TypeDebuggerSettings, fxn: Filter) = {
+    builder = new CompilerRunWithEvents(label, fxn)
     //TODO include settings
-    builder.run(fxn)
-    // provide prefuse-specific structure
-    val prefuseTree = new Tree()
-    val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
-                                                       builder.initialGoals, nodesLabel)
+    builder.run(srcs)
+    postProcess()
+  }
 
+  
+  def targetedCompile(pos: global.Position) = {
+    println("Targeted compile: " + pos)
+    updateTreeAndProcess(pos)
+  }
+  
+  private def updateTreeAndProcess(pos: global.Position) = {
+    assert(builder != null, "need full compiler run first")
+    builder.runTargeted(pos)
+    prefuseTree.clear()
+    val processedGoals = postProcess()
+    prefuseController.updateGoals(processedGoals)
+  }
+
+  // provide prefuse-specific structure
+  private def postProcess() = {
+    val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
+                                                       builder.initialGoals, label)
     if (settings.debugTD.value)
       println("[errors] " + initial.map(_.ev))
 
-    if (settings.fullTypechecking.value) (prefuseTree, Nil) else (prefuseTree, initial)
+    if (settings.fullTypechecking.value) Nil else initial
+  }
+  
+  private def realSources(srcRoots: List[String]): List[io.AbstractFile] = {
+    val srcs = new ListBuffer[String]
+    srcRoots foreach { p =>
+      io.Path(p).walk foreach { x =>
+        if (x.isFile && x.hasExtension("scala", "java"))
+          srcs += x.path
+      }
+    }
+    srcs.toList.distinct.map(s => { 
+      val f = io.AbstractFile.getFile(s)
+//      val batchFile = new BatchSourceFile(f)
+//      val unit = new global.RichCompilationUnit(batchFile)
+//      unitOfFile(f) = unit
+      f})
   }
 
   def compileAndShow(srcs: List[String], settings: TypeDebuggerSettings) {
@@ -97,9 +139,12 @@ abstract class TypeBrowser extends AnyRef
                                                   // ATM opening/closing events cannot be filtered out at this point
     }, EVDSL.ph <= 4)
 
-    val (prefuseStructure, goals) = buildStructure(srcs, settings, filtr, label)
-    val prefuseController = new PrefuseController(prefuseStructure, goals)
-    val basicSwingFrame = new SwingFrame(prefuseController, "Type debugger 0.0.3", srcs)
+    assert(srcs.length == 1, "[debugger limitation] restrict debugging to one file")
+    val sources = realSources(srcs)
+    val goals = compileFullAndProcess(sources, settings, filtr)
+    prefuseController = new PrefuseController(prefuseTree, goals)
+    prefuseController.init() // can move later?
+    val basicSwingFrame = new SwingFrame(prefuseController, "Type debugger 0.0.3", sources)
     val swingController = new TypeDebuggerController(basicSwingFrame)
     //val frame = new TypeDebuggerFrame(prefuseTree, srcs, goals)
     val lock = new Lock()

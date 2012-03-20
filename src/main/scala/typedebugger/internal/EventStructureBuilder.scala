@@ -5,12 +5,12 @@ import scala.tools.nsc.io
 import scala.collection.mutable.{ ListBuffer, Stack }
 
 trait StructureBuilders {
-  self: CompilerInfo with IStructure =>
-
+  self: CompilerInfo with IStructure with Tools =>
+    
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
-  class CompilerRunWithEvents(srcs: List[String], nodesLabel: String) {
-    import global.EV
+  class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends InstrumentedCompiler {
+    import global.{EV, Position}
     import EV._
     
     //type ENode = EventNode
@@ -121,37 +121,45 @@ trait StructureBuilders {
     }
   
     //def pf(fxn: Event =>? Boolean): Unit = apply(Filter pf fxn)
-    def run(filt: Filter): Boolean = {
+    def run(srcs: List[io.AbstractFile]): Boolean = {
       EV.resetEventsCounter()
       // reset the intermediate structure
       _root = createNode(null, null)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
-        case ev if filt(ev)=> reportWithLevel(ev, level); NoResponse
+        case ev if filt( ev )=> reportWithLevel(ev, level); NoResponse
       })
       hook hooking CompileWrapper.cc(srcs)
     }
+    
+    def runTargeted(pos: Position) = {
+      EV.resetEventsCounter()
+      _root = createNode(null, null)
+      previousLevel = -1
+      currentNodes.push((_root, previousLevel))
+      hook = Hook.indentation((level: Int) => {
+        case ev if filt( ev )=> reportWithLevel(ev, level); NoResponse
+      })
+      
+      hook hooking CompileWrapper.targetC(pos)
+    }
   }
   
-  object CompileWrapper {
-    private def sources(srcRoots: List[String]): List[String] = {
-      val srcs = new ListBuffer[String]
-      srcRoots foreach { p =>
-        io.Path(p).walk foreach { x =>
-          if (x.isFile && x.hasExtension("scala", "java"))
-            srcs += x.path
-        }
-      }
-      srcs.toList.distinct
-    }
+  // need cc for full recompile
+  // need cc for targeted recompile
   
-    def cc(paths: List[String]): Boolean = {
-      val run = new global.Run
-      val srcs = sources(paths)
-      println("[compiling] " + srcs)
-      run compile srcs
+  object CompileWrapper {
+    def cc(files: List[io.AbstractFile]): Boolean = {
+      println("[compiling] " + files.map(_.name))
+      global.run(files)
       !global.reporter.hasErrors
+    }
+    
+    def targetC(pos: global.Position): Boolean = {
+      println("[targeted compile] " + pos)
+      global.targetDebugAt(pos)
+      !global.reporter.hasErrors // is that needed?
     }
   }
 }

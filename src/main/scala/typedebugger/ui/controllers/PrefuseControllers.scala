@@ -27,11 +27,9 @@ trait PrefuseControllers {
   import global.{Tree => STree, _}
   import EV._
   
-  class PrefuseController(pTree: Tree, goals: List[UINode[PrefuseEventNode]]) extends PrefuseComponent(pTree) {
+  class PrefuseController(pTree: Tree, goals0: List[UINode[PrefuseEventNode]]) extends PrefuseComponent(pTree) {
       // methods that are global specific
     def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes)
-    def customTreeLayout(orientation: Int): NodeLinkTreeLayout =
-      new CustomNodeLinkTreeLayout(Visualization.FOCUS_ITEMS, orientation, 50, 0, 8, goals)
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isGoal(t: Tuple): Boolean = asDataNode(t).goal
     def isNode(t: Tuple): Boolean = containsDataNode(t)
@@ -46,56 +44,98 @@ trait PrefuseControllers {
       setGoalPath0(Some(asDataNode(item)))
     }
     def visualizeFixedNodesAction(): Action = new VisualizeFixedNodes(PrefuseComponent.fixedNodes, PrefuseComponent.nonGoalNodes)
-    def initialGoalPredicate(): ToExpandInfo = new InitialGoalPredicate(goals)
-      
     def showFullTree = settings.fullTypechecking.value
-  }
+
+    private var _stagedInitPredicate: ToExpandInfo = new InitialGoalPredicate()
+    def initialGoalPredicate(): ToExpandInfo = _stagedInitPredicate
+
+    private var _stagedTreeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(Visualization.FOCUS_ITEMS, orientation, 50, 0, 8)
+    def customTreeLayout(): NodeLinkTreeLayout = _stagedTreeLayout
+
+    
+    private var _goals: List[UINode[PrefuseEventNode]] = goals0
+    def updateGoals(gs: List[UINode[PrefuseEventNode]]) {
+      debug("[prefuse] update initial goals to: " + gs)
+      _goals = gs
+      flushCache()
+      showPrefuseDisplay()
+    }
+    
+    // customized predicates
+    class InitialGoalPredicate() extends ToExpandInfo {
+	    private def isInitialGoal(node: UINode[PrefuseEventNode]) =
+	      if (_goals.contains(node)) {
+	        node.ev match {
+	          case _: HardErrorEvent => true
+	          case e: ContextTypeError if e.errType == ErrorLevel.Hard => true
+	          case _ => true
+	        }
+	      } else false
+	      
+	    def isGoalOrSibling(t: VisualItem) = t match {
+	      case node: NodeItem if containsDataNode(node) =>
+	        val eNode = asDataNode(node)
+	        // Apart from expanding the error node
+	        // expand also its siblings
+	        if (!isInitialGoal(eNode)) (false, eNode.children.exists(isInitialGoal))
+	        else (true, false)
+	      case _ => (false, false)
+	    }
+	  }
       
-  class CustomNodeLinkTreeLayout(visGroup: String, orientation: Int, dspace: Double,
-    bspace: Double, tspace: Double, initialGoals: List[UINode[PrefuseEventNode]])
-    extends NodeLinkTreeLayout(tree) {
-    
-    object GoalNode extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean = t match {
-        case nodeItem: NodeItem if containsDataNode(nodeItem) =>
-          asDataNode(t).goal && nodeItem.isVisible
-        case _ => false
-      }
-    }
-    
-    // Anchor the layout root at the first error
-    // or show the synthetic root
-    // whenever we expand the type tree we update the root
-    override def getLayoutRoot() = {
-      val allVisibleGoals = m_vis.items_[NodeItem](visGroup, GoalNode)
-      val allPNodeVisibleGoals = allVisibleGoals.map(t => (asDataNode(t).pfuseNode, t)).toMap
-      
-      initialGoals match {
-        case head::_ =>
-          // Need to find respective VisualItem for node so that
-          // we can match prefuse node stored in PrefuseEventNode
-          var eNode = head 
-          while (eNode.parent.isDefined && allPNodeVisibleGoals.contains(eNode.parent.get.pfuseNode)) {
-            eNode = eNode.parent.get
-          }
-          //debug("[layout root] HEAD: " + head)
-          //debug("[layout root] all visible goals: " + allVisibleGoals.toList.map(_.toString))
-          if (!allPNodeVisibleGoals.contains(eNode.pfuseNode)) {
-            // we are dealing with a first (root) node
-            // so try to find it manually
-            val first = m_vis.items_[NodeItem](tree, new VisualItemSearchPred(head.pfuseNode))
-            if (first.hasNext) first.next else super.getLayoutRoot()
-          } else {
-            allPNodeVisibleGoals(eNode.pfuseNode) // get corresponding visualitem
-          }
-        case _ =>
-          super.getLayoutRoot()
-      }
-    }
-    
-    override def getGraph(): Graph = {
-      m_vis.getGroup(visGroup).asInstanceOf[Graph]
-    }
+	  class CustomNodeLinkTreeLayout(visGroup: String, orientation: Int, dspace: Double,
+	    bspace: Double, tspace: Double)
+	    extends NodeLinkTreeLayout(tree) {
+	    
+	    def initialGoal: Option[UINode[PrefuseEventNode]] = {
+	      _goals match {
+	        case head::_ => Some(head)
+	        case _       => None
+	      }
+	    }
+	    
+	    object GoalNode extends AbstractPredicate {
+	      override def getBoolean(t: Tuple): Boolean = t match {
+	        case nodeItem: NodeItem if containsDataNode(nodeItem) =>
+	          asDataNode(t).goal && nodeItem.isVisible
+	        case _ => false
+	      }
+	    }
+	    
+	    // Anchor the layout root at the first error
+	    // or show the synthetic root
+	    // whenever we expand the type tree we update the root
+	    override def getLayoutRoot() = {
+	      val allVisibleGoals = m_vis.items_[NodeItem](visGroup, GoalNode)
+	      val allPNodeVisibleGoals = allVisibleGoals.map(t => (asDataNode(t).pfuseNode, t)).toMap
+	      
+	      initialGoal match {
+	        case Some(head) =>
+	          // Need to find respective VisualItem for node so that
+	          // we can match prefuse node stored in PrefuseEventNode
+	          var eNode = head 
+	          while (eNode.parent.isDefined && allPNodeVisibleGoals.contains(eNode.parent.get.pfuseNode)) {
+	            eNode = eNode.parent.get
+	          }
+	          //debug("[layout root] HEAD: " + head)
+	          //debug("[layout root] all visible goals: " + allVisibleGoals.toList.map(_.toString))
+	          if (!allPNodeVisibleGoals.contains(eNode.pfuseNode)) {
+	            // we are dealing with a first (root) node
+	            // so try to find it manually
+	            val first = m_vis.items_[NodeItem](tree, new VisualItemSearchPred(head.pfuseNode))
+	            if (first.hasNext) first.next else super.getLayoutRoot()
+	          } else {
+	            allPNodeVisibleGoals(eNode.pfuseNode) // get corresponding visualitem
+	          }
+	        case None =>
+	          super.getLayoutRoot()
+	      }
+	    }
+	    
+	    override def getGraph(): Graph = {
+	      m_vis.getGroup(visGroup).asInstanceOf[Graph]
+	    }
+	  }
   }
   
   object NodeColorAction {
@@ -160,27 +200,6 @@ trait PrefuseControllers {
       }
     }
       
-  }
-  
-  class InitialGoalPredicate(initialGoals: List[UINode[PrefuseEventNode]]) extends ToExpandInfo {
-    private def isInitialGoal(node: UINode[PrefuseEventNode]) =
-      if (initialGoals.contains(node)) {
-        node.ev match {
-          case _: HardErrorEvent => true
-          case e: ContextTypeError if e.errType == ErrorLevel.Hard => true
-          case _ => true
-        }
-      } else false
-      
-    def isGoalOrSibling(t: VisualItem) = t match {
-      case node: NodeItem if containsDataNode(node) =>
-        val eNode = asDataNode(node)
-        // Apart from expanding the error node
-        // expand also its siblings
-        if (!isInitialGoal(eNode)) (false, eNode.children.exists(isInitialGoal))
-        else (true, false)
-      case _ => (false, false)
-    }
   }
     
   // Add all intermediate nodes that lead to the already visible nodes

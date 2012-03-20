@@ -42,7 +42,7 @@ object PrefuseComponent {
   val treeNodes = "tree.nodes"
   val treeEdges = "tree.edges"
 
-  val orientation = Constants.ORIENT_BOTTOM_TOP
+  val typeDebuggerorientation = Constants.ORIENT_BOTTOM_TOP
 
   val fixedNodes = "tree.fixed"           // Nodes that are 'fixed' to be visible
   val openGoalNodes = "tree.openGoals"
@@ -65,194 +65,216 @@ trait ToExpandInfo {
   def isGoalOrSibling(t: VisualItem): (Boolean, Boolean)
 }
 
-trait PrefuseControl {
-  def nodeColorAction(nodes: String): ItemAction
-  def customTreeLayout(orientation: Int): NodeLinkTreeLayout
-  def showFullTree: Boolean
-  def extractPrefuseNode(t: Tuple): Node
-  def isGoal(t: Tuple): Boolean
-  def isNode(t: Tuple): Boolean
-  def eventInfo(item: VisualItem): String
-  def setGoalPath(item: VisualItem): Unit
-  
-  def visualizeFixedNodesAction(): Action
-  def initialGoalPredicate(): ToExpandInfo
-}
-
-abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips with PrefuseControl {
+abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips {
   import PrefuseComponent._
   import PrefusePimping._
-    
-          
-  setBackground(backgroundColor)
-  setForeground(foregroundColor)
- 
-  m_vis.add(tree, t)
-
-    // Set default node/edge renderer and orientation
-  val m_nodeRenderer = new LabelRenderer(label)
-  m_nodeRenderer.setRenderType(AbstractShapeRenderer.RENDER_TYPE_FILL)
-  m_nodeRenderer.setHorizontalAlignment(Constants.CENTER)
-  m_nodeRenderer.setVerticalAlignment(Constants.CENTER)
-  m_nodeRenderer.setVerticalPadding(10)
-  m_nodeRenderer.setHorizontalPadding(20)
-  m_nodeRenderer.setRoundedCorner(8,8)
-  val m_edgeRenderer = new EdgeRenderer(Constants.EDGE_TYPE_LINE)
-      
-  val rf = new DefaultRendererFactory(m_nodeRenderer)
-  rf.add(new InGroupPredicate(treeEdges), m_edgeRenderer)
-  m_vis.setRendererFactory(rf)
   
-  var m_orientation = orientation
-
-  // colors
-  val nodeColor:ItemAction = nodeColorAction(treeNodes)
-  val textColor:ItemAction = new ColorAction(treeNodes,
-              VisualItem.TEXTCOLOR, ColorLib.rgb(0,0,0))
-  m_vis.putAction("textColor", textColor)
-      
-  val edgeColorAction = new ColorAction(treeEdges,
-              VisualItem.STROKECOLOR, ColorLib.rgb(194, 194, 194))
+  protected def nodeColorAction(nodes: String): ItemAction
+  protected def showFullTree: Boolean
+  protected def extractPrefuseNode(t: Tuple): Node
+  protected def isGoal(t: Tuple): Boolean
+  protected def isNode(t: Tuple): Boolean
+  protected def eventInfo(item: VisualItem): String
+  protected def setGoalPath(item: VisualItem): Unit
+  protected def visualizeFixedNodesAction(): Action
   
-  edgeColorAction.add(IsEdgeOnGoalPath,
-    new ColorAction(treeEdges, VisualItem.STROKECOLOR, ColorLib.rgb(0,0,0)))
-  val edgeColor:ItemAction = edgeColorAction
-
-  // quick repaint
-  val repaint0 = new ActionList()
-  repaint0.add(nodeColor)
-  repaint0.add(new RepaintAction())
-  m_vis.putAction("repaint", repaint0)
-      
-  // full paint
-  val fullPaint = new ActionList()
-  fullPaint.add(nodeColor)
-  m_vis.putAction("fullPaint", fullPaint)
-      
-  // animate paint change
-  val animatePaint = new ActionList(400)
-  animatePaint.add(new ColorAnimator(treeNodes))
-  animatePaint.add(new RepaintAction())
-  m_vis.putAction("animatePaint", animatePaint)
-
-  // create the tree layout action
-  val treeLayout: NodeLinkTreeLayout = customTreeLayout(m_orientation)
-  treeLayout.setLayoutAnchor(new Point2D.Double(25,300))
-  m_vis.putAction("treeLayout", treeLayout)
-      
-  // Animation that handles collapsing/opening nodes 
-  // Need to adapt it so that not all non-goal nodes are expanded
-  val subLayout = new CollapsedSubtreeLayout(tree, m_orientation)
-  m_vis.putAction("subLayout", subLayout)
-
-  val autoPan = new AutoPanAction()
-
-  // create the filtering and layout
-  val filter = new ActionList()
-  // Includes degree-of-interest factor
-  filter.add(visualizeFixedNodesAction())
-  filter.add(new UnfocusOnItems)
-  filter.add(new VisualizeNodesWithPred(new IsNodeOnGoalPath(openGoalNodes, nonGoalNodes)))
-  filter.add(new VisualizeNodes(linkGroupNodes))
-
-  filter.add(new ShowAllGoalsAndEdges(clickedNode))
-
-  filter.add(new FontAction(treeNodes, FontLib.getFont("Tahoma", 16)))
-  filter.add(treeLayout)
-  filter.add(textColor)
-  filter.add(nodeColor)
-  filter.add(edgeColor)
-  m_vis.putAction("filter", filter)
-      
-  // animated transition
-  val animate = new ActionList(1000)
-  animate.setPacingFunction(new SlowInSlowOutPacer())
-  animate.add(autoPan)
-  animate.add(new QualityControlAnimator())
-  animate.add(new VisibilityAnimator(tree))
-  animate.add(new LocationAnimator(treeNodes))
-  animate.add(new ColorAnimator(treeNodes))
-  animate.add(new RepaintAction())
-  m_vis.putAction("animate", animate)
-  m_vis.alwaysRunAfter("filter", "animate")
-      
-  // create animator for orientation changes
-  val orient = new ActionList(2000)
-  orient.setPacingFunction(new SlowInSlowOutPacer())
-  orient.add(autoPan)
-  orient.add(new QualityControlAnimator())
-  orient.add(new LocationAnimator(treeNodes))
-  orient.add(new RepaintAction())
-  m_vis.putAction("orient", orient)
-
-  // We cache collapse tree because it has a minimal version of
-  // the graph that contains all the errors and intermediate nodes leading to it.
-  val initialNodes = new CollapseTree(openGoalNodes, clickedNode)
-  m_vis.putAction("initial-goals", initialNodes)
- 
-  val zoomToFit = new ZoomToFitControl()
-  val hoverController = new HoverTooltip()
-  zoomToFit.setZoomOverItem(false)
+  protected def customTreeLayout(): NodeLinkTreeLayout
+  protected def initialGoalPredicate(): ToExpandInfo
   
-  // initialize the display
-  setSize(700,800)
-  setItemSorter(new TreeDepthItemSorter())
-  addControlListener(zoomToFit)
-  addControlListener(new ZoomControl())
-  addControlListener(new WheelZoomControl())
-  addControlListener(new PanControl())
-  addControlListener(hoverController)
-  addControlListener(new FocusControl(1, "filter"))
+  private var edgeRenderer: EdgeRenderer = _
+  private var nodeRenderer: LabelRenderer = _
+  protected var orientation: Int = _
+  private var treeLayout: NodeLinkTreeLayout = _
+  
+  def treeRoot(): Node = if (treeLayout != null) treeLayout.getLayoutRoot() else null
+  
+  private val collapsedTreeAction =  new CollapseTree(openGoalNodes, clickedNode)
+  def nodesAlwaysVisible: List[Node] = {
+    collapsedTreeAction.minimumVisibleNodes
+  }
+  private val hoverController = new HoverTooltip() 
+  def tooltipController = hoverController
 
-  setOrientation(orientation)
-  m_vis.addFocusGroup(fixedNodes, new DefaultTupleSet())
-  m_vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
-  m_vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())
-  m_vis.addFocusGroup(toRemoveNodes, new DefaultTupleSet())
-  m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
-  m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
-
-  // To have the whole tree expanded initially
-  // comment out initial-goals
-  if (!showFullTree)
-    m_vis.run("initial-goals")
-  m_vis.run("filter")
+  def init () {
+	  setBackground(backgroundColor)
+	  setForeground(foregroundColor)
+	 
+	  m_vis.add(tree, t)
+	
+	    // Set default node/edge renderer and orientation
+	  nodeRenderer = new LabelRenderer(label)
+	  nodeRenderer.setRenderType(AbstractShapeRenderer.RENDER_TYPE_FILL)
+	  nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+	  nodeRenderer.setVerticalAlignment(Constants.CENTER)
+	  nodeRenderer.setVerticalPadding(10)
+	  nodeRenderer.setHorizontalPadding(20)
+	  nodeRenderer.setRoundedCorner(8,8)
+	  edgeRenderer = new EdgeRenderer(Constants.EDGE_TYPE_LINE)
+	      
+	  val rf = new DefaultRendererFactory(nodeRenderer)
+	  rf.add(new InGroupPredicate(treeEdges), edgeRenderer)
+	  m_vis.setRendererFactory(rf)
+	  
+	  // colors
+	  val nodeColor:ItemAction = nodeColorAction(treeNodes)
+	  val textColor:ItemAction = new ColorAction(treeNodes,
+	              VisualItem.TEXTCOLOR, ColorLib.rgb(0,0,0))
+	  m_vis.putAction("textColor", textColor)
+	      
+	  val edgeColorAction = new ColorAction(treeEdges,
+	              VisualItem.STROKECOLOR, ColorLib.rgb(194, 194, 194))
+	  
+	  edgeColorAction.add(IsEdgeOnGoalPath,
+	    new ColorAction(treeEdges, VisualItem.STROKECOLOR, ColorLib.rgb(0,0,0)))
+	  val edgeColor:ItemAction = edgeColorAction
+	
+	  // quick repaint
+	  val repaint0 = new ActionList()
+	  repaint0.add(nodeColor)
+	  repaint0.add(new RepaintAction())
+	  m_vis.putAction("repaint", repaint0)
+	      
+	  // full paint
+	  val fullPaint = new ActionList()
+	  fullPaint.add(nodeColor)
+	  m_vis.putAction("fullPaint", fullPaint)
+	      
+	  // animate paint change
+	  val animatePaint = new ActionList(400)
+	  animatePaint.add(new ColorAnimator(treeNodes))
+	  animatePaint.add(new RepaintAction())
+	  m_vis.putAction("animatePaint", animatePaint)
+	
+	  // create the tree layout action
+	  treeLayout =  customTreeLayout()
+	  treeLayout.setLayoutAnchor(new Point2D.Double(25,300))
+	  m_vis.putAction("treeLayout", treeLayout)
+	      
+	  // Animation that handles collapsing/opening nodes 
+	  // Need to adapt it so that not all non-goal nodes are expanded
+	  val subLayout = new CollapsedSubtreeLayout(tree, orientation)
+	  m_vis.putAction("subLayout", subLayout)
+	
+	  val autoPan = new AutoPanAction()
+	
+	  // create the filtering and layout
+	  val filter = new ActionList()
+	  // Includes degree-of-interest factor
+	  filter.add(visualizeFixedNodesAction())
+	  filter.add(new UnfocusOnItems)
+	  filter.add(new VisualizeNodesWithPred(new IsNodeOnGoalPath(openGoalNodes, nonGoalNodes)))
+	  filter.add(new VisualizeNodes(linkGroupNodes))
+	
+	  filter.add(new ShowAllGoalsAndEdges(clickedNode))
+	
+	  filter.add(new FontAction(treeNodes, FontLib.getFont("Tahoma", 16)))
+	  filter.add(treeLayout)
+	  filter.add(textColor)
+	  filter.add(nodeColor)
+	  filter.add(edgeColor)
+	  m_vis.putAction("filter", filter)
+	      
+	  // animated transition
+	  val animate = new ActionList(1000)
+	  animate.setPacingFunction(new SlowInSlowOutPacer())
+	  animate.add(autoPan)
+	  animate.add(new QualityControlAnimator())
+	  animate.add(new VisibilityAnimator(tree))
+	  animate.add(new LocationAnimator(treeNodes))
+	  animate.add(new ColorAnimator(treeNodes))
+	  animate.add(new RepaintAction())
+	  m_vis.putAction("animate", animate)
+	  m_vis.alwaysRunAfter("filter", "animate")
+	      
+	  // create animator for orientation changes
+	  val orient = new ActionList(2000)
+	  orient.setPacingFunction(new SlowInSlowOutPacer())
+	  orient.add(autoPan)
+	  orient.add(new QualityControlAnimator())
+	  orient.add(new LocationAnimator(treeNodes))
+	  orient.add(new RepaintAction())
+	  m_vis.putAction("orient", orient)
+	
+	  // We cache collapse tree because it has a minimal version of
+	  // the graph that contains all the errors and intermediate nodes leading to it.
+	  m_vis.putAction("initial-goals", collapsedTreeAction)
+	 
+	  val zoomToFit = new ZoomToFitControl()
+	  zoomToFit.setZoomOverItem(false)
+	  
+	  // initialize the display
+	  setSize(700,800)
+	  setItemSorter(new TreeDepthItemSorter())
+	  addControlListener(zoomToFit)
+	  addControlListener(new ZoomControl())
+	  addControlListener(new WheelZoomControl())
+	  addControlListener(new PanControl())
+	  addControlListener(hoverController)
+	  addControlListener(new FocusControl(1, "filter"))
+	
+	  setOrientation(typeDebuggerorientation)
+	  m_vis.addFocusGroup(fixedNodes, new DefaultTupleSet())
+	  m_vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
+	  m_vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())
+	  m_vis.addFocusGroup(toRemoveNodes, new DefaultTupleSet())
+	  m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
+	  m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
+	
+	  showPrefuseDisplay()
+  }
+  
+  protected def showPrefuseDisplay() {
+    if (!showFullTree)
+	    m_vis.run("initial-goals")
+	  m_vis.run("filter")
+  }
 
   private def setOrientation(orientation0: Int) {
     val rtl = m_vis.getAction("treeLayout").asInstanceOf[NodeLinkTreeLayout]
     val stl = m_vis.getAction("subLayout").asInstanceOf[CollapsedSubtreeLayout]
     orientation0 match {
       case Constants.ORIENT_LEFT_RIGHT =>
-          m_nodeRenderer.setHorizontalAlignment(Constants.LEFT)
-          m_edgeRenderer.setHorizontalAlignment1(Constants.RIGHT)
-          m_edgeRenderer.setHorizontalAlignment2(Constants.LEFT)
-          m_edgeRenderer.setVerticalAlignment1(Constants.CENTER)
-          m_edgeRenderer.setVerticalAlignment2(Constants.CENTER)
+          nodeRenderer.setHorizontalAlignment(Constants.LEFT)
+          edgeRenderer.setHorizontalAlignment1(Constants.RIGHT)
+          edgeRenderer.setHorizontalAlignment2(Constants.LEFT)
+          edgeRenderer.setVerticalAlignment1(Constants.CENTER)
+          edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_RIGHT_LEFT =>
-          m_nodeRenderer.setHorizontalAlignment(Constants.RIGHT)
-          m_edgeRenderer.setHorizontalAlignment1(Constants.LEFT)
-          m_edgeRenderer.setHorizontalAlignment2(Constants.RIGHT)
-          m_edgeRenderer.setVerticalAlignment1(Constants.CENTER)
-          m_edgeRenderer.setVerticalAlignment2(Constants.CENTER)
+          nodeRenderer.setHorizontalAlignment(Constants.RIGHT)
+          edgeRenderer.setHorizontalAlignment1(Constants.LEFT)
+          edgeRenderer.setHorizontalAlignment2(Constants.RIGHT)
+          edgeRenderer.setVerticalAlignment1(Constants.CENTER)
+          edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_TOP_BOTTOM =>
-          m_nodeRenderer.setHorizontalAlignment(Constants.CENTER)
-          m_edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
-          m_edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
-          m_edgeRenderer.setVerticalAlignment1(Constants.BOTTOM)
-          m_edgeRenderer.setVerticalAlignment2(Constants.TOP)
+          nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+          edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
+          edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
+          edgeRenderer.setVerticalAlignment1(Constants.BOTTOM)
+          edgeRenderer.setVerticalAlignment2(Constants.TOP)
       case Constants.ORIENT_BOTTOM_TOP =>
-          m_nodeRenderer.setHorizontalAlignment(Constants.CENTER)
-          m_edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
-          m_edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
-          m_edgeRenderer.setVerticalAlignment1(Constants.TOP)
-          m_edgeRenderer.setVerticalAlignment2(Constants.BOTTOM)
+          nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+          edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
+          edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
+          edgeRenderer.setVerticalAlignment1(Constants.TOP)
+          edgeRenderer.setVerticalAlignment2(Constants.BOTTOM)
       case _ =>
           throw new IllegalArgumentException(
-              "Unrecognized orientation value: "+orientation)
+              "Unrecognized orientation value: "+orientation0)
     }
-    m_orientation = orientation0
+    orientation = orientation0
     rtl.setOrientation(orientation0)
     stl.setOrientation(orientation0)
+  }
+  
+  protected def flushCache() {
+    collapsedTreeAction.cachedMinimumSet = None
+    m_vis.getFocusGroup(fixedNodes).clear()
+    m_vis.getFocusGroup(openGoalNodes).clear()
+    m_vis.getFocusGroup(nonGoalNodes).clear()
+    m_vis.getFocusGroup(toRemoveNodes).clear()
+    m_vis.getFocusGroup(linkGroupNodes).clear()
+    m_vis.getFocusGroup(clickedNode).clear()
+    m_vis.getFocusGroup(Visualization.FOCUS_ITEMS).clear()
   }
 
 
@@ -281,7 +303,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       if ( frac == 0.0 ) {
         var xbias = 0
         var ybias = 0
-        m_orientation match {
+        orientation match {
           case Constants.ORIENT_LEFT_RIGHT =>
             xbias = m_bias
 
@@ -383,7 +405,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       }
     }
     
-    lazy val pred = new ToRemovePred
+    lazy val pred = new ToRemovePred // TODO: make it val
 
     def run(frac: Double) {
       val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
@@ -442,11 +464,20 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   class CollapseTree(openGoalsGroup: String, clickedNode: String)
     extends Action {
     
-    lazy val minimumVisibleNodes = findLeastCommonSpanningTree(allInitialGoals)
-    lazy val predicate           = initialGoalPredicate()
+    private[PrefuseComponent] var cachedMinimumSet: Option[List[Node]] = None
     
+    def minimumVisibleNodes: List[Node] = cachedMinimumSet match {
+      case Some(v) => v
+      case None =>
+        // cache was flushed, calculate from scratch
+        val all = allInitialGoals.toList
+        cachedMinimumSet = Some(findLeastCommonSpanningTree(all))
+        cachedMinimumSet.get
+    }
+    
+    private def allInitialGoals: TupleSet = m_vis.getFocusGroup(openGoalsGroup)
+
     private def findLeastCommonSpanningTree(nodes: List[Node]): List[Node] = {
-      //assert(nodes.length > 1)
       if (nodes.length == 1)
         nodes
       else {
@@ -458,7 +489,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
 	      var start: Node = nodes.head
 	      while (start != null) {
 	        idx += start -> 1
-	        marked = start :: marked 
+	        marked = start :: marked
 	        start = start.getParent()
 	      }
 	      
@@ -479,11 +510,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       }
     }
     
-    private def allInitialGoals: List[Node] =  m_vis.getFocusGroup(openGoalsGroup).toList
-    
     def run(frac: Double) {
       val items = m_vis.items_[VisualItem](Visualization.ALL_ITEMS)
-      val ts = m_vis.getFocusGroup(openGoalsGroup)
+      val ts = allInitialGoals
+      val predicate = initialGoalPredicate()
       for (item <- items) {
         val (visibleGoal, sibling) = predicate.isGoalOrSibling(item)
         if (!visibleGoal) {

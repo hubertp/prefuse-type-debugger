@@ -6,9 +6,9 @@ import java.awt.event.{WindowAdapter, WindowEvent}
 import javax.swing.{Action => swingAction, _}
 
 import scala.concurrent.Lock
-import scala.tools.nsc.io.{File => ScalaFile}
+import scala.tools.nsc.io.{File => ScalaFile, AbstractFile}
 
-class SwingFrame(val prefuseComponent: PrefuseComponent, frameName: String, srcs: List[String]) {
+class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, val srcs: List[AbstractFile]) {
 
   val frame = new JFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
@@ -30,22 +30,13 @@ class SwingFrame(val prefuseComponent: PrefuseComponent, frameName: String, srcs
     
     topPane.add(topSplitPane)
     tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
+    sCodeViewer.setEditable(false)
+    //sCodeViewer.setEnabled(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
 
-
-    if (srcs.isEmpty)
-      println("[Warning] No files specified for debugging.")
-    loadFile(srcs.head)
     frame.getContentPane().add(topPane)
     frame.pack()
     frame.setVisible(true)
   }
-
-  private def loadFile(fName: String) {
-    // at the moment we only ensure that there is only one
-    val f = new java.io.File(fName)
-    val src = if (f.exists) ScalaFile(fName).slurp else "Missing source code"
-    sCodeViewer.setText(src)
-  }
-
+  
 }
