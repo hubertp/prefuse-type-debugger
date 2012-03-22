@@ -7,15 +7,8 @@ import scala.tools.nsc.util.SourceFile
 // Simplified RichCompilationUnit
 trait DebuggerCompilationUnits {
   self: Global =>
-    
-    
-  final val NotLoaded = -2
-  final val JustParsed = -1
-  final val TypeChecked = 0
   
-  class DebuggerCompilationUnit(source: SourceFile) extends CompilationUnit(source) {
-    var status: Int = NotLoaded
-    
+  class DebuggerCompilationUnit(source: SourceFile) extends CompilationUnit(source) {    
     var _targetPos: Position = NoPosition
     override def targetPos: Position = _targetPos
     def targetPos_=(p: Position) { _targetPos = p }

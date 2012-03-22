@@ -57,9 +57,10 @@ abstract class TypeBrowser extends AnyRef
   
   import UIConfig.{nodesLabel => label}
   
-  private var builder: InstrumentedCompiler{
+  private var builder: CompilerWithInstrumentation {
     def root: BaseTreeNode[EventNode]
-    def initialGoals: List[BaseTreeNode[EventNode]]} = _
+    def initialGoals: List[BaseTreeNode[EventNode]]
+  } = _
     
   private val prefuseTree = new Tree()
   private var prefuseController: PrefuseController = _
@@ -103,12 +104,7 @@ abstract class TypeBrowser extends AnyRef
           srcs += x.path
       }
     }
-    srcs.toList.distinct.map(s => { 
-      val f = io.AbstractFile.getFile(s)
-//      val batchFile = new BatchSourceFile(f)
-//      val unit = new global.RichCompilationUnit(batchFile)
-//      unitOfFile(f) = unit
-      f})
+    srcs.toList.distinct.map(s => io.AbstractFile.getFile(s))
   }
 
   def compileAndShow(srcs: List[String], settings: TypeDebuggerSettings) {

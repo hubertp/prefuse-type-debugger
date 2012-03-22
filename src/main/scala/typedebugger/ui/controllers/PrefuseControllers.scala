@@ -46,18 +46,18 @@ trait PrefuseControllers {
     def visualizeFixedNodesAction(): Action = new VisualizeFixedNodes(PrefuseComponent.fixedNodes, PrefuseComponent.nonGoalNodes)
     def showFullTree = settings.fullTypechecking.value
 
-    private var _stagedInitPredicate: ToExpandInfo = new InitialGoalPredicate()
-    def initialGoalPredicate(): ToExpandInfo = _stagedInitPredicate
+    private var _initPredicate: ToExpandInfo = new InitialGoalPredicate()
+    def initialGoalPredicate(): ToExpandInfo = _initPredicate
 
-    private var _stagedTreeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(Visualization.FOCUS_ITEMS, orientation, 50, 0, 8)
-    def customTreeLayout(): NodeLinkTreeLayout = _stagedTreeLayout
+    private var _treeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(Visualization.FOCUS_ITEMS, orientation, 50, 0, 8)
+    def customTreeLayout(): NodeLinkTreeLayout = _treeLayout
 
     
     private var _goals: List[UINode[PrefuseEventNode]] = goals0
     def updateGoals(gs: List[UINode[PrefuseEventNode]]) {
       debug("[prefuse] update initial goals to: " + gs)
       _goals = gs
-      flushCache()
+      flushVisCache()
       showPrefuseDisplay()
     }
     

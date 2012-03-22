@@ -28,8 +28,6 @@ trait SwingControllers {
   
   import PrefusePimping._
   
-  //val sFileOfAbstractFile = new LinkedHashMap[io.AbstractFile, SourceFile]()
-  
   class TypeDebuggerController(val frame: SwingFrame) {
     var lastClicked: Option[NodeItem] = None
     
@@ -53,12 +51,9 @@ trait SwingControllers {
     
     private def loadSourceFile(absFile: io.AbstractFile) {
       // at the moment we only ensure that there is only one
-      val src = if (absFile.file.exists) {
-        val sFile = io.File(absFile.file)
-        //val batchFile = new BatchSourceFile(absFile)
-        //sFileOfAbstractFile(absFile) = batchFile
-        sFile.slurp
-      } else "Missing source code"
+      val src = if (absFile.file.exists)
+        io.File(absFile.file).slurp
+      else "Missing source code"
 
       frame.sCodeViewer.setText(src)
     }
@@ -76,17 +71,17 @@ trait SwingControllers {
         else (e.getDot, e.getMark)
       
       def caretUpdate(e: CaretEvent) {
-        println("Caret update: " + e.getDot + " .... " + e.getMark)
+        debug("Caret update: " + e.getDot + " .... " + e.getMark)
         // locate tree
         frame.srcs match {
           case List(oneSource) =>
             val sFile = new BatchSourceFile(oneSource)
             val (start, end) = orderedPos(e)
             val position = global.rangePos(sFile, start, start, end)
-            println("Selection position: " + position)
+            debug("Selection position: " + position)
             val t = global.locate(position)
             frame.prefuseComponent.grabFocus() // fix focus for key navigation
-            println("Overlapping tree: " + t + "\n with pos " + t.pos)
+            debug("Overlapping tree: " + t + "\n with pos " + t.pos)
             if (t != EmptyTree) {
               // todo: check its type?
               targetedCompile(position)
@@ -234,7 +229,6 @@ trait SwingControllers {
 	                  return
 	              }
 	            case None =>
-	              println("NONE FOUND")
 	              frame.prefuseComponent.treeRoot() // fixme bug?
 	              return
 	          }

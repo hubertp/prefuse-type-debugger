@@ -9,7 +9,7 @@ trait StructureBuilders {
     
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
-  class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends InstrumentedCompiler {
+  class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends CompilerWithInstrumentation {
     import global.{EV, Position}
     import EV._
     
@@ -145,9 +145,6 @@ trait StructureBuilders {
       hook hooking CompileWrapper.targetC(pos)
     }
   }
-  
-  // need cc for full recompile
-  // need cc for targeted recompile
   
   object CompileWrapper {
     def cc(files: List[io.AbstractFile]): Boolean = {

@@ -42,8 +42,8 @@ trait DebuggerGlobal extends EventsGlobal {
     }
   }
   
-  // api
-  
+  // compilation api
+
   private var _compilerRun: DebuggerRun = _
   
   def initRun() {
@@ -106,7 +106,7 @@ trait DebuggerGlobal extends EventsGlobal {
     // locate the tree
     reloadSource(pos.source)               // flush source info
     globalPhase = _compilerRun.typerPhase  // if run uses typeCheck this will be no longer necessary
-    val unit = unitOfFile(pos.source.file) // getorelse
+    val unit = unitOfFile(pos.source.file)
     parseAndEnter(unit)
     // todo: avoid debugging if the the new tree is contained in the old one
     unit.targetPos = pos
@@ -120,12 +120,9 @@ trait DebuggerGlobal extends EventsGlobal {
   }
   
   def parseAndEnter(unit: DebuggerCompilationUnit) {
-    if (unit.status == NotLoaded) {
-      _compilerRun.compileLate(unit)
-      validatePositions(unit.body) // needed?
-      // todo: syncTopLevelSyms 
-      unit.status = JustParsed
-    }
+    _compilerRun.compileLate(unit)
+    validatePositions(unit.body) // needed?
+    // todo: syncTopLevelSyms 
   }
 
 }

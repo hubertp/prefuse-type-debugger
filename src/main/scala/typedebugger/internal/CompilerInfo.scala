@@ -10,7 +10,6 @@ import scala.collection.mutable
 
 
 trait CompilerInfo {
-  self =>
   val global: Global with Snapshots with interactive.RangePositions with DebuggerCompilationUnits
     with DebuggerGlobal
   
@@ -23,7 +22,7 @@ trait CompilerInfo {
 trait Tools {
   self: CompilerInfo =>
     
-  trait InstrumentedCompiler {
+  trait CompilerWithInstrumentation {
     def run(srcs: List[io.AbstractFile]): Boolean
     def runTargeted(pos: global.Position): Boolean
   }
