@@ -11,7 +11,7 @@ import scala.tools.nsc.util.{ SourceFile, BatchSourceFile }
 import scala.collection.mutable
 
 trait DebuggerGlobal extends EventsGlobal {
-  outer: Global with DebuggerCompilationUnits with interactive.RangePositions =>
+  outer: Global with DebuggerCompilationUnits with interactive.RangePositions with DebuggerPositions =>
     
   val unitOfFile = new mutable.LinkedHashMap[io.AbstractFile, DebuggerCompilationUnit]()
   
@@ -96,6 +96,11 @@ trait DebuggerGlobal extends EventsGlobal {
   def locate(pos: Position): Tree = {
     val unit = unitOfFile(pos.source.file)
     new Locator(pos) locateIn unit.body
+  }
+  
+  def locateStatement(pos: Position): Tree = {
+    val unit = unitOfFile(pos.source.file)
+    new StatementLocator(pos) locateStat unit.body
   }
   
   def targetDebugAt(pos: Position) {

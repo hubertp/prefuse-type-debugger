@@ -81,11 +81,11 @@ trait SwingControllers {
             debug("Selection position: " + position)
             val t = global.locate(position)
             frame.prefuseComponent.grabFocus() // fix focus for key navigation
-            debug("Overlapping tree: " + t + "\n with pos " + t.pos)
-            if (t != EmptyTree) {
-              // todo: check its type?
+            debug("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
+            if (t != EmptyTree)
               targetedCompile(position)
-            }
+            else
+              debug("invalid selection")
           case _ => // not supported yet
         }
       }

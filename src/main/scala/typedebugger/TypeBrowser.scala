@@ -52,7 +52,7 @@ abstract class TypeBrowser extends AnyRef
                            with ui.controllers.PrefuseControllers
                            with ui.controllers.SwingControllers
                            with ui.UIUtils{
-  import global.EV
+  import global.{EV, NoPosition}
   import EV._
   
   import UIConfig.{nodesLabel => label}
@@ -80,7 +80,9 @@ abstract class TypeBrowser extends AnyRef
   
   private def updateTreeAndProcess(pos: global.Position) = {
     assert(builder != null, "need full compiler run first")
-    builder.runTargeted(pos)
+    val overlappingStat = global.locateStatement(pos)
+    val statPos = if (overlappingStat.pos.isRange && !overlappingStat.pos.isTransparent) overlappingStat.pos else NoPosition
+    builder.runTargeted(pos, statPos)
     prefuseTree.clear()
     val processedGoals = postProcess()
     prefuseController.updateGoals(processedGoals)

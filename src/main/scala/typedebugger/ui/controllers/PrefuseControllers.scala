@@ -161,6 +161,8 @@ trait PrefuseControllers {
           ColorLib.rgba(255, 0, 0, 150)
         case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Hard =>
           ColorLib.rgba(255, 0, 0, 150)
+        case Some(ev: TyperOmittedStatement) =>
+          ColorLib.rgba(204, 204, 204, 50)
         case Some(ev: SoftErrorEvent) =>
           ColorLib.rgba(255, 0, 0, 50)
         case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Soft =>

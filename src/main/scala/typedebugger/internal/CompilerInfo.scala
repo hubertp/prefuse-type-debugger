@@ -11,7 +11,7 @@ import scala.collection.mutable
 
 trait CompilerInfo {
   val global: Global with Snapshots with interactive.RangePositions with DebuggerCompilationUnits
-    with DebuggerGlobal
+    with DebuggerGlobal with DebuggerPositions
   
   val settings: Settings with TypeDebuggerSettings // todo remove, superseded by global.settings
   def debug(msg: String) = if (settings.debugTD.value) println("[debug] " + msg)
@@ -24,6 +24,6 @@ trait Tools {
     
   trait CompilerWithInstrumentation {
     def run(srcs: List[io.AbstractFile]): Boolean
-    def runTargeted(pos: global.Position): Boolean
+    def runTargeted(pos: global.Position, statPos: global.Position): Boolean
   }
 }

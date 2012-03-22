@@ -10,7 +10,7 @@ trait StructureBuilders {
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
   class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends CompilerWithInstrumentation {
-    import global.{EV, Position}
+    import global.{EV, Position, NoPosition}
     import EV._
     
     //type ENode = EventNode
@@ -28,14 +28,21 @@ trait StructureBuilders {
     // Hook that enables us to collect all the events
     private var hook: Hook.IndentationHook = _
     
-    private def createNode(ev: Event, parentENode: BaseTreeNode[EventNode]): BaseTreeNode[EventNode] = {
+    private def createNode(ev: Event, parentENode: BaseTreeNode[EventNode])
+                           (implicit statPos: Position): BaseTreeNode[EventNode] = {
       val evNode = new EventNode(ev, new ListBuffer(), if (parentENode == null) None else Some(parentENode))
       // We want them in order of appearance
       ev match {
         case _: HardErrorEvent =>
           errorNodes = evNode::errorNodes
-        case e:ContextTypeError if (e.errType == ErrorLevel.Hard) =>
+        case e: ContextTypeError if (e.errType == ErrorLevel.Hard) =>
           errorNodes = evNode::errorNodes
+        case e: TyperTyped if (statPos != NoPosition) =>
+          e.expl match {
+            case expl: StatementExplanation if expl.stat.pos.sameRange(statPos) =>
+              errorNodes = evNode::errorNodes
+            case _ =>
+          }
         case _ =>
       }
       evNode
@@ -47,7 +54,7 @@ trait StructureBuilders {
     //}
    
     // analyze the logged events and build necessary structure for the tree
-    def reportWithLevel(ev: Event, level: Int) {
+    def reportWithLevel(ev: Event, level: Int)(implicit statPos: Position = NoPosition) {
       // This relies on the fact that done blocks are not filtered out
   //      assert(previousLevel <= level, "prev: " + previousLevel + " level " + level)
       implicit def nodeWithLevel(a: BaseTreeNode[EventNode]): (BaseTreeNode[EventNode], Int) = (a, level)
@@ -124,7 +131,7 @@ trait StructureBuilders {
     def run(srcs: List[io.AbstractFile]): Boolean = {
       EV.resetEventsCounter()
       // reset the intermediate structure
-      _root = createNode(null, null)
+      _root = createNode(null, null)(NoPosition)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
@@ -133,13 +140,13 @@ trait StructureBuilders {
       hook hooking CompileWrapper.cc(srcs)
     }
     
-    def runTargeted(pos: Position) = {
+    def runTargeted(pos: Position, statPosition: Position) = {
       EV.resetEventsCounter()
-      _root = createNode(null, null)
+      _root = createNode(null, null)(NoPosition)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
-        case ev if filt( ev )=> reportWithLevel(ev, level); NoResponse
+        case ev if filt( ev )=> reportWithLevel(ev, level)(statPosition); NoResponse
       })
       
       hook hooking CompileWrapper.targetC(pos)

@@ -344,7 +344,7 @@ trait StringOps extends AnyRef
       case _: TypeRefinementStatement =>
         "Typecheck refinement statement"
 
-      case _: TypeExistentialTypeClause =>
+      case _: TypeExistentialTypeStatement =>
         "Typecheck existential type-clause"
 
       // Use case?

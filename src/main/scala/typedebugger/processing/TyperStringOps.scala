@@ -29,6 +29,11 @@ trait TyperStringOps {
         case e: SymInitializeTyper =>
           ("Initialize tree's symbol type", "Initializing symbol will force its lazy type to be resolved")
           
+        case e: TyperOmittedStatement =>
+          ("Statement not typechecked",
+           "Statement:\n" + anyString(e.tree) + "\nwas not typechecked as targeted debugging was used.\n" +
+           "Statement was not on an direct path to the target selection") 
+          
         case e: PackageTyper =>
           ("Type package", "Type package " + e.tree.asInstanceOf[RefTree].name.toString)
           
