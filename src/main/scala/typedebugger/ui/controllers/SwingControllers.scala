@@ -12,6 +12,7 @@ import prefuse.data.expression.{AbstractPredicate, Predicate, OrPredicate}
 import java.awt.Color
 import java.awt.event._
 import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
+import javax.swing.text.Highlighter
 import javax.swing.event.{CaretListener, CaretEvent}
 
 import scala.collection.JavaConversions._
@@ -82,9 +83,12 @@ trait SwingControllers {
             val t = global.locate(position)
             frame.prefuseComponent.grabFocus() // fix focus for key navigation
             debug("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
-            if (t != EmptyTree)
+            if (t != EmptyTree) {
+              highlightContr.clearHighlight(true)
+              val ref = highlightContr.highlight(position, highlightContr.TargetDebuggingHighlighter)
+              highlightContr.activeSelection = ref
               targetedCompile(position)
-            else
+            } else
               debug("invalid selection")
           case _ => // not supported yet
         }
@@ -92,6 +96,7 @@ trait SwingControllers {
     }
     
     class HiglighterAndGeneralInfo() extends ControlAdapter {
+      var activeSelection: Highlighter.Highlight =  null
       
       override def itemClicked(item: VisualItem, e: MouseEvent) = 
         if (containsDataNode(item) && e.isAltDown())
@@ -149,13 +154,19 @@ trait SwingControllers {
 	      clearHighlight()
 	    }
       
-      private def highlight(pos: Position, colorSelection: DefaultHighlightPainter) = 
-        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
+      private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter) = 
+        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection).asInstanceOf[Highlighter.Highlight]
+        else null
   
-      private def clearHighlight() = codeHighlighter.getHighlights.foreach(codeHighlighter.removeHighlight)
+      private[SwingControllers] def clearHighlight(force: Boolean = false) = {
+        codeHighlighter.getHighlights foreach (h =>
+          if (force || h != activeSelection) codeHighlighter.removeHighlight(h)
+        )
+      }
      
       object TreeMainHighlighter extends DefaultHighlightPainter(Color.red)
       object TreeReferenceHighlighter extends DefaultHighlightPainter(Color.green)
+      object TargetDebuggingHighlighter extends DefaultHighlightPainter(new Color(204, 204, 204, 80))
     }
     
       
