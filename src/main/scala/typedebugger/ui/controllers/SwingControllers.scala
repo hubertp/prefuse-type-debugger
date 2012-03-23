@@ -96,7 +96,7 @@ trait SwingControllers {
     }
     
     class HiglighterAndGeneralInfo() extends ControlAdapter {
-      var activeSelection: Highlighter.Highlight =  null
+      var activeSelection: AnyRef =  null
       
       override def itemClicked(item: VisualItem, e: MouseEvent) = 
         if (containsDataNode(item) && e.isAltDown())
@@ -154,8 +154,8 @@ trait SwingControllers {
 	      clearHighlight()
 	    }
       
-      private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter) = 
-        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection).asInstanceOf[Highlighter.Highlight]
+      private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter): AnyRef = 
+        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
         else null
   
       private[SwingControllers] def clearHighlight(force: Boolean = false) = {

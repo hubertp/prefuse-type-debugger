@@ -80,9 +80,9 @@ abstract class TypeBrowser extends AnyRef
   
   private def updateTreeAndProcess(pos: global.Position) = {
     assert(builder != null, "need full compiler run first")
-    val overlappingStat = global.locateStatement(pos)
-    val statPos = if (overlappingStat.pos.isRange && !overlappingStat.pos.isTransparent) overlappingStat.pos else NoPosition
-    builder.runTargeted(pos, statPos)
+    val overlappingTree = global.locate(pos) //global.locateStatement(pos)
+    val treePos = if (overlappingTree.pos.isRange && !overlappingTree.pos.isTransparent) overlappingTree.pos else NoPosition
+    builder.runTargeted(pos, treePos)
     prefuseTree.clear()
     val processedGoals = postProcess()
     prefuseController.updateGoals(processedGoals)

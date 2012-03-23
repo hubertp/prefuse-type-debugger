@@ -37,12 +37,13 @@ trait StructureBuilders {
           errorNodes = evNode::errorNodes
         case e: ContextTypeError if (e.errType == ErrorLevel.Hard) =>
           errorNodes = evNode::errorNodes
-        case e: TyperTyped if (statPos != NoPosition) =>
-          e.expl match {
+        case e: TyperTyped if statPos != NoPosition && e.tree.pos.sameRange(statPos) =>
+          /*e.expl match {
             case expl: StatementExplanation if expl.stat.pos.sameRange(statPos) =>
               errorNodes = evNode::errorNodes
             case _ =>
-          }
+          }*/
+          errorNodes = evNode::errorNodes
         case _ =>
       }
       evNode
@@ -140,13 +141,13 @@ trait StructureBuilders {
       hook hooking CompileWrapper.cc(srcs)
     }
     
-    def runTargeted(pos: Position, statPosition: Position) = {
+    def runTargeted(pos: Position, expandPos: Position) = {
       EV.resetEventsCounter()
       _root = createNode(null, null)(NoPosition)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
-        case ev if filt( ev )=> reportWithLevel(ev, level)(statPosition); NoResponse
+        case ev if filt( ev )=> reportWithLevel(ev, level)(expandPos); NoResponse
       })
       
       hook hooking CompileWrapper.targetC(pos)

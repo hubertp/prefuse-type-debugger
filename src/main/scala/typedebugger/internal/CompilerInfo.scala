@@ -24,6 +24,6 @@ trait Tools {
     
   trait CompilerWithInstrumentation {
     def run(srcs: List[io.AbstractFile]): Boolean
-    def runTargeted(pos: global.Position, statPos: global.Position): Boolean
+    def runTargeted(pos: global.Position, expandPos: global.Position): Boolean
   }
 }

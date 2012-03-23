@@ -29,6 +29,15 @@ trait DebuggerGlobal extends EventsGlobal {
     override def instrumentingOn = instrumenting
   }
   
+  
+  override def signalDone(context: Context, old: Tree, result: Tree) {
+    // investigate whether this approach is visible for targeted debugging
+    
+    // Check if this is the tree, we've been looking for
+    // throw an exception
+    // properly close instrumentation blocks 
+  }
+  
   private var _instrumenting = false
   def instrumenting = _instrumenting
   
@@ -43,7 +52,6 @@ trait DebuggerGlobal extends EventsGlobal {
   }
   
   // compilation api
-
   private var _compilerRun: DebuggerRun = _
   
   def initRun() {
