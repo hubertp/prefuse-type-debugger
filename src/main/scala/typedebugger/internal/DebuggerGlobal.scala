@@ -29,13 +29,21 @@ trait DebuggerGlobal extends EventsGlobal {
     override def instrumentingOn = instrumenting
   }
   
+  // since overriding settings with more specific type won't work
+  def debuggerSettings: scala.tools.nsc.Settings with TypeDebuggerSettings
   
-  override def signalDone(context: Context, old: Tree, result: Tree) {
-    // investigate whether this approach is visible for targeted debugging
-    
-    // Check if this is the tree, we've been looking for
-    // throw an exception
-    // properly close instrumentation blocks 
+  // optional approach to target debugging, when we abort further typechecking
+  // once we are done with the searched for tree `result`
+  override def signalDone(context: analyzer.Context, old: Tree, result: Tree) {
+    val target = context.unit.targetPos
+    if (debuggerSettings.withTargetThrow.value && target != NoPosition && context.unit.exists
+        && result.pos.isOpaqueRange && (result.pos includes context.unit.targetPos)) {
+      if (debuggerSettings.debugTD.value)
+        println("target debugging, typechecked required tree, abort")
+      val located = new Locator(target) locateIn result
+      if (located != EmptyTree)
+        throw new EV.TargetDebugDone(result)
+    }
   }
   
   private var _instrumenting = false
@@ -127,6 +135,13 @@ trait DebuggerGlobal extends EventsGlobal {
       withInstrumentingOn {
         _compilerRun.typeCheck(unit)
       }
+      // ensure that this can only happen if we do not throw an exception
+      if (debuggerSettings.withTargetThrow.value)
+        println("[bug] should fully typecheck tree when throwing error on targeted debugging")
+    } catch {
+      case ex: EV.TargetDebugDone =>
+        if (!debuggerSettings.withTargetThrow.value)
+          println("[bug] shouldn't end prematurely typechecking on targeted debugging") 
     } finally {
       unit.targetPos = NoPosition
     }

@@ -17,7 +17,9 @@ object TypeDebuggerUI {
                          with internal.DebuggerCompilationUnits
                          with internal.Snapshots
                          with internal.DebuggerGlobal
-                         with internal.DebuggerPositions
+                         with internal.DebuggerPositions {
+        def debuggerSettings = settings0
+      }
       val settings = settings0
     }
     
