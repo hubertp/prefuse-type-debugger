@@ -12,15 +12,7 @@ object TypeDebuggerUI {
     
     val command = new CompilerCommand(args.toList, settings0)
     val tb = new TypeBrowser {
-      val global = new Global(settings0, new ConsoleReporter(settings0))
-                         with interactive.RangePositions
-                         with internal.DebuggerCompilationUnits
-                         with internal.Snapshots
-                         with internal.DebuggerGlobal
-                         with internal.DebuggerPositions {
-        def debuggerSettings = settings0
-      }
-      val settings = settings0
+      val global = new internal.DebuggerGlobal(settings0, new ConsoleReporter(settings0))
     }
     
     tb.compileAndShow(command.files, settings0)

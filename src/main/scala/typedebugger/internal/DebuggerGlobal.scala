@@ -3,15 +3,21 @@ package internal
 
 import scala.tools.nsc.interactive
 import scala.tools.nsc.event.EventsGlobal
-import scala.tools.nsc.Global
 import scala.tools.nsc.event.HookLoader
 import scala.tools.nsc.io
+import scala.tools.nsc.reporters.Reporter
+import scala.tools.nsc.Settings
 import scala.tools.nsc.util.{ SourceFile, BatchSourceFile }
 
 import scala.collection.mutable
 
-trait DebuggerGlobal extends EventsGlobal {
-  outer: Global with DebuggerCompilationUnits with interactive.RangePositions with DebuggerPositions =>
+class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: Reporter)
+  extends scala.tools.nsc.Global(_settings, _reporter)
+    with EventsGlobal
+    with DebuggerCompilationUnits
+    with interactive.RangePositions
+    with DebuggerPositions
+    with internal.Snapshots {
     
   val unitOfFile = new mutable.LinkedHashMap[io.AbstractFile, DebuggerCompilationUnit]()
   
@@ -29,16 +35,15 @@ trait DebuggerGlobal extends EventsGlobal {
     override def instrumentingOn = instrumenting
   }
   
-  // since overriding settings with more specific type won't work
-  def debuggerSettings: scala.tools.nsc.Settings with TypeDebuggerSettings
+  override def settings: Settings with TypeDebuggerSettings = _settings
   
   // optional approach to target debugging, when we abort further typechecking
   // once we are done with the searched for tree `result`
   override def signalDone(context: analyzer.Context, old: Tree, result: Tree) {
     val target = context.unit.targetPos
-    if (debuggerSettings.withTargetThrow.value && target != NoPosition && context.unit.exists
+    if (settings.withTargetThrow.value && target != NoPosition && context.unit.exists
         && result.pos.isOpaqueRange && (result.pos includes context.unit.targetPos)) {
-      if (debuggerSettings.debugTD.value)
+      if (settings.debugTD.value)
         println("target debugging, typechecked required tree, abort")
       val located = new Locator(target) locateIn result
       if (located != EmptyTree)
@@ -136,11 +141,11 @@ trait DebuggerGlobal extends EventsGlobal {
         _compilerRun.typeCheck(unit)
       }
       // ensure that this can only happen if we do not throw an exception
-      if (debuggerSettings.withTargetThrow.value)
+      if (settings.withTargetThrow.value)
         println("[bug] should fully typecheck tree when throwing error on targeted debugging")
     } catch {
       case ex: EV.TargetDebugDone =>
-        if (!debuggerSettings.withTargetThrow.value)
+        if (!settings.withTargetThrow.value)
           println("[bug] shouldn't end prematurely typechecking on targeted debugging") 
     } finally {
       unit.targetPos = NoPosition

@@ -10,11 +10,9 @@ import scala.collection.mutable
 
 
 trait CompilerInfo {
-  val global: Global with Snapshots with interactive.RangePositions with DebuggerCompilationUnits
-    with DebuggerGlobal with DebuggerPositions
-  
-  val settings: Settings with TypeDebuggerSettings // todo remove, superseded by global.settings
-  def debug(msg: String) = if (settings.debugTD.value) println("[debug] " + msg)
+  val global: DebuggerGlobal
+  def settings: Settings with TypeDebuggerSettings = global.settings
+  def debug(msg: String) = if (global.settings.debugTD.value) println("[debug] " + msg)
   def targetedCompile(pos: global.Position): Unit
 }
 
