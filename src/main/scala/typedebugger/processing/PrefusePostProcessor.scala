@@ -76,9 +76,9 @@ trait PrefusePostProcessors {
           root.pfuseNode.set(label, root)
           root.children ++= child.children.map(processChildren(root, _)).flatten
           Some(root)
-        } else if (advancedFilter(child)) {
-          // Ignore those considered to be more advanced/hidden
-          None
+//        } else if (advancedFilter(child)) {
+//          // Ignore those considered to be more advanced/hidden
+//          None
         } else if (validEvent(child.ev))  {
           //println("process-nonroot-child: " + child + " || " + parent.pfuseNode)
           val child1 = new PrefuseEventNode(child.ev, Some(parent), t.addChild(parent.pfuseNode))

@@ -1,8 +1,6 @@
 package scala.typedebugger
 package ui
 
-
-
 import prefuse.{Constants, Display, Visualization}
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
 import prefuse.data.tuple.{TupleSet, DefaultTupleSet}
@@ -29,7 +27,7 @@ import javax.swing.{Action => swingAction, _}
 import javax.swing.event.TreeModelListener
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ ListBuffer, Stack, HashMap }
+import scala.collection.mutable.{ ListBuffer, Stack, HashMap}
 
 
 //import javax.swing.{Action => swingAction, _}
@@ -94,6 +92,12 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   }
   private val hoverController = new HoverTooltip() 
   def tooltipController = hoverController
+  
+  def enableOption(v: Filtering.Value): Unit
+  def disableOption(v: Filtering.Value): Unit
+  protected def isOptionEnabled(t: Tuple): Boolean
+  protected def isAdvancedOption(t: Tuple): Boolean
+  
 
   def init () {
     setBackground(backgroundColor)
@@ -221,6 +225,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
   
     showPrefuseDisplay()
+  }
+  
+  def reRenderProof() {
+    m_vis.run("filter")
   }
   
   protected def showPrefuseDisplay() {
@@ -422,11 +430,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     }
   }
   
-
-  
   // Need to show all the goals, all edges between them, 
   // as well as immediate (1-distance) subgoals of each goal
   class ShowAllGoalsAndEdges(clickedNode: String) extends Action {
+    
     def run(frac: Double) {
       val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
       
@@ -445,9 +452,18 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
           case item: NodeItem =>
             PrefuseLib.updateVisible(item, true)
             item.setExpanded(true)
-            item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
+            item.childEdges_[EdgeItem]().foreach { edge =>
+              val targetNode = edge.getTargetNode()
+              if (!isAdvancedOption(targetNode) || isOptionEnabled(targetNode))
+                PrefuseLib.updateVisible(edge, true)
+              else
+                println("EDGE IS INVALID: " + targetNode + " " + isOptionEnabled(targetNode))
+            }
             // neighbors should be added to separate group
-            item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
+            item.outNeighbors_[NodeItem]().foreach { neighbor =>
+              if (!isAdvancedOption(neighbor) || isOptionEnabled(neighbor))
+                PrefuseLib.updateVisible(neighbor, true)
+            }
             
             // If this is not a goal, then expand all the incoming edges as well
             if (!isGoal(item))
@@ -459,6 +475,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       }
     }
   }
+  
   
   // Collapse the whole tree initially so that only (hard) errors are visible
   class CollapseTree(openGoalsGroup: String, clickedNode: String)

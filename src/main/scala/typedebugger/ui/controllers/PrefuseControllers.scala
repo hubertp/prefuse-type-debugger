@@ -19,7 +19,7 @@ import UIConfig.{nodesLabel => label} // todo: remove
 
 
 trait PrefuseControllers {
-  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure =>
+  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with EventFiltering =>
     
   import PrefuseComponent._
   import PrefusePimping._
@@ -33,6 +33,7 @@ trait PrefuseControllers {
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isGoal(t: Tuple): Boolean = asDataNode(t).goal
     def isNode(t: Tuple): Boolean = containsDataNode(t)
+    protected def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
     def eventInfo(item: VisualItem): String = item.get(label).asInstanceOf[UINode[PrefuseEventNode]].fullInfo
     def setGoalPath(item: VisualItem): Unit = {
       def setGoalPath0(node: Option[UINode[PrefuseEventNode]]): Unit = node match {
@@ -59,6 +60,26 @@ trait PrefuseControllers {
       _goals = gs
       flushVisCache()
       showPrefuseDisplay()
+    }
+    
+    private val advFilter = new mutable.BitSet()
+    
+    def enableOption(v: Filtering.Value) {
+      advFilter += v.id
+    }
+    
+    def disableOption(v: Filtering.Value) {
+      advFilter -= v.id
+    }
+    
+    protected def isOptionEnabled(t: Tuple): Boolean = {
+      val ev = asDataNode(t).ev
+      if (fromEventToEnum.isDefinedAt(ev)) {
+        advFilter(fromEventToEnum(ev).id)
+      } else {
+        println(" SOME OTHER: " + ev.getClass)
+        false
+      }
     }
     
     // customized predicates

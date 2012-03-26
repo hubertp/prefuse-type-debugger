@@ -13,6 +13,7 @@ import java.awt.Color
 import java.awt.event._
 import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 import javax.swing.text.Highlighter
+import javax.swing.{JCheckBoxMenuItem}
 import javax.swing.event.{CaretListener, CaretEvent}
 
 import scala.collection.JavaConversions._
@@ -29,7 +30,9 @@ trait SwingControllers {
   
   import PrefusePimping._
   
-  class TypeDebuggerController(val frame: SwingFrame) {
+  class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
+    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", srcs) {
+
     var lastClicked: Option[NodeItem] = None
     
     val highlightContr = new HiglighterAndGeneralInfo()
@@ -37,16 +40,16 @@ trait SwingControllers {
    
     def init() {
       // add listeners
-      frame.prefuseComponent.addControlListener(highlightContr)
-      frame.prefuseComponent.addControlListener(new AddGoal())
-      frame.prefuseComponent.addControlListener(new LinkNode())
-      frame.prefuseComponent.addControlListener(new FixedNode())
-      frame.prefuseComponent.addControlListener(KeyPressAddGoal)
+      prefuseComponent.addControlListener(highlightContr)
+      prefuseComponent.addControlListener(new AddGoal())
+      prefuseComponent.addControlListener(new LinkNode())
+      prefuseComponent.addControlListener(new FixedNode())
+      prefuseComponent.addControlListener(KeyPressAddGoal)
       
-      if (frame.srcs.isEmpty)
+      if (srcs.isEmpty)
         println("[Warning] No files specified for debugging.")
       else 
-        loadSourceFile(frame.srcs.head) // TODO: remove restriction
+        loadSourceFile(srcs.head) // TODO: remove restriction
         
     }
     
@@ -56,13 +59,30 @@ trait SwingControllers {
         io.File(absFile.file).slurp
       else "Missing source code"
 
-      frame.sCodeViewer.setText(src)
+      sCodeViewer.setText(src)
     }
     
-    private def codeHighlighter = frame.sCodeViewer.getHighlighter()
-    frame.sCodeViewer.addCaretListener(new SelectionListener())
+    private def codeHighlighter = sCodeViewer.getHighlighter()
+    sCodeViewer.addCaretListener(new SelectionListener())
     
     init()
+    
+    def filteringBoxListener = FilteringListener
+    object FilteringListener extends ItemListener {
+      def itemStateChanged(e: ItemEvent) {
+        val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
+        val option = Filtering.withName(checkItem.getText)
+        if (e.getStateChange() == ItemEvent.SELECTED) {
+          println("ENABLE " + option)
+          prefuseComponent.enableOption(option)
+        } else {
+          println("DISABLED " + option)
+          prefuseComponent.disableOption(option)
+        }
+        prefuseComponent.reRenderProof()
+        // update nodes
+      }
+    }
     
     // specific adapters, actions
     class SelectionListener() extends CaretListener {
@@ -74,14 +94,14 @@ trait SwingControllers {
       def caretUpdate(e: CaretEvent) {
         debug("Caret update: " + e.getDot + " .... " + e.getMark)
         // locate tree
-        frame.srcs match {
+        srcs match {
           case List(oneSource) =>
             val sFile = new BatchSourceFile(oneSource)
             val (start, end) = orderedPos(e)
             val position = global.rangePos(sFile, start, start, end)
             debug("Selection position: " + position)
             val t = global.locate(position)
-            frame.prefuseComponent.grabFocus() // fix focus for key navigation
+            prefuseComponent.grabFocus() // fix focus for key navigation
             debug("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
             if (t != EmptyTree) {
               highlightContr.clearHighlight(true)
@@ -109,7 +129,7 @@ trait SwingControllers {
           node.ev match {
             case e:TreeEvent if e.tree.pos.isRange =>
               val prettyTree = asString(e.tree)
-              frame.ASTViewer.setText(prettyTree)
+              ASTViewer.setText(prettyTree)
               highlight(e.tree.pos, TreeMainHighlighter)
               
             case e: SymEvent if e.sym.pos.isRange =>
@@ -150,7 +170,7 @@ trait SwingControllers {
       }
       
 	    override def itemExited(item: VisualItem, e: MouseEvent) {
-	      frame.ASTViewer.setText(null)
+	      ASTViewer.setText(null)
 	      clearHighlight()
 	    }
       
@@ -222,7 +242,7 @@ trait SwingControllers {
 	          lastClicked.get
 	        else {
 	          // Find bottom most event
-	          val vis = frame.prefuseComponent.getVisualization
+	          val vis = prefuseComponent.getVisualization
 	          val ts = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
 	          val goals = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
 	          ts.tuples().find {
@@ -240,7 +260,7 @@ trait SwingControllers {
 	                  return
 	              }
 	            case None =>
-	              frame.prefuseComponent.treeRoot() // fixme bug?
+	              prefuseComponent.treeRoot() // fixme bug?
 	              return
 	          }
 	        }
@@ -248,7 +268,7 @@ trait SwingControllers {
 	      val vis = last.getVisualization
 	      val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
 	
-	      frame.prefuseComponent.tooltipController.clearTooltip()
+	      prefuseComponent.tooltipController.clearTooltip()
 	      keyCode match {
 	        case KeyEvent.VK_DOWN =>
 	          // expand down (if necessary)
@@ -283,12 +303,12 @@ trait SwingControllers {
 	        val pNode = asDataNode(node).pfuseNode
 	        node.getVisualization.items(new VisualItemSearchPred(pNode)).toList match {
 	          case List(single: VisualItem) =>
-	            frame.prefuseComponent.tooltipController.showItemTooltip(single)
+	            prefuseComponent.tooltipController.showItemTooltip(single)
 	          case _ =>
 	        }
 	        
 	      case KeyEvent.VK_ESCAPE =>
-	        frame.prefuseComponent.tooltipController.clearTooltip()
+	        prefuseComponent.tooltipController.clearTooltip()
 	      
 	      case _ =>
 	        
@@ -300,7 +320,7 @@ trait SwingControllers {
 	          AddGoal.addClickedItem(first, vis)
 	          highlightContr.itemEntered(first, null)
 	          // need to schedule the action by hand since keycontrol doesn't do it
-	          vis.run("filter")
+	          vis.run("filter") // use reRenderProof
 	        case _ =>
 	          println("incorrect search " + n)
 	      }
@@ -410,9 +430,8 @@ trait SwingControllers {
 	      val eNode = asDataNode(node)
 	      
 	      // is any of its children a goal
-	      val hasGoalChild = node.outNeighbors_[NodeItem]().exists(n =>
-	        // it has to be already expanded, so this is valid
-	        asDataNode(n).goal || eNode.goal)
+	      // it has to be already expanded, so this is valid
+	      val hasGoalChild = eNode.goal || node.outNeighbors_[NodeItem]().exists(asDataNode(_).goal)
 	      if (hasGoalChild) {
 	        // we are dealing with a goal or its parent
 	        eNode.parent match {
@@ -427,6 +446,7 @@ trait SwingControllers {
 	        // expand its children which are non-goals
 	        var eNode0 = eNode
 	        // goals are all in, so we are fine 
+	        // TODO: is this loop necessary? parent should already be expanded, right?
 	        while (!eNode0.goal && eNode0.parent.isDefined) {
 	          ts2.addTuple(eNode0.pfuseNode)
 	          eNode0 = eNode0.parent.get
@@ -457,7 +477,7 @@ trait SwingControllers {
 	        // with multiple errors (least spanning tree problem)
 	        if (eNode.parent.isDefined) {
 	          // cached minimal spanning tree
-	          val cached = frame.prefuseComponent.nodesAlwaysVisible
+	          val cached = prefuseComponent.nodesAlwaysVisible
 	          var eNode0 = eNode.parent.get
 	          while (eNode0.parent.isDefined && ts1.containsTuple(eNode0.parent.get.pfuseNode)) {            
 	            eNode0 = eNode0.parent.get

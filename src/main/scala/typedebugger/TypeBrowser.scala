@@ -5,40 +5,12 @@ import java.awt.geom.{Point2D, Rectangle2D}
 import java.awt.event._
 
 import java.io.File
-import javax.swing.{Action => swingAction, _}
-import javax.swing.event.TreeModelListener
-
-//import javax.swing.text.{Highlighter, DefaultHighlighter}
 
 import scala.concurrent.Lock
-import scala.collection.mutable.{ ListBuffer, Stack, HashMap }
-import scala.collection.JavaConversions._
+import scala.collection.mutable.ListBuffer
 import scala.tools.nsc.io
-import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
-import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
-import prefuse.data.tuple.{TupleSet, DefaultTupleSet}
-import prefuse.data.io.TreeMLReader
-import prefuse.data.expression.{AbstractPredicate, Predicate, OrPredicate}
-import prefuse.util.PrefuseLib
-import prefuse.{Constants, Display, Visualization}
-import prefuse.action._
-import prefuse.action.animate.{ColorAnimator, LocationAnimator, QualityControlAnimator, VisibilityAnimator}
-import prefuse.action.assignment.{ColorAction, FontAction}
-import prefuse.action.filter.{FisheyeTreeFilter, VisibilityFilter}
-import prefuse.activity.SlowInSlowOutPacer
-import prefuse.controls.{ControlAdapter, FocusControl, PanControl, WheelZoomControl,
-                         ZoomControl, ZoomToFitControl}
-import prefuse.action.layout.CollapsedSubtreeLayout
-import prefuse.action.layout.graph.NodeLinkTreeLayout
-import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
-import prefuse.visual.expression.{InGroupPredicate, VisiblePredicate}
-import prefuse.visual.sort.TreeDepthItemSorter
-import prefuse.util.{ColorLib, FontLib, GraphicsLib}
-import prefuse.util.display.{DisplayLib}
-import prefuse.util.ui.{JFastLabel, JSearchPanel}
-import prefuse.render._
-
+import prefuse.data.Tree
 import ui.{UIConfig, SwingFrame}
 
 // combine all parts into a single module
@@ -51,7 +23,8 @@ abstract class TypeBrowser extends AnyRef
                            with processing.StringOps
                            with ui.controllers.PrefuseControllers
                            with ui.controllers.SwingControllers
-                           with ui.UIUtils{
+                           with ui.controllers.EventFiltering
+                           with ui.UIUtils {
   import global.{EV, NoPosition}
   import EV._
   
@@ -143,11 +116,9 @@ abstract class TypeBrowser extends AnyRef
     val goals = compileFullAndProcess(sources, settings, filtr)
     prefuseController = new PrefuseController(prefuseTree, goals)
     prefuseController.init() // can move later?
-    val basicSwingFrame = new SwingFrame(prefuseController, "Type debugger 0.0.3", sources)
-    val swingController = new TypeDebuggerController(basicSwingFrame)
-    //val frame = new TypeDebuggerFrame(prefuseTree, srcs, goals)
+    val swingController = new TypeDebuggerController(prefuseController, sources)
     val lock = new Lock()
-    swingController.frame.createFrame(lock)
+    swingController.createFrame(lock)
     //frame.createFrame(lock)
     lock.acquire
   }

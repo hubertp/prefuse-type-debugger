@@ -2,15 +2,15 @@ package scala.typedebugger
 package ui
 
 import java.awt.BorderLayout
-import java.awt.event.{WindowAdapter, WindowEvent}
+import java.awt.event.{WindowAdapter, WindowEvent, ItemListener}
 import javax.swing.{Action => swingAction, _}
 
 import scala.concurrent.Lock
 import scala.tools.nsc.io.{File => ScalaFile, AbstractFile}
 
-class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, val srcs: List[AbstractFile]) {
+abstract class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, val srcs: List[AbstractFile]) {
 
-  val frame = new JFrame(frameName)
+  val jframe = new JFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
 
   val ASTViewer = new JTextArea(30, 90)
@@ -18,8 +18,8 @@ class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, 
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
-    frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE)
-    frame.addWindowListener(new WindowAdapter() {
+    jframe.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE)
+    jframe.addWindowListener(new WindowAdapter() {
       override def windowClosed(e: WindowEvent): Unit = lock.release
     })
 
@@ -33,10 +33,34 @@ class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, 
     sCodeViewer.setEditable(false)
     //sCodeViewer.setEnabled(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    
+    // add menu
+    val menuBar = new JMenuBar()
+    val viewMenu = new JMenu("View")
 
-    frame.getContentPane().add(topPane)
-    frame.pack()
-    frame.setVisible(true)
+    // dynamic filtering
+    val filtering = new JMenu("Event filtering")
+    addFilteringOptions(filtering)
+    
+    viewMenu.add(filtering)
+    
+    menuBar.add(viewMenu)
+    
+    
+    jframe.setJMenuBar(menuBar)
+    jframe.getContentPane().add(topPane)
+    jframe.pack()
+    jframe.setVisible(true)
+  }
+
+  def addFilteringOptions(parent: JMenu) {
+    Filtering.values foreach { v =>
+      val item = new JCheckBoxMenuItem(v.toString)
+      item.addItemListener(filteringBoxListener)
+      parent.add(item)
+    }
   }
   
+  def filteringBoxListener: ItemListener
+
 }
