@@ -35,7 +35,7 @@ trait PrefuseStructure extends IStructure {
           case tpchecker:TyperTyped =>
             Explanations(tpchecker)
           case _ =>
-            Events(ev)._1
+            EventDescriptors(ev).basicInfo
         }
       } else "Typecheck full tree" // root
         
@@ -59,7 +59,7 @@ trait PrefuseStructure extends IStructure {
             //"\nTree class " + evTyped.tree.getClass + " pos " + evTyped.tree.pos
 
           case _ =>
-            Events(ev)._2
+            EventDescriptors(ev).fullInfo
             //ev formattedString Formatting.fmtFull
         }
       else "Typecheck full tree" // root

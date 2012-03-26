@@ -2,6 +2,8 @@ package scala.typedebugger
 package processing
 
 import scala.tools.nsc.symtab
+import scala.collection.mutable
+import scala.ref.WeakReference
 
 trait StringOps extends AnyRef
                 with TyperStringOps
@@ -42,20 +44,41 @@ trait StringOps extends AnyRef
         ev formattedString Formatting.fmt
     }
   }
-  
-  // TODO, provide full info as well
-  // todo: cache results
-  object Events extends AnyRef
+
+  object EventDescriptors extends AnyRef
                 with ErrorEvents
                 with TyperEventsOps
                 with AdaptEventsOps
                 with InferEventsOps
                 with ImplicitsEventsOps
                 with NamerEventsOps
-                with TypesEventsOps {
-    def apply(e: Event, full: Boolean = false) = e match {
+                with TypesEventsOps
+                with Descriptors {
+
+    private val cache = new mutable.WeakHashMap[Int, WeakReference[Descriptor]]()
+    
+    def clearCache() {
+      cache.clear()
+    }
+    
+    private def update(e: Event, descr: Descriptor): Descriptor = {
+      cache(e.id) = new WeakReference(descr)
+      descr
+    }
+    
+    def apply(e: Event): Descriptor = cache.get(e.id) match {
+      case Some(ref) =>
+        ref.get match {
+          case Some(v) => v
+          case None    => update(e, generate(e))
+        }
+      case None =>
+        update(e, generate(e))
+    }
+    
+    def generate(e: Event): Descriptor = e match {
       case eEV: ContextTypeError =>
-        explainError(eEV, full)
+        explainError(eEV)
       case ev: TyperEvent        =>
         explainTyperEvent(ev)
       case ev: DoTypedApplyEvent =>
@@ -75,8 +98,11 @@ trait StringOps extends AnyRef
       case ev: TypesEvent        =>
         explainTypesEvent(ev)
       case _                     =>
-        (e formattedString Formatting.fmt, e formattedString Formatting.fmtFull)
-    }
+        new Descriptor {
+          def basicInfo = e formattedString Formatting.fmt
+          def fullInfo  = e formattedString Formatting.fmtFull
+        }
+    }    
   }
   
   private def printDebug(ev: Explanation) {
@@ -421,21 +447,43 @@ trait StringOps extends AnyRef
   
   // TODO, should be able to provide more details message
   trait ErrorEvents {
-    def explainError(ev: Event with ContextTypeError, fullInfo: Boolean)= ev match {
+    self: Descriptors =>
+    def explainError(ev: Event with ContextTypeError)= ev match {
       case ContextAmbiguousTypeErrorEvent(err, level) =>
-        (level match {
-          case ErrorLevel.Hard => "Ambiguous type error"
-          case ErrorLevel.Soft => "Recoverable ambiguous type error"
-        }, "")
+        new Descriptor {
+          def basicInfo = level match {
+            case ErrorLevel.Hard => "Ambiguous type error"
+            case ErrorLevel.Soft => "Recoverable ambiguous type error"
+          }
+          def fullInfo  = ""
+        }
       
       case ContextTypeErrorEvent(err, level) =>
-        (level match {
-          case ErrorLevel.Hard => "Type error"
-          case ErrorLevel.Soft => err.errMsg + "\n" + "Recoverable type error"
-        }, "Error:\n" + err.errMsg)
+        new Descriptor {
+          def basicInfo = level match {
+            case ErrorLevel.Hard => "Type error"
+            case ErrorLevel.Soft => err.errMsg + "\n" + "Recoverable type error"
+          }
+          def fullInfo  = "Error:\n" + err.errMsg
+        }
       
       case _ =>
-        (ev formattedString Formatting.fmt, ev formattedString Formatting.fmtFull)
+        new DefaultDescriptor("error")
+    }
+  }
+  
+  trait Descriptors {
+    abstract class Descriptor() {
+      def basicInfo: String
+      lazy val lazyBasicInfo = basicInfo
+      def fullInfo: String
+      lazy val lazyFullInfo = fullInfo
+      def info(kind: Boolean) = if (kind) lazyBasicInfo else lazyFullInfo
+    }
+    
+    class DefaultDescriptor(what: String) extends Descriptor {
+      def basicInfo: String = "(" + what + " | not implemented)"
+      def fullInfo: String = "(" + what + " | not implemented)"
     }
   }
 }

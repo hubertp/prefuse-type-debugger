@@ -84,6 +84,7 @@ abstract class TypeBrowser extends AnyRef
     val treePos = if (overlappingTree.pos.isRange && !overlappingTree.pos.isTransparent) overlappingTree.pos else NoPosition
     builder.runTargeted(pos, treePos)
     prefuseTree.clear()
+    EventDescriptors.clearCache()
     val processedGoals = postProcess()
     prefuseController.updateGoals(processedGoals)
   }
