@@ -31,7 +31,7 @@ trait SwingControllers {
   import PrefusePimping._
   
   class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
-    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", srcs) {
+    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", srcs, settings.advancedDebug.value) {
 
     var lastClicked: Option[NodeItem] = None
     
@@ -50,7 +50,6 @@ trait SwingControllers {
         println("[Warning] No files specified for debugging.")
       else 
         loadSourceFile(srcs.head) // TODO: remove restriction
-        
     }
     
     private def loadSourceFile(absFile: io.AbstractFile) {
@@ -73,14 +72,12 @@ trait SwingControllers {
         val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
         val option = Filtering.withName(checkItem.getText)
         if (e.getStateChange() == ItemEvent.SELECTED) {
-          println("ENABLE " + option)
           prefuseComponent.enableOption(option)
         } else {
-          println("DISABLED " + option)
           prefuseComponent.disableOption(option)
+          prefuseComponent.reRenderDisabledEvents()
         }
         prefuseComponent.reRenderProof()
-        // update nodes
       }
     }
     

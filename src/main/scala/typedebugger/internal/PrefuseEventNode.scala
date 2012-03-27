@@ -6,7 +6,7 @@ import scala.collection.mutable
 import mutable.{ ListBuffer }
 
 trait PrefuseStructure extends IStructure {
-  self: CompilerInfo with processing.StringOps =>
+  self: CompilerInfo with processing.StringOps with EventFiltering =>
     
   import global._
   import EV._
@@ -67,58 +67,6 @@ trait PrefuseStructure extends IStructure {
     
     // Determine initial state for the node
     // This can change by enabling options explicitly
-    lazy val advanced: Boolean = advanced0
-        
-    private def advanced0: Boolean = ev match {
-      case _: ConvertConstrBody =>
-        true
-
-      case e: ValidateParentClass =>
-        e.parent.symbol != null && (e.parent.symbol == definitions.ScalaObjectClass ||
-                                    e.parent.symbol == definitions.ObjectClass)
-
-      case e: TyperTyped =>
-        val res = e.tree match {
-          // Should make it more specific, i.e. search for synthetics 
-          case ddef: DefDef if ddef.name == nme.CONSTRUCTOR || (ddef.symbol != null && ddef.symbol.isSynthetic) =>
-            true
-          case _ =>
-            false
-        }
-        if (!res) {
-          e.expl match {
-            case e@TypeTemplateStatement(stat) =>
-              if (stat.symbol != null) stat.symbol.isSynthetic || stat.symbol.isGetter
-              else false
-            case _ =>
-              false
-          }
-        } else true
-        
-      case e: ProtoTypeArgsDoTypedApply =>
-        true
-        
-      case e: ImplicitsEligibility =>
-        true
-
-      case e: CheckTypesCompatibility =>
-        true
-        
-      case e: SubTypeCheck =>
-        true
-        
-      case e: Subtyping =>
-        true
-        
-      case e: OverloadedSymDoTypedApply =>
-        true
-        
-      case e: ImprovesAlternativesCheck =>
-        true
-        
-      case _ =>
-        false
-      
-    }
+    lazy val advanced: Boolean = FilteringOps.map.isDefinedAt(ev)
   }
 }

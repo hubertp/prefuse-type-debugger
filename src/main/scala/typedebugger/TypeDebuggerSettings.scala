@@ -8,4 +8,5 @@ trait TypeDebuggerSettings {
   val reportSoftErrors = BooleanSetting("-XwithSoftErrors", "Focus type debugger on soft errors as well as the hard ones")
   val advancedDebug    = BooleanSetting("-Xadvanced", "Show debugging for synthetics and more advanced features")
   val withTargetThrow  = BooleanSetting("-Ythrowtarget", "Abrupt debugging immediately after typechecking the selected tree")
+  val logEvents        = PathSetting   ("-YlogActivity", "Log all the user actions that were done while running type debugger", "/dev/null")
 }

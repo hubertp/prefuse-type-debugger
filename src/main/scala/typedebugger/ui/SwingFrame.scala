@@ -8,7 +8,10 @@ import javax.swing.{Action => swingAction, _}
 import scala.concurrent.Lock
 import scala.tools.nsc.io.{File => ScalaFile, AbstractFile}
 
-abstract class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName: String, val srcs: List[AbstractFile]) {
+abstract class SwingFrame(prefuseComponent: PrefuseComponent,
+                          frameName: String,
+                          srcs: List[AbstractFile],
+                          filtState: Boolean) {
 
   val jframe = new JFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
@@ -56,6 +59,10 @@ abstract class SwingFrame(val prefuseComponent: PrefuseComponent, val frameName:
   def addFilteringOptions(parent: JMenu) {
     Filtering.values foreach { v =>
       val item = new JCheckBoxMenuItem(v.toString)
+      if (filtState) {
+        item.setState(filtState)
+        prefuseComponent.enableOption(v)
+      }
       item.addItemListener(filteringBoxListener)
       parent.add(item)
     }

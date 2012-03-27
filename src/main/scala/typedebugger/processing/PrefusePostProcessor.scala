@@ -1,7 +1,7 @@
 package scala.typedebugger
 package processing
 
-import internal.{ CompilerInfo, IStructure, PrefuseStructure }
+import internal.{ CompilerInfo, IStructure, PrefuseStructure, EventFiltering }
 
 import prefuse.data.{ Tree, Node }
 
@@ -11,7 +11,7 @@ import mutable.{ ListBuffer }
 import scala.tools.nsc.symtab
 
 trait PrefusePostProcessors {
-  self: CompilerInfo with IStructure with PrefuseStructure =>
+  self: CompilerInfo with IStructure with PrefuseStructure with EventFiltering =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -161,58 +161,7 @@ trait PrefusePostProcessors {
       
       // Should split into proper advanced and synthetics
       def advancedFilter(node: BaseTreeNode[_]): Boolean =
-        !settings.advancedDebug.value && (node.ev match {
-          case _: ConvertConstrBody =>
-            true
-
-          case e: ValidateParentClass =>
-            e.parent.symbol != null && (e.parent.symbol == definitions.ScalaObjectClass ||
-                                        e.parent.symbol == definitions.ObjectClass)
-
-          case e: TyperTyped =>
-            val res = e.tree match {
-              // Should make it more specific, i.e. search for synthetics 
-              case ddef: DefDef if ddef.name == nme.CONSTRUCTOR || (ddef.symbol != null && ddef.symbol.isSynthetic) =>
-                true
-              case _ =>
-                false
-            }
-            if (!res) {
-              e.expl match {
-                case e@TypeTemplateStatement(stat) =>
-                  if (stat.symbol != null) {
-                    stat.symbol.isSynthetic || stat.symbol.isGetter
-                  } else false
-                case _ =>
-                  false
-              }
-            } else true
-            
-          case e: ProtoTypeArgsDoTypedApply =>
-            true
-            
-          case e: ImplicitsEligibility =>
-            true
-
-          case e: CheckTypesCompatibility =>
-            true
-            
-          case e: SubTypeCheck =>
-            true
-            
-          case e: Subtyping =>
-            true
-            
-          case e: OverloadedSymDoTypedApply =>
-            true
-            
-          case e: ImprovesAlternativesCheck =>
-            true
-            
-          case _ =>
-            false
-
-        })
+        !settings.advancedDebug.value && FilteringOps.map.isDefinedAt(node.ev)
     }
   }
 }

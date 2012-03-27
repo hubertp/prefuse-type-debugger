@@ -19,7 +19,7 @@ import UIConfig.{nodesLabel => label} // todo: remove
 
 
 trait PrefuseControllers {
-  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with EventFiltering =>
+  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
     
   import PrefuseComponent._
   import PrefusePimping._
@@ -74,8 +74,8 @@ trait PrefuseControllers {
     
     protected def isOptionEnabled(t: Tuple): Boolean = {
       val ev = asDataNode(t).ev
-      if (fromEventToEnum.isDefinedAt(ev)) {
-        advFilter(fromEventToEnum(ev).id)
+      if (FilteringOps.map.isDefinedAt(ev)) {
+        advFilter(FilteringOps.map(ev).id)
       } else {
         println(" SOME OTHER: " + ev.getClass)
         false

@@ -224,7 +224,12 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
   
+    m_vis.putAction("advancedOptions", new CollapseDisabled())
     showPrefuseDisplay()
+  }
+  
+  def reRenderDisabledEvents() {
+    m_vis.run("advancedOptions")
   }
   
   def reRenderProof() {
@@ -402,7 +407,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   // todo: this should be an object but there is a bug in the compiler
   // which I don't have time to track down
   class UnfocusOnItems extends Action {
-    //val vis = m_vis // to avoid illegalaccesserror i=during runtime (bug in compiler?)
+    //val vis = m_vis // to avoid illegalaccesserror during runtime (bug in compiler?)
    
     // todo: again, this should be an object
     class ToRemovePred extends AbstractPredicate {
@@ -456,8 +461,6 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
               val targetNode = edge.getTargetNode()
               if (!isAdvancedOption(targetNode) || isOptionEnabled(targetNode))
                 PrefuseLib.updateVisible(edge, true)
-              else
-                println("EDGE IS INVALID: " + targetNode + " " + isOptionEnabled(targetNode))
             }
             // neighbors should be added to separate group
             item.outNeighbors_[NodeItem]().foreach { neighbor =>
@@ -560,6 +563,28 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       // the least common node between all initial goals
       if (ts.getTupleCount() > 1)
         minimumVisibleNodes.foreach(ts.addTuple)
+    }
+  }
+  
+  class CollapseDisabled() extends Action {
+    // todo similar to visualitemsearchpred
+    object OnlyNodes extends AbstractPredicate {
+      override def getBoolean(t: Tuple): Boolean = t match {
+        case item: NodeItem if isNode(t) => true
+        case _                           => false
+      }
+    }
+    def run(frac: Double) {
+      val nodes = m_vis.items_[NodeItem](Visualization.ALL_ITEMS, OnlyNodes)
+      for (node <- nodes) {
+        if (node.isVisible && isAdvancedOption(node) && !isOptionEnabled(node)) {
+          PrefuseLib.updateVisible(node, false)
+          node.setExpanded(false)
+          node.inEdges_[EdgeItem]() foreach { edge =>
+            PrefuseLib.updateVisible(edge, false)
+          }
+        }
+      }
     }
   }
   
