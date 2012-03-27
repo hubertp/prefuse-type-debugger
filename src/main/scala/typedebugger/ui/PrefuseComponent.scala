@@ -211,7 +211,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     addControlListener(new ZoomControl())
     addControlListener(new WheelZoomControl())
     addControlListener(new PanControl())
-    addControlListener(hoverController)
+    addControlListener(tooltipController)
     addControlListener(new FocusControl(1, "filter"))
   
     setOrientation(typeDebuggerorientation)
@@ -352,7 +352,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     }
     
     override def itemReleased(item: VisualItem, e: MouseEvent) {
-      if(item.isInstanceOf[NodeItem] && e.getButton() == MouseEvent.BUTTON3)
+      if(item.isInstanceOf[NodeItem] && e.getButton == MouseEvent.BUTTON3)
         showNodeTooltip(item, e.getX(), e.getY())
     }
     

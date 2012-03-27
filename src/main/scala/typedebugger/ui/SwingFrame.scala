@@ -17,6 +17,7 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
 
   val ASTViewer = new JTextArea(30, 90)
   val sCodeViewer = new JTextArea(30, 30)
+  val infoViewer = new JTextArea(2, 5)
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -31,9 +32,11 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
     topSplitPane.setResizeWeight(0.7)
     
     topPane.add(topSplitPane)
-    tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
+    val codeViewPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(sCodeViewer), infoViewer)
+    codeViewPane.setResizeWeight(1.0)
+    codeViewPane.setDividerLocation(0.1)
+    tabFolder.addTab("Tree", null, codeViewPane)
     sCodeViewer.setEditable(false)
-    //sCodeViewer.setEnabled(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
     
     // add menu

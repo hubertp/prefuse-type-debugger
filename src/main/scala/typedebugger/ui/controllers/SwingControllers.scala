@@ -20,7 +20,7 @@ import scala.tools.nsc.io
 import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
 trait SwingControllers {
-  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure =>
+  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -33,7 +33,7 @@ trait SwingControllers {
 
     var lastAccessed: Option[NodeItem] = None
     
-    val highlightContr = new HiglighterAndGeneralInfo()
+    val highlightContr = new HighlighterAndGeneralInfo()
     val cleanupAction = new CleanupAction()
    
     def init() {
@@ -43,6 +43,7 @@ trait SwingControllers {
       prefuseComponent.addControlListener(new LinkNode())
       prefuseComponent.addControlListener(new FixedNode())
       prefuseComponent.addControlListener(KeyPressAddGoal)
+      prefuseComponent.addControlListener(HiddenEvents)
       
       if (srcs.isEmpty)
         println("[Warning] No files specified for debugging.")
@@ -95,7 +96,7 @@ trait SwingControllers {
       }
     }
     
-    class HiglighterAndGeneralInfo() extends ControlAdapter {
+    class HighlighterAndGeneralInfo() extends ControlAdapter {
       var activeSelection: AnyRef =  null
       
       override def itemClicked(item: VisualItem, e: MouseEvent) = 
@@ -167,6 +168,28 @@ trait SwingControllers {
       object TreeMainHighlighter extends DefaultHighlightPainter(Color.red)
       object TreeReferenceHighlighter extends DefaultHighlightPainter(Color.green)
       object TargetDebuggingHighlighter extends DefaultHighlightPainter(new Color(204, 204, 204, 80))
+    }
+    
+    object HiddenEvents extends ControlAdapter {
+      private final val PREFIX = "Hidden information (enable filtering to see): \n"
+      override def itemEntered(item: VisualItem, e: MouseEvent) {
+        item match {
+          case node: NodeItem =>
+            // display information about hidden events (if any)
+            val children = node.children_[NodeItem].flatMap { ch =>
+              if (!ch.isVisible && asDataNode(ch).advanced)
+                Some(FilteringOps.map(asDataNode(ch).ev))
+              else None
+            }.toList
+            if (children.nonEmpty)
+              infoViewer.setText(PREFIX + children.distinct.mkString(","))
+          case _ =>
+        }
+      }
+      
+      override def itemExited(item: VisualItem, e: MouseEvent) {
+        infoViewer.setText("")
+      }
     }
     
       
