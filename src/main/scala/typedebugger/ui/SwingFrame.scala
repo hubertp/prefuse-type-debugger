@@ -2,15 +2,14 @@ package scala.typedebugger
 package ui
 
 import java.awt.BorderLayout
-import java.awt.event.{WindowAdapter, WindowEvent, ItemListener}
+import java.awt.event.{WindowAdapter, WindowEvent, ItemListener, ItemEvent}
 import javax.swing.{Action => swingAction, _}
 
 import scala.concurrent.Lock
-import scala.tools.nsc.io.{File => ScalaFile, AbstractFile}
+import scala.tools.nsc.io
 
-abstract class SwingFrame(prefuseComponent: PrefuseComponent,
+class SwingFrame(prefuseComponent: PrefuseComponent,
                           frameName: String,
-                          srcs: List[AbstractFile],
                           filtState: Boolean) {
 
   val jframe = new JFrame(frameName)
@@ -68,6 +67,19 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,
     }
   }
   
-  def filteringBoxListener: ItemListener
+  def filteringBoxListener: ItemListener = FilteringListener
+  private object FilteringListener extends ItemListener {
+      def itemStateChanged(e: ItemEvent) {
+        val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
+        val option = Filtering.withName(checkItem.getText)
+        if (e.getStateChange() == ItemEvent.SELECTED) {
+          prefuseComponent.enableOption(option)
+        } else {
+          prefuseComponent.disableOption(option)
+          prefuseComponent.reRenderDisabledEvents()
+        }
+        prefuseComponent.reRenderProof()
+      }
+    }
 
 }

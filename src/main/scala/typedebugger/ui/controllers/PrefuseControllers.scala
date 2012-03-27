@@ -15,9 +15,6 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable
 
-import UIConfig.{nodesLabel => label} // todo: remove
-
-
 trait PrefuseControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
     
@@ -33,8 +30,7 @@ trait PrefuseControllers {
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isGoal(t: Tuple): Boolean = asDataNode(t).goal
     def isNode(t: Tuple): Boolean = containsDataNode(t)
-    protected def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
-    def eventInfo(item: VisualItem): String = item.get(label).asInstanceOf[UINode[PrefuseEventNode]].fullInfo
+    def eventInfo(item: VisualItem): String = asDataNode(item).fullInfo
     def setGoalPath(item: VisualItem): Unit = {
       def setGoalPath0(node: Option[UINode[PrefuseEventNode]]): Unit = node match {
         case Some(n) if !n.goal =>
@@ -64,23 +60,14 @@ trait PrefuseControllers {
     
     private val advFilter = new mutable.BitSet()
     
-    def enableOption(v: Filtering.Value) {
-      advFilter += v.id
-    }
+    def enableOption(v: Filtering.Value) { advFilter += v.id }
+    def disableOption(v: Filtering.Value) { advFilter -= v.id}
     
-    def disableOption(v: Filtering.Value) {
-      advFilter -= v.id
-    }
-    
-    protected def isOptionEnabled(t: Tuple): Boolean = {
+    def isOptionEnabled(t: Tuple): Boolean = {
       val ev = asDataNode(t).ev
-      if (FilteringOps.map.isDefinedAt(ev)) {
-        advFilter(FilteringOps.map(ev).id)
-      } else {
-        println(" SOME OTHER: " + ev.getClass)
-        false
-      }
+      FilteringOps.map.isDefinedAt(ev) && advFilter(FilteringOps.map(ev).id)
     }
+    def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
     
     // customized predicates
     class InitialGoalPredicate() extends ToExpandInfo {
@@ -175,7 +162,6 @@ trait PrefuseControllers {
     override def getColor(item: VisualItem): Int = {
       val event = retrieveEvent(item)
       event match {
-        // TODO
         case _ if ( m_vis.isInGroup(item, PrefuseComponent.clickedNode)) =>
           ColorLib.rgb(198, 229, 250) // Make it always visible
         case Some(ev: HardErrorEvent) =>

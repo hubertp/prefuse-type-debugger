@@ -11,7 +11,7 @@ import mutable.{ ListBuffer }
 import scala.tools.nsc.symtab
 
 trait PrefusePostProcessors {
-  self: CompilerInfo with IStructure with PrefuseStructure with EventFiltering =>
+  self: CompilerInfo with IStructure with PrefuseStructure =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -38,9 +38,8 @@ trait PrefusePostProcessors {
          false
        case _: TyperTyped1Done => // typing event
          false
-       case _: NamerDone => // bug in compiler? _:NamerDone.type crashes
+       case _: NamerDone => // bug in compiler? NamerDone.type crashes
          false
-  // TODO re-enable
        case _: ImplicitSearchDone =>
          false
        case _: TyperTypedDone =>
@@ -70,21 +69,16 @@ trait PrefusePostProcessors {
       def processChildren(parent: UINode[PrefuseEventNode], child: BaseTreeNode[EventNode]): Option[UINode[PrefuseEventNode]] = {
         val filter = child.children.nonEmpty && child.children.last.ev.isInstanceOf[DoneBlock] && filterOutStructure(parent)
         def validEvent(ev: Event) = (!unvisible.isDefinedAt(ev) || unvisible(ev))
-        // TODO use filter to abandon useless branches
         if (parent == null) {
           val root = new PrefuseEventNode(child.ev, None, t.addRoot())
           root.pfuseNode.set(label, root)
           root.children ++= child.children.map(processChildren(root, _)).flatten
           Some(root)
-//        } else if (advancedFilter(child)) {
-//          // Ignore those considered to be more advanced/hidden
-//          None
         } else if (validEvent(child.ev))  {
-          //println("process-nonroot-child: " + child + " || " + parent.pfuseNode)
           val child1 = new PrefuseEventNode(child.ev, Some(parent), t.addChild(parent.pfuseNode))
           child1.pfuseNode.set(label, child1)
           child1.children ++= child.children.map(processChildren(child1, _)).flatten
-          // mapping of error nodes
+          // mapping of error/goal nodes
           if (errorNodes0.contains(child)) {
             errorNodes += child1
           }
@@ -157,11 +151,6 @@ trait PrefusePostProcessors {
         }
         // Also with adapt-typeTree
       }
-      
-      
-      // Should split into proper advanced and synthetics
-      def advancedFilter(node: BaseTreeNode[_]): Boolean =
-        !settings.advancedDebug.value && FilteringOps.map.isDefinedAt(node.ev)
     }
   }
 }

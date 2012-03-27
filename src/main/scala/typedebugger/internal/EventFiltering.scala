@@ -33,11 +33,10 @@ trait EventFiltering {
       
       private def cachedRes(e: Event): Option[Filtering.Value] = {
         if (!cache.contains(e)) {
-          val res = e match {
+          cache(e) = e match {
               case e: TyperTyped => handleTyperTyped(e)
               case _             => handleRest(e)
             }
-          cache(e) = res
         }
         cache(e)
       }
@@ -64,6 +63,8 @@ trait EventFiltering {
         
       case e: ImprovesAlternativesCheck =>
         Some(Filtering.AltComp)
+      case _ =>
+        None
     }
     
     private def handleTyperTyped(e: TyperTyped): Option[Filtering.Value] = {

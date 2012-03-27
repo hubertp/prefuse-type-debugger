@@ -13,11 +13,9 @@ import java.awt.Color
 import java.awt.event._
 import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 import javax.swing.text.Highlighter
-import javax.swing.{JCheckBoxMenuItem}
 import javax.swing.event.{CaretListener, CaretEvent}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.LinkedHashMap
 import scala.tools.nsc.io
 import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
@@ -31,9 +29,9 @@ trait SwingControllers {
   import PrefusePimping._
   
   class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
-    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", srcs, settings.advancedDebug.value) {
+    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", settings.advancedDebug.value) {
 
-    var lastClicked: Option[NodeItem] = None
+    var lastAccessed: Option[NodeItem] = None
     
     val highlightContr = new HiglighterAndGeneralInfo()
     val cleanupAction = new CleanupAction()
@@ -65,21 +63,6 @@ trait SwingControllers {
     sCodeViewer.addCaretListener(new SelectionListener())
     
     init()
-    
-    def filteringBoxListener = FilteringListener
-    object FilteringListener extends ItemListener {
-      def itemStateChanged(e: ItemEvent) {
-        val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
-        val option = Filtering.withName(checkItem.getText)
-        if (e.getStateChange() == ItemEvent.SELECTED) {
-          prefuseComponent.enableOption(option)
-        } else {
-          prefuseComponent.disableOption(option)
-          prefuseComponent.reRenderDisabledEvents()
-        }
-        prefuseComponent.reRenderProof()
-      }
-    }
     
     // specific adapters, actions
     class SelectionListener() extends CaretListener {
@@ -205,7 +188,7 @@ trait SwingControllers {
 			      } else {
 			        fGroup.addTuple(item)
 			      }
-			      lastClicked = Some(item)
+			      lastAccessed = Some(item)
 	        case _ =>   
 	      }
 	    }
@@ -229,14 +212,9 @@ trait SwingControllers {
 	    
 	    override def keyPressed(k: KeyEvent) {
 	      // pre-filter
-	      val keyCode = k.getKeyCode
-	      /*if (keyCode < 37 || keyCode > 40) {
-	        controlKeyPressed(k)
-	        return
-	      }*/
-	        
-	      val last: NodeItem = if (lastClicked.isDefined)
-	          lastClicked.get
+	      val keyCode = k.getKeyCode	        
+	      val last: NodeItem = if (lastAccessed.isDefined)
+	          lastAccessed.get
 	        else {
 	          // Find bottom most event
 	          val vis = prefuseComponent.getVisualization
@@ -317,7 +295,7 @@ trait SwingControllers {
 	          AddGoal.addClickedItem(first, vis)
 	          highlightContr.itemEntered(first, null)
 	          // need to schedule the action by hand since keycontrol doesn't do it
-	          vis.run("filter") // use reRenderProof
+	          prefuseComponent.reRenderDisabledEvents()
 	        case _ =>
 	          println("incorrect search " + n)
 	      }
@@ -449,7 +427,7 @@ trait SwingControllers {
 	          eNode0 = eNode0.parent.get
 	        }
 	      }
-	      lastClicked = Some(node)        
+	      lastAccessed = Some(node)        
 	    }
 	  }
 	  

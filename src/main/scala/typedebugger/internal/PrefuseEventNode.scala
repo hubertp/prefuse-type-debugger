@@ -47,21 +47,15 @@ trait PrefuseStructure extends IStructure {
           case evTyped: TyperTyped =>
             //TODO This still needs adjustment
             val tpe = if (evTyped.tree.tpe != null) evTyped.tree.tpe else if (evTyped.tree.symbol != null) evTyped.tree.symbol.tpe else null
-            /*(evTyped formattedString PrefuseEventNode.fmtFull) + "\n" + 
-            "Type of tree: [ " + tpe + " ] expected: [ " + evTyped.pt + " ]" + 
-            "\nDebugging info: " + evTyped.tree.getClass +
-            "\nEvent toString: " + evTyped.eventString*/
             evTyped.expl + "\n\n" +
             "Typechecking tree: \n " +
             snapshotAnyString(evTyped.tree)(evTyped.time) + "\n\n" +
             (if (settings.debugTD.value && evTyped.tree != null) "Tree class " + evTyped.tree.getClass + " with sym " + evTyped.tree.symbol else "") +
             "\nExpected type: " + (if (evTyped.pt == WildcardType) "None" else snapshotAnyString(evTyped.pt)(evTyped.time)) +
             (if (tpe != null) "\nType of tree set to: " + snapshotAnyString(tpe)(evTyped.time) else " Tree not yet typed")
-            //"\nTree class " + evTyped.tree.getClass + " pos " + evTyped.tree.pos
 
           case _ =>
             EventDescriptors(ev).fullInfo
-            //ev formattedString Formatting.fmtFull
         }
       else "Typecheck full tree" // root
     

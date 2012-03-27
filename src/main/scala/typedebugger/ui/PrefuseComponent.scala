@@ -27,10 +27,8 @@ import javax.swing.{Action => swingAction, _}
 import javax.swing.event.TreeModelListener
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ ListBuffer, Stack, HashMap}
+import scala.collection.mutable.HashMap
 
-
-//import javax.swing.{Action => swingAction, _}
 import prefuse.render._
 
 
@@ -402,28 +400,19 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     }
   }
 
-  
-  // Remove all nodes (and outgoing/incoming edges) that are in the toRemoveGoals group
-  // todo: this should be an object but there is a bug in the compiler
-  // which I don't have time to track down
-  class UnfocusOnItems extends Action {
-    //val vis = m_vis // to avoid illegalaccesserror during runtime (bug in compiler?)
-   
-    // todo: again, this should be an object
-    class ToRemovePred extends AbstractPredicate {
+  class UnfocusOnItems extends Action { 
+    object ToRemovePred extends AbstractPredicate {
       override def getBoolean(t: Tuple): Boolean = {
         // because we added nodeItem to the list, not visualItem which 't' is
         val ts = m_vis.getFocusGroup(toRemoveNodes)
         ts != null && isNode(t) && ts.containsTuple(extractPrefuseNode(t))
       }
     }
-    
-    lazy val pred = new ToRemovePred // TODO: make it val
 
     def run(frac: Double) {
       val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
       if (ts != null) {
-        for (item <- m_vis.items_[NodeItem](pred)) {
+        for (item <- m_vis.items_[NodeItem](ToRemovePred)) {
           PrefuseLib.updateVisible(item, false)
           item.setExpanded(false)
           item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
@@ -459,12 +448,12 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
             item.setExpanded(true)
             item.childEdges_[EdgeItem]().foreach { edge =>
               val targetNode = edge.getTargetNode()
-              if (!isAdvancedOption(targetNode) || isOptionEnabled(targetNode))
+              if (!edge.isVisible && (!isAdvancedOption(targetNode) || isOptionEnabled(targetNode)))
                 PrefuseLib.updateVisible(edge, true)
             }
             // neighbors should be added to separate group
             item.outNeighbors_[NodeItem]().foreach { neighbor =>
-              if (!isAdvancedOption(neighbor) || isOptionEnabled(neighbor))
+              if (!neighbor.isVisible && (!isAdvancedOption(neighbor) || isOptionEnabled(neighbor)))
                 PrefuseLib.updateVisible(neighbor, true)
             }
             
