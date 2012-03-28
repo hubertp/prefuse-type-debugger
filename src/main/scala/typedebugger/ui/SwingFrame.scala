@@ -59,14 +59,26 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
   }
 
   def addFilteringOptions(parent: JMenu) {
-    Filtering.values foreach { v =>
-      val item = new JCheckBoxMenuItem(v.toString)
-      if (filtState) {
-        item.setState(filtState)
-        prefuseComponent.adv.enableOption(v)
+    val grouped = Filtering.values groupBy {
+      v => v match {
+        case g: Filtering.GroupVal =>
+          g.group
+        case _ =>
+          Groups.NoGroup
       }
-      item.addItemListener(filteringBoxListener)
-      parent.add(item)
+    }
+    grouped foreach { g =>
+      val groupMenu = new JMenu(g._1.toString)
+      g._2 foreach { v =>
+        val item = new JCheckBoxMenuItem(v.toString)
+        if (filtState) {
+          item.setState(filtState)
+          prefuseComponent.adv.enableOption(v)
+        }
+        item.addItemListener(filteringBoxListener)
+        groupMenu.add(item)
+      }
+      parent.add(groupMenu)
     }
   }
   

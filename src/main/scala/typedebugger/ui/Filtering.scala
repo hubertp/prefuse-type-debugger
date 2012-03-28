@@ -1,7 +1,21 @@
 package scala.typedebugger
 package ui
 
-object Filtering extends Enumeration with ImplicitEvents {
+object Groups extends Enumeration {
+  type Group = Value
+  implicit val Implicits, Synthetics, NoGroup = Value
+}
+
+import Groups.Group
+
+object Filtering extends Enumeration with ImplicitFiltering with SyntheticFiltering {
+  class GroupVal(i: Int, name: String, parent: Group) extends Val(i, name) {
+    def group: Group = parent
+  }
+  
+  protected def GroupValue(name: String)(implicit parent: Group) =
+    new GroupVal(nextId, name, parent)
+  
   val Subtyping      = Value("subtyping")
   val SubCheck       = Value("subtype checks")
   val AltComp        = Value("compare alternatives")
@@ -10,15 +24,23 @@ object Filtering extends Enumeration with ImplicitEvents {
   val ProtoTpeArgs   = Value("inferred prototype arguments")
   val ValidateParent = Value("validate parent class (scala.ScalaObject or java.lang.Object)")
   val ConvConstr     = Value("convert constructor body")
-  
-  val TemplateSynth  = Value("synthetic template")
-  val DefSynth       = Value("synthetic definition")
-  val Constr         = Value("constructor")
 }
 
-trait ImplicitEvents extends Enumeration {
+trait ImplicitFiltering {
+  self: Filtering.type =>
+
+  import Groups.Implicits
+
+  val ImplElig       = GroupValue("implicits eligibility")
+  val VerifyImpl     = GroupValue("verify implicit")
+}
+
+trait SyntheticFiltering {
   self: Filtering.type =>
   
-  val ImplElig       = Value("implicits eligibility")
-  val VerifyImpl     = Value("verify implicit")
+  import Groups.Synthetics
+  
+  val TemplateSynth  = GroupValue("synthetic template")
+  val DefSynth       = GroupValue("synthetic definition")
+  val Constr         = GroupValue("constructor")
 }
