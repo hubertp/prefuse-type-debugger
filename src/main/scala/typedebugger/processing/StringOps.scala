@@ -55,7 +55,7 @@ trait StringOps extends AnyRef
                 with TypesEventsOps
                 with Descriptors {
 
-    private val cache = new mutable.WeakHashMap[Int, WeakReference[Descriptor]]()
+    private[this] val cache = new mutable.WeakHashMap[Int, WeakReference[Descriptor]]()
     
     def clearCache() {
       cache.clear()

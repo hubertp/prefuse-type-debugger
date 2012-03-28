@@ -17,19 +17,10 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
     with DebuggerCompilationUnits
     with interactive.RangePositions
     with DebuggerPositions
-    with internal.Snapshots {
+    with DebuggerStringsRep
+    with Snapshots {
     
   val unitOfFile = new mutable.LinkedHashMap[io.AbstractFile, DebuggerCompilationUnit]()
-  
-  trait DebuggerStrings extends Strings {
-    self: EventModel =>
-      
-    // TODO provide custom printing
-    abstract override protected def anyStringInternal(x: Any): String = x match {
-      case x: Tree => super.treeString(x)
-      case _       => super.anyStringInternal(x)
-    }
-  }
   
   override def EVGlobal: EventModel with EventPostInit = new EVGlobal with DebuggerStrings {
     override def instrumentingOn = instrumenting

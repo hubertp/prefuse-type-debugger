@@ -35,9 +35,11 @@ trait SwingControllers {
     
     val highlightContr = new HighlighterAndGeneralInfo()
     val cleanupAction = new CleanupAction()
+    
+    private def codeHighlighter = sCodeViewer.getHighlighter()
+    sCodeViewer.addCaretListener(new SelectionListener())
    
-    def init() {
-      // add listeners
+    def initPrefuseListeners() {
       prefuseComponent.addControlListener(highlightContr)
       prefuseComponent.addControlListener(new AddGoal())
       prefuseComponent.addControlListener(new LinkNode())
@@ -59,11 +61,7 @@ trait SwingControllers {
 
       sCodeViewer.setText(src)
     }
-    
-    private def codeHighlighter = sCodeViewer.getHighlighter()
-    sCodeViewer.addCaretListener(new SelectionListener())
-    
-    init()
+
     
     // specific adapters, actions
     class SelectionListener() extends CaretListener {
@@ -91,7 +89,9 @@ trait SwingControllers {
               targetedCompile(position)
             } else
               debug("invalid selection")
+
           case _ => // not supported yet
+
         }
       }
     }
@@ -231,69 +231,80 @@ trait SwingControllers {
 	  object KeyPressAddGoal extends ControlAdapter {
 	    
 	    val validKeys = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT)
+	    def lastNode: Option[NodeItem] =
+	      if (lastAccessed.isDefined)
+          lastAccessed
+        else {
+          // Find bottom most event
+          val vis = prefuseComponent.getVisualization
+          val ts = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+          val goals = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
+          ts.tuples().find {
+            case item: NodeItem =>
+              val item1 = asDataNode(item)
+              !item1.parent.isDefined || !goals.containsTuple(item1.parent.get.pfuseNode)
+            case _ => false } match {
+            case Some(top: NodeItem) =>
+              top.children_[NodeItem].find (asDataNode(_).goal) match {
+                case Some(child) =>
+                  Some(child)
+                case _ =>
+                  println("[warning] cannot navigate, found bug")
+                  // bug
+                  None
+              }
+            case None =>
+              //prefuseComponent.treeRoot()
+              None
+            }
+        }
+
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
-	    override def keyPressed(k: KeyEvent) {
-	      // pre-filter
-	      val keyCode = k.getKeyCode	        
-	      val last: NodeItem = if (lastAccessed.isDefined)
-	          lastAccessed.get
-	        else {
-	          // Find bottom most event
-	          val vis = prefuseComponent.getVisualization
-	          val ts = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-	          val goals = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
-	          ts.tuples().find {
-	            case item: NodeItem =>
-	              val item1 = asDataNode(item)
-	              !item1.parent.isDefined || !goals.containsTuple(item1.parent.get.pfuseNode)
-	            case _ => false } match {
-	            case Some(top: NodeItem) =>
-	              top.children_[NodeItem].find (asDataNode(_).goal) match {
-	                case Some(child) =>
-	                  child
-	                case _ =>
-	                  println("[warning] cannot navigate, found bug")
-	                  // bug
-	                  return
-	              }
-	            case None =>
-	              prefuseComponent.treeRoot() // fixme bug?
-	              return
-	          }
-	        }
-	
-	      val vis = last.getVisualization
-	      val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-	
-	      prefuseComponent.tooltipController.clearTooltip()
-	      keyCode match {
-	        case KeyEvent.VK_DOWN =>
-	          // expand down (if necessary)
-	          val n = asDataNode(last)
-	          if (n.parent.isDefined)
-	            navigate(n.parent.get.pfuseNode, vis)
-	          
-	        case KeyEvent.VK_LEFT =>
-	          // expand left neighbour (if possible)
-	          val prevSibling = last.getPreviousSibling()
-	          if (prevSibling != null)
-	            navigate(asDataNode(prevSibling).pfuseNode, vis)
-	          
-	        case KeyEvent.VK_RIGHT =>
-	          // expand right neighbour (if possible)
-	          val nextSibling = last.getNextSibling()
-	          if (nextSibling != null)
-	            navigate(asDataNode(nextSibling).pfuseNode, vis)
-	
-	        case KeyEvent.VK_UP =>
-	          if (last.getChildCount() > 0)
-	            navigate(asDataNode(last.getFirstChild()).pfuseNode, vis)
-	            
-	        case other =>
-	          controlKeyPressed(other, last)
-	          
-	      }
+	    override def keyPressed(k: KeyEvent): Unit = lastNode match {
+	      case Some(last) =>
+	        debug("Key pressed. Last accessed event " + last)
+          val keyCode = k.getKeyCode	
+  	      val vis = last.getVisualization
+  	      val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+  	
+  	      prefuseComponent.tooltipController.clearTooltip()
+  	      keyCode match {
+  	        case KeyEvent.VK_DOWN =>
+  	          // expand down (if necessary)
+  	          val n = asDataNode(last)
+  	          if (n.parent.isDefined)
+  	            navigate(n.parent.get.pfuseNode, vis)
+  	          
+  	        case KeyEvent.VK_LEFT =>
+  	          // expand left neighbour (if possible)
+  	          val prevSibling = last.getPreviousSibling()
+  	          if (prevSibling != null)
+  	            navigate(asDataNode(prevSibling).pfuseNode, vis)
+  	          
+  	        case KeyEvent.VK_RIGHT =>
+  	          // expand right neighbour (if possible)
+  	          val nextSibling = last.getNextSibling()
+  	          if (nextSibling != null)
+  	            navigate(asDataNode(nextSibling).pfuseNode, vis)
+  	
+  	        case KeyEvent.VK_UP =>
+  	          if (last.getChildCount() > 0)
+  	            navigate(asDataNode(last.getFirstChild()).pfuseNode, vis)
+  
+  	        case KeyEvent.VK_E  => // expand
+  	          expand(last)
+  
+  	        case KeyEvent.VK_C  => // collapse
+  	          collapse(last)
+  
+  	        case other =>
+  	          controlKeyPressed(other, last)
+
+          }
+
+  	    case None =>
+
 	    }
 	    
 	    def controlKeyPressed(k: Int, node: NodeItem) = k match {
@@ -318,10 +329,34 @@ trait SwingControllers {
 	          AddGoal.addClickedItem(first, vis)
 	          highlightContr.itemEntered(first, null)
 	          // need to schedule the action by hand since keycontrol doesn't do it
-	          prefuseComponent.reRenderDisabledEvents()
+	          prefuseComponent.reRenderView()
 	        case _ =>
 	          println("incorrect search " + n)
 	      }
+	    }
+	    
+	    def expand(last: NodeItem) = {
+	      val nodes = advancedNodes(!_.isVisible, last) 
+	      if (nodes.nonEmpty) {
+	        nodes.distinct foreach prefuseComponent.adv.enableOption
+	        prefuseComponent.reRenderView()
+	      }
+	    }
+	    
+	    def collapse(last: NodeItem) = {
+        val nodes = advancedNodes(_.isVisible, last) 
+        if (nodes.nonEmpty) {
+          nodes.distinct foreach prefuseComponent.adv.disableOption
+          prefuseComponent.reRenderView()
+        }
+      }
+	    
+	    private def advancedNodes(visibleState: NodeItem => Boolean, last: NodeItem) = {
+	      last.children_[NodeItem] flatMap { ch =>
+	        if (visibleState(ch) && asDataNode(ch).advanced)
+	          Some(FilteringOps.map(asDataNode(ch).ev))
+	        else None
+	      } toList
 	    }
 	  }
 	  
@@ -429,8 +464,7 @@ trait SwingControllers {
 	      
 	      // is any of its children a goal
 	      // it has to be already expanded, so this is valid
-	      val hasGoalChild = eNode.goal || node.outNeighbors_[NodeItem]().exists(asDataNode(_).goal)
-	      if (hasGoalChild) {
+	      if (eNode.goal || node.outNeighbors_[NodeItem]().exists(asDataNode(_).goal)) {
 	        // we are dealing with a goal or its parent
 	        eNode.parent match {
 	          case Some(parent) =>

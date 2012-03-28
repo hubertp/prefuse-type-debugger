@@ -63,7 +63,7 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
       val item = new JCheckBoxMenuItem(v.toString)
       if (filtState) {
         item.setState(filtState)
-        prefuseComponent.enableOption(v)
+        prefuseComponent.adv.enableOption(v)
       }
       item.addItemListener(filteringBoxListener)
       parent.add(item)
@@ -72,17 +72,17 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
   
   def filteringBoxListener: ItemListener = FilteringListener
   private object FilteringListener extends ItemListener {
-      def itemStateChanged(e: ItemEvent) {
-        val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
-        val option = Filtering.withName(checkItem.getText)
-        if (e.getStateChange() == ItemEvent.SELECTED) {
-          prefuseComponent.enableOption(option)
-        } else {
-          prefuseComponent.disableOption(option)
-          prefuseComponent.reRenderDisabledEvents()
-        }
-        prefuseComponent.reRenderProof()
+    def itemStateChanged(e: ItemEvent) {
+      val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
+      val option = Filtering.withName(checkItem.getText)
+      if (e.getStateChange() == ItemEvent.SELECTED) {
+        prefuseComponent.adv.enableOption(option)
+      } else {
+        prefuseComponent.adv.disableOption(option)
+        prefuseComponent.reRenderDisabledEvents()
       }
+      prefuseComponent.reRenderView()
     }
+  }
 
 }

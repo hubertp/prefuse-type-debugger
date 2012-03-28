@@ -61,6 +61,13 @@ trait ToExpandInfo {
   def isGoalOrSibling(t: VisualItem): (Boolean, Boolean)
 }
 
+trait AdvancedOptions {
+  def enableOption(v: Filtering.Value): Unit
+  def disableOption(v: Filtering.Value): Unit
+  def isOptionEnabled(t: Tuple): Boolean
+  def isAdvancedOption(t: Tuple): Boolean  
+}
+
 abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips {
   import PrefuseComponent._
   import PrefusePimping._
@@ -91,11 +98,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   private val hoverController = new HoverTooltip() 
   def tooltipController = hoverController
   
-  def enableOption(v: Filtering.Value): Unit
-  def disableOption(v: Filtering.Value): Unit
-  protected def isOptionEnabled(t: Tuple): Boolean
-  protected def isAdvancedOption(t: Tuple): Boolean
-  
+  def adv: AdvancedOptions
 
   def init () {
     setBackground(backgroundColor)
@@ -230,7 +233,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     m_vis.run("advancedOptions")
   }
   
-  def reRenderProof() {
+  def reRenderView() {
     m_vis.run("filter")
   }
   
@@ -448,12 +451,12 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
             item.setExpanded(true)
             item.childEdges_[EdgeItem]().foreach { edge =>
               val targetNode = edge.getTargetNode()
-              if (!edge.isVisible && (!isAdvancedOption(targetNode) || isOptionEnabled(targetNode)))
+              if (!edge.isVisible && (!adv.isAdvancedOption(targetNode) || adv.isOptionEnabled(targetNode)))
                 PrefuseLib.updateVisible(edge, true)
             }
             // neighbors should be added to separate group
             item.outNeighbors_[NodeItem]().foreach { neighbor =>
-              if (!neighbor.isVisible && (!isAdvancedOption(neighbor) || isOptionEnabled(neighbor)))
+              if (!neighbor.isVisible && (!adv.isAdvancedOption(neighbor) || adv.isOptionEnabled(neighbor)))
                 PrefuseLib.updateVisible(neighbor, true)
             }
             
@@ -566,7 +569,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     def run(frac: Double) {
       val nodes = m_vis.items_[NodeItem](Visualization.ALL_ITEMS, OnlyNodes)
       for (node <- nodes) {
-        if (node.isVisible && isAdvancedOption(node) && !isOptionEnabled(node)) {
+        if (node.isVisible && adv.isAdvancedOption(node) && !adv.isOptionEnabled(node)) {
           PrefuseLib.updateVisible(node, false)
           node.setExpanded(false)
           node.inEdges_[EdgeItem]() foreach { edge =>

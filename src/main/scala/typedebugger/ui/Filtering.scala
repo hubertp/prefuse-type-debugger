@@ -1,10 +1,9 @@
 package scala.typedebugger
 package ui
 
-object Filtering extends Enumeration {
+object Filtering extends Enumeration with ImplicitEvents {
   val Subtyping      = Value("subtyping")
   val SubCheck       = Value("subtype checks")
-  val ImplElig       = Value("implicits eligibility")
   val AltComp        = Value("compare alternatives")
   val QuickAltFilter = Value("quick alternatives filtering")
   val TypesComp      = Value("types compatibility")
@@ -15,4 +14,11 @@ object Filtering extends Enumeration {
   val TemplateSynth  = Value("synthetic template")
   val DefSynth       = Value("synthetic definition")
   val Constr         = Value("constructor")
+}
+
+trait ImplicitEvents extends Enumeration {
+  self: Filtering.type =>
+  
+  val ImplElig       = Value("implicits eligibility")
+  val VerifyImpl     = Value("verify implicit")
 }

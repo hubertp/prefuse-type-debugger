@@ -20,7 +20,7 @@ trait CompilerInfo {
 trait Tools {
   self: CompilerInfo =>
     
-  trait CompilerWithInstrumentation {
+  trait CompilerWithEventInfo {
     def run(srcs: List[io.AbstractFile]): Boolean
     def runTargeted(pos: global.Position, expandPos: global.Position): Boolean
   }

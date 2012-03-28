@@ -30,7 +30,7 @@ abstract class TypeBrowser extends AnyRef
   
   import UIConfig.{nodesLabel => label}
   
-  private var builder: CompilerWithInstrumentation {
+  private var builder: CompilerWithEventInfo {
     def root: BaseTreeNode[EventNode]
     def initialGoals: List[BaseTreeNode[EventNode]]
   } = _
@@ -115,8 +115,9 @@ abstract class TypeBrowser extends AnyRef
     val sources = realSources(srcs)
     val goals = compileFullAndProcess(sources, settings, filtr)
     prefuseController = new PrefuseController(prefuseTree, goals)
-    prefuseController.init() // can move later?
+    prefuseController.init()
     val swingController = new TypeDebuggerController(prefuseController, sources)
+    swingController.initPrefuseListeners()
     val lock = new Lock()
     swingController.createFrame(lock)
     //frame.createFrame(lock)

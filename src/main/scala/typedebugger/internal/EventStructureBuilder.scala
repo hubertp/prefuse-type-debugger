@@ -9,7 +9,7 @@ trait StructureBuilders {
     
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
-  class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends CompilerWithInstrumentation {
+  class CompilerRunWithEvents(nodesLabel: String, filt: global.EV.Filter) extends CompilerWithEventInfo {
     import global.{EV, Position, NoPosition}
     import EV._
     
@@ -48,16 +48,9 @@ trait StructureBuilders {
       }
       evNode
     }
-    
-    //private def updateChildren(node: BaseTreeNode[EventNode], child0: BaseTreeNode[EventNode]) {
-    //  node.children += child0
-      //node.children = child0 +: node.children
-    //}
    
     // analyze the logged events and build necessary structure for the tree
     def reportWithLevel(ev: Event, level: Int)(implicit statPos: Position = NoPosition) {
-      // This relies on the fact that done blocks are not filtered out
-  //      assert(previousLevel <= level, "prev: " + previousLevel + " level " + level)
       implicit def nodeWithLevel(a: BaseTreeNode[EventNode]): (BaseTreeNode[EventNode], Int) = (a, level)
       implicit def onlyNode(a: Tuple2[BaseTreeNode[EventNode], Int]) = a._1
 
@@ -66,7 +59,7 @@ trait StructureBuilders {
           // Event that is already in an enclosed block
           // This relies on the fact that blocks are correctly opened/closed
           // and events that are opening blocks are not filtered (otherwise we can get some inconsistency)
-          // TODO: we need to remove the above problem (see RecoveryEvent)
+          // RecoveryEvent to some extent helps in this case, when we are dealing with exceptions.
           val top = currentNodes.top
           if (top.children.isEmpty) {
             // This is the first 

@@ -24,6 +24,19 @@ trait PrefuseControllers {
   import global.{Tree => STree, _}
   import EV._
   
+  class AdvancedOptionsController extends AdvancedOptions {
+    private val advFilter = new mutable.BitSet()
+    
+    def enableOption(v: Filtering.Value) { advFilter += v.id }
+    def disableOption(v: Filtering.Value) { advFilter -= v.id}
+    
+    def isOptionEnabled(t: Tuple): Boolean = {
+      val ev = asDataNode(t).ev
+      FilteringOps.map.isDefinedAt(ev) && advFilter(FilteringOps.map(ev).id)
+    }
+    def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
+  }
+  
   class PrefuseController(pTree: Tree, goals0: List[UINode[PrefuseEventNode]]) extends PrefuseComponent(pTree) {
       // methods that are global specific
     def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes)
@@ -58,16 +71,7 @@ trait PrefuseControllers {
       showPrefuseDisplay()
     }
     
-    private val advFilter = new mutable.BitSet()
-    
-    def enableOption(v: Filtering.Value) { advFilter += v.id }
-    def disableOption(v: Filtering.Value) { advFilter -= v.id}
-    
-    def isOptionEnabled(t: Tuple): Boolean = {
-      val ev = asDataNode(t).ev
-      FilteringOps.map.isDefinedAt(ev) && advFilter(FilteringOps.map(ev).id)
-    }
-    def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
+    val adv: AdvancedOptions = new AdvancedOptionsController()
     
     // customized predicates
     class InitialGoalPredicate() extends ToExpandInfo {
