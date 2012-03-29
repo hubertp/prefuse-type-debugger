@@ -1,11 +1,14 @@
 package scala.typedebugger
 package processing
 
+import util.StringFormatter
+
 trait TyperStringOps {
   self: StringOps with internal.CompilerInfo =>
     
   import global._
   import EV._
+  import StringFormatter._ // shouldn't implicit figure out it automatically
     
   trait TyperEventsOps {
     self: Descriptors =>
@@ -403,9 +406,9 @@ trait TyperStringOps {
       case e:SuccessTypedApplyFunTyper =>
         new Descriptor() {
           def basicInfo = "Successfully typed function as\n " + snapshotAnyString(e.expectedFunPt)
-          def fullInfo  = "Function \n" + snapshotAnyString(e.tree) + " \n" +
-                          "was typed as \n" + snapshotAnyString(e.expectedFunPt) + "\n" +
-                          "in the context of expected type " + snapshotAnyString(e.pt)
+          def fullInfo:StringFormatter  = ("Function \n%tree\n" +
+                          "was typed as \n%tpe\n" +
+                          "in the context of expected type %tpe").dFormat(snapshotAnyString(e.tree), snapshotAnyString(e.expectedFunPt), snapshotAnyString(e.pt))
         }
         
       case e:TypedApplyToAssignment =>

@@ -55,7 +55,7 @@ trait PrefuseStructure extends IStructure {
             (if (tpe != null) "\nType of tree set to: " + snapshotAnyString(tpe)(evTyped.time) else " Tree not yet typed")
 
           case _ =>
-            EventDescriptors(ev).fullInfo
+            EventDescriptors(ev).fullInfo.normalize
         }
       else "Typecheck full tree" // root
     

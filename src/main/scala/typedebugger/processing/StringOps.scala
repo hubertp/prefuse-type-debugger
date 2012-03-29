@@ -5,6 +5,8 @@ import scala.tools.nsc.symtab
 import scala.collection.mutable
 import scala.ref.WeakReference
 
+import util.StringFormatter
+
 trait StringOps extends AnyRef
                 with TyperStringOps
                 with AdaptStringOps
@@ -189,9 +191,10 @@ trait StringOps extends AnyRef
          }
         //"Typecheck member in template"
 
-      case TypeExplicitTreeReturnType(_, tpe) =>
+      case TypeExplicitTreeReturnType(_, tpeTree) =>
         //"Typecheck return type " + snapshotAnyString(tpe) + " of the function"
-        "Typecheck explicit return type"
+        if (tpeTree.tpe.resultType.typeSymbol == definitions.UnitClass) "Typecheck Unit return type"
+        else "Typecheck explicit return type"
 
       case _: TypeDefConstr => 
         "Typecheck body of the constructor"
@@ -476,14 +479,14 @@ trait StringOps extends AnyRef
     abstract class Descriptor() {
       def basicInfo: String
       lazy val lazyBasicInfo = basicInfo
-      def fullInfo: String
+      def fullInfo: StringFormatter
       lazy val lazyFullInfo = fullInfo
       def info(kind: Boolean) = if (kind) lazyBasicInfo else lazyFullInfo
     }
     
     class DefaultDescriptor(what: String) extends Descriptor {
       def basicInfo: String = "(" + what + " | not implemented)"
-      def fullInfo: String = "(" + what + " | not implemented)"
+      def fullInfo: StringFormatter = "(" + what + " | not implemented)"
     }
   }
 }
