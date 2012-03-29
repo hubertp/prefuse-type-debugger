@@ -1,7 +1,7 @@
 package scala.typedebugger
 package ui
 
-import java.awt.BorderLayout
+import java.awt.{ BorderLayout, Dimension }
 import java.awt.event.{WindowAdapter, WindowEvent, ItemListener, ItemEvent}
 import javax.swing.{Action => swingAction, _}
 
@@ -17,7 +17,7 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
 
   val ASTViewer = new JTextArea(30, 90)
   val sCodeViewer = new JTextArea(30, 30)
-  val infoViewer = new JTextArea(2, 5)
+  val statusBar = new JLabel()
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -32,10 +32,10 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
     topSplitPane.setResizeWeight(0.7)
     
     topPane.add(topSplitPane)
-    val codeViewPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(sCodeViewer), infoViewer)
-    codeViewPane.setResizeWeight(1.0)
-    codeViewPane.setDividerLocation(0.1)
-    tabFolder.addTab("Tree", null, codeViewPane)
+//    val codeViewPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(sCodeViewer), infoViewer)
+//    codeViewPane.setResizeWeight(1.0)
+//    codeViewPane.setDividerLocation(0.1)
+    tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
     sCodeViewer.setEditable(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
     
@@ -51,6 +51,10 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
     
     menuBar.add(viewMenu)
     
+    statusBar.setPreferredSize(new Dimension(topPane.getWidth, 15))
+    statusBar.setHorizontalAlignment(SwingConstants.LEFT)
+    topPane.add(statusBar, BorderLayout.SOUTH)
+    topPane.setBorder(new border.BevelBorder(border.BevelBorder.LOWERED))
     
     jframe.setJMenuBar(menuBar)
     jframe.getContentPane().add(topPane)

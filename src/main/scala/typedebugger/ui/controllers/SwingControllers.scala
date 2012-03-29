@@ -171,7 +171,7 @@ trait SwingControllers {
     }
     
     object HiddenEvents extends ControlAdapter {
-      private final val PREFIX = "Hidden information (enable filtering to see): \n"
+      private final val PREFIX = "Filtered debugging: "
       override def itemEntered(item: VisualItem, e: MouseEvent) {
         item match {
           case node: NodeItem =>
@@ -182,13 +182,13 @@ trait SwingControllers {
               else None
             }.toList
             if (children.nonEmpty)
-              infoViewer.setText(PREFIX + children.distinct.mkString(","))
+              statusBar.setText(PREFIX + children.distinct.mkString(","))
           case _ =>
         }
       }
       
       override def itemExited(item: VisualItem, e: MouseEvent) {
-        infoViewer.setText("")
+        statusBar.setText("")
       }
     }
     

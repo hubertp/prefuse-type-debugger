@@ -45,26 +45,31 @@ trait EventFiltering {
     private def handleRest(e: Event): Option[Filtering.Value] = e match {
       case e: ProtoTypeArgsDoTypedApply =>
         Some(Filtering.ProtoTpeArgs)
-        
-      case e: ImplicitsEligibility =>
-        Some(Filtering.ImplElig)
-    
+
       case e: CheckTypesCompatibility =>
         Some(Filtering.TypesComp)
-        
+
       case e: SubTypeCheck =>
         Some(Filtering.SubCheck)
-        
+
       case e: Subtyping =>
         Some(Filtering.Subtyping)
-        
+
       case e: OverloadedSymDoTypedApply =>
         Some(Filtering.QuickAltFilter)
-        
+
       case e: ImprovesAlternativesCheck =>
         Some(Filtering.AltComp)
+
+      case e: ImplicitsEligibility =>
+        Some(Filtering.ImplElig)
+
+      case e: VerifyImplicit =>
+        Some(Filtering.VerifyImpl)
+
       case _ =>
         None
+
     }
     
     private def handleTyperTyped(e: TyperTyped): Option[Filtering.Value] = {
@@ -82,6 +87,7 @@ trait EventFiltering {
             case _ =>
               None
           }
+
       }
     }
   }
