@@ -43,7 +43,7 @@ trait PrefuseControllers {
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isGoal(t: Tuple): Boolean = asDataNode(t).goal
     def isNode(t: Tuple): Boolean = containsDataNode(t)
-    def eventInfo(item: VisualItem): String = asDataNode(item).fullInfo
+    def eventInfo(item: VisualItem): util.StringFormatter = asDataNode(item).fullInfo
     def setGoalPath(item: VisualItem): Unit = {
       def setGoalPath0(node: Option[UINode[PrefuseEventNode]]): Unit = node match {
         case Some(n) if !n.goal =>

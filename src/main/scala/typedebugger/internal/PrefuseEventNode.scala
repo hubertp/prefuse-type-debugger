@@ -15,7 +15,7 @@ trait PrefuseStructure extends IStructure {
   
   trait UINodeLike[T, Container[X]] extends BaseTreeNodeLike[T, Container] {
     val pfuseNode: Node
-    def fullInfo: String
+    def fullInfo: util.StringFormatter
     var goal: Boolean
     def advanced: Boolean
   }
@@ -55,7 +55,7 @@ trait PrefuseStructure extends IStructure {
             (if (tpe != null) "\nType of tree set to: " + snapshotAnyString(tpe)(evTyped.time) else " Tree not yet typed")
 
           case _ =>
-            EventDescriptors(ev).fullInfo.normalize
+            EventDescriptors(ev).fullInfo
         }
       else "Typecheck full tree" // root
     

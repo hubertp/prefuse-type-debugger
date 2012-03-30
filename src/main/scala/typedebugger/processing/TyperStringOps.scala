@@ -406,9 +406,8 @@ trait TyperStringOps {
       case e:SuccessTypedApplyFunTyper =>
         new Descriptor() {
           def basicInfo = "Successfully typed function as\n " + snapshotAnyString(e.expectedFunPt)
-          def fullInfo:StringFormatter  = ("Function \n%tree\n" +
-                          "was typed as \n%tpe\n" +
-                          "in the context of expected type %tpe").dFormat(snapshotAnyString(e.tree), snapshotAnyString(e.expectedFunPt), snapshotAnyString(e.pt))
+          def fullInfo  = ("Function %tree was typed as %tpe " +
+                          "in the context of the expected type %tpe").dFormat(Some("Typed function"), snapshotAnyString(e.tree), snapshotAnyString(e.expectedFunPt), snapshotAnyString(e.pt))
         }
         
       case e:TypedApplyToAssignment =>

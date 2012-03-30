@@ -1,38 +1,43 @@
 package scala.typedebugger
 package util
 
-case class StringFormatter(text: List[String], args: List[CustomArg]) {
+case class StringFormatter(text: List[String], title: Option[String], args: List[CustomArg]) {
   def normalize: String = {
-    // perform the substitution of tags
-    // text.lenght = args.length + 1
-    (text zip args).foldRight(text.last){(x, y) => x._1 + x._2 + y}
-  }
+    args match {
+      case Nil => text.mkString
+      case _   =>
+        (text zip args).foldRight(text.last){(x, y) => x._1 + x._2 + y}    
+    }
+  }  
 }
 
 object StringFormatter {
   implicit def toSimpleFormatter(text: String): StringFormatter = {
-    StringFormatter(List(text), Nil)
+    StringFormatter(List(text), None, Nil)
   }
   
   implicit def toFormatter(text: String): FormatableText = new FormatableText(text)
   
   class FormatableText(text0: String) {
-    def dFormat(args: String*): StringFormatter = {
+    
+    def dFormat(args: String*): StringFormatter = dFormat(None, (args: _*))
+    
+    def dFormat(title: Option[String], args: String*): StringFormatter = {
       // count special tags in text0
       // categorize all the arguments appropriately
-      val patt = ("(" + TreeText.tag + "|" + TypeText.tag + "|" + SymText.tag + ")").r
+      val patt = List(TreeText, TypeText, SymText).map(_.tag).mkString("(", "|", ")").r
       val allTags = patt findAllIn text0 toList
       
       if (allTags.length == args.length) {
         val args1 = (allTags zip args) map {
-          case (TreeText.tag, arg) => TreeText(arg)
-          case (TypeText.tag, arg) => TypeText(arg)
-          case (SymText.tag, arg)  => SymText(arg)
+          case (TreeText.tag, arg)  => TreeText(arg)
+          case (TypeText.tag, arg)  => TypeText(arg)
+          case (SymText.tag, arg)   => SymText(arg)
+          case (tag, _)               => throw new Exception("Invalid formatting tag in event description: " + tag)
         }
-        StringFormatter(patt split text0 toList, args1)
+        StringFormatter(patt split text0 toList, title, args1)
       } else {
-        println("Invalid formatted text")
-        StringFormatter(List(text0), Nil)
+        throw new Exception("Number of tags and arguments don't match. Text: " + text0 + "\nArgs: " + args)
       }
     }
   }

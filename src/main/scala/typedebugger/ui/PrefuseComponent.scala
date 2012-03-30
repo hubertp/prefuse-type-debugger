@@ -77,7 +77,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   protected def extractPrefuseNode(t: Tuple): Node
   protected def isGoal(t: Tuple): Boolean
   protected def isNode(t: Tuple): Boolean
-  protected def eventInfo(item: VisualItem): String
+  protected def eventInfo(item: VisualItem): util.StringFormatter
   protected def setGoalPath(item: VisualItem): Unit
   protected def visualizeFixedNodesAction(): Action
   
@@ -370,7 +370,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
       val v = item.getVisualization()
       val info = eventInfo(item)
       
-      showTooltip(new NodeTooltip("Some name", eventInfo(item), 100, 100, v.getDisplay(0)),
+      showTooltip(new NodeTooltip(eventInfo(item), 100, 100, v.getDisplay(0)),
                   item, coordX, coordY)
     }
     

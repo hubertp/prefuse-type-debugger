@@ -5,7 +5,12 @@ import javax.swing.{JPanel, Timer, JComponent,
          JLabel, JButton, BorderFactory,
          JTextArea, JScrollPane}
 import java.awt.event.{MouseAdapter, MouseEvent, ActionListener, ActionEvent}
-import java.awt.{Color, Font, BorderLayout}
+import java.awt.{Color, Font, BorderLayout, Insets}
+import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
+import javax.swing.border._
+
+import scala.collection.mutable
+import util.StringFormatter
 
 trait PrefuseTooltips {
   abstract class PrefuseTooltip(
@@ -86,32 +91,85 @@ trait PrefuseTooltips {
         stopShowing()
       }
     }
-
   }
   
-  class NodeTooltip(name: String, contents: String, startDelay: Int, stopDelay: Int, owner: JComponent)
+  class NodeTooltip(contents: util.StringFormatter, startDelay: Int, stopDelay: Int, owner: JComponent)
     extends PrefuseTooltip(startDelay, stopDelay, owner, false) {
-    val contentsPanel = new JPanel(new BorderLayout())
+    val contentsPanel = new JPanel()
+    final val constTextFact = 1.5
+    final val newLine = System.getProperty("line.separator")
     
     init()
     
     def init() {
-      val nameLabel = new JLabel()
-      nameLabel.setText(name)
-      
-      // Should dynamically adjust
-      val textArea =  new JTextArea(10, 80)
-      textArea.setText(contents)
+      val textArea = swingFormattedText(contents, findAreaMaxHeight(), findAreaMaxWidth())
       textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
       textArea.setEditable(false)
       textArea.setLineWrap(true)
-      contentsPanel.setBackground(new Color(255, 250, 205));
-    
-      contentsPanel.add(nameLabel)
-      contentsPanel.add(new JScrollPane(textArea))
 
-      contentsPanel.setBorder(BorderFactory.createLineBorder(Color.gray));
-      contentsPanel.setBackground(new Color(255, 250, 205));
+      contents.title match {
+        case Some(title) =>
+          val titleBorder = BorderFactory.createTitledBorder(title)
+          titleBorder.setTitleJustification(TitledBorder.LEFT)
+          contentsPanel.setBorder(BorderFactory.createCompoundBorder(
+                        titleBorder,
+                        BorderFactory.createEmptyBorder(2, 2, 2, 2)))
+        case None        =>
+          contentsPanel.setBorder(BorderFactory.createLineBorder(Color.gray));
+          contentsPanel.setLayout(new BorderLayout())
+      }
+      contentsPanel.add(new JScrollPane(textArea))
+    }
+    
+    private def findAreaMaxWidth(areaMax: Int = 80, margin: Int = 2): Int = {
+      var maxWidth = 0
+      contents.text foreach { elem =>
+        val localMax = (elem.split(newLine).max.length * constTextFact).toInt
+        if (localMax > maxWidth)
+          maxWidth = localMax min areaMax
+      }
+      contents.args foreach { elem =>
+        val argMax = (elem.toString.split(newLine).max.length * constTextFact).toInt
+        if (argMax > maxWidth)
+          maxWidth = argMax min areaMax
+      }
+      maxWidth + margin
+    }
+    
+    private def findAreaMaxHeight(areaMax: Int = 10, margin: Int = 2): Int = {
+      val maxHeight = contents.text map (_.split(newLine).length) sum
+      
+      val totalArgsHeight = contents.args.map(
+        _.text.split(newLine).length 
+      ) sum
+      
+      val height = ((maxHeight + totalArgsHeight) * constTextFact) toInt
+      
+      margin + 
+       (if (height > areaMax) areaMax else height)
+    }
+    
+    private def swingFormattedText(formatter: StringFormatter, height: Int, width: Int): JTextArea = {
+      val positions = new mutable.ListBuffer[(Int, Int)]()
+      val color = new DefaultHighlightPainter(Color.lightGray)
+      
+      def addNewLine(s: String): String = {
+        if (!s.endsWith(newLine)) s + newLine else s
+      }
+      
+      var text = (formatter.text zip formatter.args).foldLeft("") { (x, y) =>
+        val upto = x + addNewLine(y._1) // only text
+        val withArg = upto + y._2 // tree/tpe/symbol
+        positions += ((upto.length, withArg.length))
+        addNewLine(withArg)
+      }
+      val textArea =  new JTextArea(height, width)
+      textArea.setMargin(new Insets(2, 2, 2, 2));
+      if (formatter.text.length != formatter.args.length) // add missing bit after zip
+        text = text + addNewLine(formatter.text.last)
+      textArea.setText(text)
+      positions.foreach(poss => textArea.getHighlighter.addHighlight(poss._1, poss._2, color))
+      textArea
     }
   
     protected def getContents() = contentsPanel
