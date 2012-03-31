@@ -26,6 +26,8 @@ trait SwingControllers {
   import EV._
   import UIConfig.{nodesLabel => label}
   
+  import PrefuseComponent.toVisualNode
+  
   import PrefusePimping._
   
   class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
@@ -34,16 +36,15 @@ trait SwingControllers {
     var lastAccessed: Option[NodeItem] = None
     
     val highlightContr = new HighlighterAndGeneralInfo()
-    val cleanupAction = new CleanupAction()
     
     private def codeHighlighter = sCodeViewer.getHighlighter()
     sCodeViewer.addCaretListener(new SelectionListener())
    
     def initPrefuseListeners() {
       prefuseComponent.addControlListener(highlightContr)
-      prefuseComponent.addControlListener(new AddGoal())
-      prefuseComponent.addControlListener(new LinkNode())
-      prefuseComponent.addControlListener(new FixedNode())
+      prefuseComponent.addControlListener(new ClickedNodeListener())
+      //prefuseComponent.addControlListener(new LinkNode())
+      prefuseComponent.addControlListener(new StickyNode())
       prefuseComponent.addControlListener(KeyPressAddGoal)
       prefuseComponent.addControlListener(HiddenEvents)
       
@@ -177,7 +178,7 @@ trait SwingControllers {
           case node: NodeItem =>
             // display information about hidden events (if any)
             val children = node.children_[NodeItem].flatMap { ch =>
-              if (!ch.isVisible && asDataNode(ch).advanced)
+              if (!ch.isVisible && asDataNode(ch).advanced && !prefuseComponent.adv.isOptionEnabled(ch))
                 Some(FilteringOps.map(asDataNode(ch).ev))
               else None
             }.toList
@@ -192,38 +193,38 @@ trait SwingControllers {
       }
     }
     
-      
-    // Handle action on the node of the graph.
-	  // Expand the node that was just clicked. Also cleanup all the intermediate nodes leading to it.
-	  class FixedNode extends ControlAdapter {
-	    override def itemClicked(item0: VisualItem, e: MouseEvent) {
-	      if (!e.isControlDown() || !e.isShiftDown())
-	        return
-	      
-	      item0 match {
-	        case item: NodeItem =>
-			      val vis = item.getVisualization
-			      val fGroup = vis.getFocusGroup(PrefuseComponent.fixedNodes)
-			      if (fGroup.containsTuple(item)) {
-			        fGroup.removeTuple(item)
-			        vis.getFocusGroup(PrefuseComponent.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
-			        cleanupLinkPath(item, vis)
-			      } else {
-			        fGroup.addTuple(item)
-			      }
-			      lastAccessed = Some(item)
-	        case _ =>   
-	      }
-	    }
+    // 'Stick' node that was clicked with Shift & Ctrl.
+    // It will be visible even if it is not on a path to a goal(errors etc).
+    class StickyNode extends ControlAdapter {
+      override def itemClicked(item0: VisualItem, e: MouseEvent) {
+        if (!e.isControlDown() || !e.isShiftDown())
+          return
+
+        item0 match {
+          case item: NodeItem =>
+            val vis = item.getVisualization
+            val fGroup = vis.getFocusGroup(PrefuseComponent.stickyNodes)
+            if (fGroup.containsTuple(item)) {
+              fGroup.removeTuple(item)
+              vis.getFocusGroup(PrefuseComponent.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
+              cleanup(item.getSourceTuple.asInstanceOf[Node], vis)
+            } else {
+              fGroup.addTuple(item)
+            }
+            lastAccessed = Some(item)
+          case _ =>   
+        }
+      }
 	    
-	    def cleanupLinkPath(starting: NodeItem, vis: Visualization) {
-	      var n = asDataNode(starting)
+	    def cleanup(starting: Node, vis: Visualization) {
+	      var node = starting
 	      val tsNonGoal = vis.getFocusGroup(PrefuseComponent.nonGoalNodes)
 	      val tsRemove = vis.getFocusGroup(PrefuseComponent.toRemoveNodes)
-	      while (!n.goal && n.parent.isDefined) {
-	        tsNonGoal.removeTuple(n.pfuseNode)
-	        tsRemove.addTuple(n.pfuseNode)
-	        n = n.parent.get
+	      val tsGoal = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
+	      while (!(tsGoal containsTuple node) && node.getParent != null) {
+	        tsNonGoal.removeTuple(node)
+	        tsRemove.addTuple(node)
+	        node = node.getParent
 	      }
 	    }
 	  }
@@ -237,26 +238,9 @@ trait SwingControllers {
         else {
           // Find bottom most event
           val vis = prefuseComponent.getVisualization
-          val ts = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-          val goals = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
-          ts.tuples().find {
-            case item: NodeItem =>
-              val item1 = asDataNode(item)
-              !item1.parent.isDefined || !goals.containsTuple(item1.parent.get.pfuseNode)
-            case _ => false } match {
-            case Some(top: NodeItem) =>
-              top.children_[NodeItem].find (asDataNode(_).goal) match {
-                case Some(child) =>
-                  Some(child)
-                case _ =>
-                  println("[warning] cannot navigate, found bug")
-                  // bug
-                  None
-              }
-            case None =>
-              //prefuseComponent.treeRoot()
-              None
-            }
+          val goals = prefuseComponent.getVisualization.getFocusGroup(PrefuseComponent.openGoalNodes)
+          val lowest = prefuseComponent.getBottomNode
+          if (lowest == null) None else Some(lowest)
         }
 
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
@@ -266,31 +250,29 @@ trait SwingControllers {
 	        debug("Key pressed. Last accessed event " + last)
           val keyCode = k.getKeyCode	
   	      val vis = last.getVisualization
-  	      val vGroup = vis.getFocusGroup(Visualization.FOCUS_ITEMS)
   	
   	      prefuseComponent.tooltipController.clearTooltip()
   	      keyCode match {
   	        case KeyEvent.VK_DOWN =>
   	          // expand down (if necessary)
-  	          val n = asDataNode(last)
-  	          if (n.parent.isDefined)
-  	            navigate(n.parent.get.pfuseNode, vis)
+  	          if (last.getParent != null)
+  	            navigate(last.getParent.asInstanceOf[NodeItem], vis)
   	          
   	        case KeyEvent.VK_LEFT =>
   	          // expand left neighbour (if possible)
   	          val prevSibling = last.getPreviousSibling()
   	          if (prevSibling != null)
-  	            navigate(asDataNode(prevSibling).pfuseNode, vis)
+  	            navigate(prevSibling.asInstanceOf[NodeItem], vis)
   	          
   	        case KeyEvent.VK_RIGHT =>
   	          // expand right neighbour (if possible)
   	          val nextSibling = last.getNextSibling()
   	          if (nextSibling != null)
-  	            navigate(asDataNode(nextSibling).pfuseNode, vis)
+  	            navigate(nextSibling.asInstanceOf[NodeItem], vis)
   	
   	        case KeyEvent.VK_UP =>
   	          if (last.getChildCount() > 0)
-  	            navigate(asDataNode(last.getFirstChild()).pfuseNode, vis)
+  	            navigate(last.getFirstChild().asInstanceOf[NodeItem], vis)
   
   	        case KeyEvent.VK_E  => // expand
   	          expand(last)
@@ -323,16 +305,12 @@ trait SwingControllers {
 	        
 	    }
 	    
-	    def navigate(n: Node, vis: Visualization) {
-	      vis.items(new VisualItemSearchPred(n)).toList match {
-	        case List(first: NodeItem) =>
-	          AddGoal.addClickedItem(first, vis)
-	          highlightContr.itemEntered(first, null)
-	          // need to schedule the action by hand since keycontrol doesn't do it
-	          prefuseComponent.reRenderView()
-	        case _ =>
-	          println("incorrect search " + n)
-	      }
+	    def navigate(target: NodeItem, vis: Visualization) {
+	      debug("navigate to: " + target)
+	      ClickedNodeListener.addClickedItem(target)
+	      highlightContr.itemEntered(target, null)
+        // need to schedule the action by hand since keycontrol doesn't do it
+        prefuseComponent.reRenderView()
 	    }
 	    
 	    def expand(last: NodeItem) = {
@@ -363,7 +341,7 @@ trait SwingControllers {
     // Find node which is somehow linked (tree or symbol reference) to the
 	  // one that was just clicked (with Ctrl).
 	  // Use case: clicking on a node to see at what point it's type was set.
-	  class LinkNode extends ControlAdapter {
+/*	  class LinkNode extends ControlAdapter {
 	    
 	    import PrefuseComponent.{linkGroupNodes => linkGroup,
 	                             treeNodes, nonGoalNodes, openGoalNodes}
@@ -429,110 +407,107 @@ trait SwingControllers {
 	        case _ =>
 	      }
 	    }
-	  }
+	  }*/
 	  
-	  // 'Stick' node that was clicked with Shift & Ctrl.
-    // It will be visible even if it is not on a path to a goal(errors etc).
-    class AddGoal() extends ControlAdapter {
-      import AddGoal._
+    // Handle action on the node of the graph.
+    // Expand the node that was just clicked. Also cleanup all the intermediate nodes leading to it.
+    class ClickedNodeListener() extends ControlAdapter {
+      import ClickedNodeListener._
       override def itemClicked(item0: VisualItem, e: MouseEvent) {
         if (e.isControlDown() || e.isShiftDown())
           return
           
         item0 match {
           case item: NodeItem =>
-            addClickedItem(item, item.getVisualization())
+            addClickedItem(item)
           case _ =>
         }
-      }
+      }      
     }
   
-	  object AddGoal {
-	    def addClickedItem(node: NodeItem, vis: Visualization) {
+	  object ClickedNodeListener {
+	    def addClickedItem(node: NodeItem) {
 	      // Add or remove from focus group
+	      debug("Add clicked item " + node)
 	      val vis = node.getVisualization
 	      val ts1 = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
-	      val ts2 = vis.getFocusGroup(PrefuseComponent.nonGoalNodes)
 	      val clicked = vis.getFocusGroup(PrefuseComponent.clickedNode)
 	
-	      cleanupAction.clean(node)
+	      CleanupAction.clean(node)
 	      clicked.clear()
 	      clicked.addTuple(node)
-	
-	      // identify parent goal
-	      val eNode = asDataNode(node)
 	      
-	      // is any of its children a goal
-	      // it has to be already expanded, so this is valid
-	      if (eNode.goal || node.outNeighbors_[NodeItem]().exists(asDataNode(_).goal)) {
-	        // we are dealing with a goal or its parent
-	        eNode.parent match {
-	          case Some(parent) =>
-	            // expand its parent
-	            parent.goal = true
-	            ts1.addTuple(parent.pfuseNode)
-	          case None =>
+	      if (ts1.containsTuple(node.getSourceTuple)) {
+	        if (node.getParent != null) {
+	          node.getParent match {
+	            case item: NodeItem =>
+	              ts1.addTuple(item.getSourceTuple)
+	            case parent: Node =>
+	              ts1.addTuple(parent)
+	            case _ =>
+	              throw new Exception("Prefuse bug!")
+	          }
 	        }
 	      } else {
-	        // we are dealing with a non-direct goal
-	        // expand its children which are non-goals
-	        var eNode0 = eNode
-	        // goals are all in, so we are fine 
-	        // TODO: is this loop necessary? parent should already be expanded, right?
-	        while (!eNode0.goal && eNode0.parent.isDefined) {
-	          ts2.addTuple(eNode0.pfuseNode)
-	          eNode0 = eNode0.parent.get
-	        }
+	        var item: Node = node.getSourceTuple().asInstanceOf[Node] // ts1 contains SourceTuples not VisualItems, meh
+          // re-add nodes that should be in ts2
+          // this means adding all non-goals on the path from this node upwards upto a goal node
+          // (the latter is guaranteed to be reached since we wouldn't be able to reach item0 otherwise)
+          // This is cleaner than complicating the logic for the removal
+	        val ts2 = vis.getFocusGroup(PrefuseComponent.nonGoalNodes)
+          while (item != null && !ts1.containsTuple(item)) {
+            ts2.addTuple(item)
+            item = item.getParent()
+          }
 	      }
 	      lastAccessed = Some(node)        
 	    }
 	  }
 	  
-	  class CleanupAction {
+	  object CleanupAction {
 	    import PrefuseComponent._
-	    def clean(item: VisualItem) {
-	      if (!containsDataNode(item))
+	    def clean(item0: VisualItem) {
+	      if (!containsDataNode(item0))
 	        return
 	
-	      var eNode = asDataNode(item)
-	      val vis = item.getVisualization
-	      val List(ts1, ts2, ts3, tsRemove) =
-	        List(openGoalNodes, nonGoalNodes, linkGroupNodes, toRemoveNodes).map(vis.getFocusGroup(_))
+	      val vis = item0.getVisualization
+	      //val List(ts1, ts2, ts3, tsRemove) =
+	      val ts1 = vis.getFocusGroup(openGoalNodes)
+	      val ts2 = vis.getFocusGroup(nonGoalNodes)
+	      val tsRemove = vis.getFocusGroup(toRemoveNodes)
+	        //List(openGoalNodes, nonGoalNodes, linkGroupNodes, toRemoveNodes).map(vis.getFocusGroup(_))
 	      
 	      // Remove all the link nodes
-	      ts3.foreach(tsRemove.addTuple)
-	      ts3.clear()
-	      
-	      if (eNode.goal) {
+	      //ts3.foreach(tsRemove.addTuple)
+	      //ts3.clear()
+
+        // collapse all non-goals (parts need to be re-created if necessary)
+        ts2.foreach(tsRemove.addTuple)
+        ts2.clear()
+
+        if (ts1.containsTuple(item0.getSourceTuple)) {
 	        // Collapse all the subgoals above
-	        // Currently disable messages view when dealing
-	        // with multiple errors (least spanning tree problem)
-	        if (eNode.parent.isDefined) {
-	          // cached minimal spanning tree
-	          val cached = prefuseComponent.nodesAlwaysVisible
-	          var eNode0 = eNode.parent.get
-	          while (eNode0.parent.isDefined && ts1.containsTuple(eNode0.parent.get.pfuseNode)) {            
-	            eNode0 = eNode0.parent.get
-	            if (!cached.contains(eNode0.pfuseNode)) {
-	              ts1.removeTuple(eNode0.pfuseNode)
-	              tsRemove.addTuple(eNode0.pfuseNode)
-	            }
-	          }
+          val parent0 = item0.getSourceTuple.asInstanceOf[Node].getParent // casting unfortunately necessary
+          val parent = parent0 match {
+            case visItem: NodeItem if visItem != null => visItem.getSourceTuple.asInstanceOf[Node]
+            case parent0: Node     => parent0
+            case _                 => throw new Exception("Prefuse bug!")
+          }
+          if (parent != null) {
+            val cached = prefuseComponent.nodesAlwaysVisible
+            var item = parent
+            val ts1 = vis.getFocusGroup(openGoalNodes)
+            while (item.getParent != null && ts1.containsTuple(item.getParent)) {            
+              item = item.getParent
+              // keep the minimal subset always expanded
+              if (!cached.contains(toVisualNode(item, vis))) {
+                ts1.removeTuple(item)
+                tsRemove.addTuple(item)
+              }
+            }
 	        }
-	        
-	        // also collapse non-goals
-	        ts2.foreach(tsRemove.addTuple)
-	        ts2.clear()
 	      } else {
-	        // Remove all the other non-essential non-goals
-	        // apart from those leading to this node
-	        ts2.foreach(tsRemove.addTuple)
-	        ts2.clear()
-	        var eNode0 = eNode
-	        while(eNode0.parent.isDefined && !ts1.containsTuple(eNode0.parent.get.pfuseNode)) {
-	          ts2.addTuple(eNode0.pfuseNode)
-	          eNode0 = eNode0.parent.get            
-	        }
+	        // necessary non-goal nodes should be re-added. See addClickedItem handler for non-goal
 	      }
 	    }
 	  }

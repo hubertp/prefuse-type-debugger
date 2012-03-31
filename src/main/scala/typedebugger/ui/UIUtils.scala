@@ -24,6 +24,15 @@ trait UIUtils {
       case _ => false
     }
   }
+  
+  class VisualItemsSearchPred(search: List[Node]) extends AbstractPredicate {
+    override def getBoolean(t: Tuple): Boolean = t match {
+      case item: NodeItem if containsDataNode(t) =>
+        search contains (asDataNode(t).pfuseNode) // should be enough to compare asDataNode(t)?
+      case _ =>
+        false
+    }
+  }
 
   // todo: define in terms of unapply/apply
   def containsDataNode(t: Tuple): Boolean = t.canGet(label, COLUMN_PREFUSENODE_CLASS)
@@ -32,14 +41,6 @@ trait UIUtils {
 
 object UIConfig {
   val nodesLabel = "event.node"
-}
-
-class VisualizeNodes(groupName: String) extends Action {
-  def run(frac: Double) {
-    val target = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-    val ts = m_vis.getFocusGroup(groupName)
-    ts.tuples().foreach(n => target.addTuple(n.asInstanceOf[Tuple]))
-  }
 }
 
 object PrefusePimping {

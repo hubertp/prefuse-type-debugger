@@ -16,7 +16,6 @@ trait PrefuseStructure extends IStructure {
   trait UINodeLike[T, Container[X]] extends BaseTreeNodeLike[T, Container] {
     val pfuseNode: Node
     def fullInfo: util.StringFormatter
-    var goal: Boolean
     def advanced: Boolean
   }
   
@@ -26,10 +25,7 @@ trait PrefuseStructure extends IStructure {
                          val parent: Option[UINode[PrefuseEventNode]],
                          val pfuseNode: Node) extends UINode[PrefuseEventNode] {
     val children = ListBuffer[UINode[PrefuseEventNode]]()
-    var goal = false // for caching purposes so that we don't have to constantly
-                     // check neighbors
     
-    // TODO refactor to a separate place that handles all the UI stuff
     override def toString =
       if (ev != null) {
         ev match {
@@ -39,8 +35,7 @@ trait PrefuseStructure extends IStructure {
             EventDescriptors(ev).basicInfo
         }
       } else "Typecheck full tree" // root
-        
-    // TODO this should go
+
     def fullInfo =
       if (ev != null)
         ev match {

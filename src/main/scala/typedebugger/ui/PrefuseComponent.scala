@@ -27,7 +27,7 @@ import javax.swing.{Action => swingAction, _}
 import javax.swing.event.TreeModelListener
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import prefuse.render._
 
@@ -40,26 +40,25 @@ object PrefuseComponent {
 
   val typeDebuggerorientation = Constants.ORIENT_BOTTOM_TOP
 
-  val fixedNodes = "tree.fixed"           // Nodes that are 'fixed' to be visible
+  val stickyNodes = "tree.sticky"           // Nodes that are 'fixed' to be visible
   val openGoalNodes = "tree.openGoals"
   val nonGoalNodes = "tree.openNods"      // Intermediate nodes on the path to the goal nodes
   val toRemoveNodes = "tree.removeNodes"  // Nodes to be removed on the refresh of UI
-  val linkGroupNodes = "tree.link"
+  //val linkGroupNodes = "tree.link"
   val clickedNode = "tree.clicked"
+  val visibleGroup = "tree.visible"
   
   val typerNodes = "tree.typer"
   val namerNodes = "tree.namer"
   
   val backgroundColor = Color.WHITE
   val foregroundColor = Color.BLACK
+  
+  def toVisualNode(node: Node, vis: Visualization): NodeItem = vis.getVisualItem(tree, node).asInstanceOf[NodeItem]
+  def toVisualEdge(edge: Edge, vis: Visualization): EdgeItem = vis.getVisualItem(tree, edge).asInstanceOf[EdgeItem]
 }
 
 import UIConfig.{nodesLabel => label} // todo: remove
-
-// TODO possible to get rid of that?
-trait ToExpandInfo {
-  def isGoalOrSibling(t: VisualItem): (Boolean, Boolean)
-}
 
 trait AdvancedOptions {
   def enableOption(v: Filtering.Value): Unit
@@ -75,30 +74,35 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   protected def nodeColorAction(nodes: String): ItemAction
   protected def showFullTree: Boolean
   protected def extractPrefuseNode(t: Tuple): Node
-  protected def isGoal(t: Tuple): Boolean
   protected def isNode(t: Tuple): Boolean
   protected def eventInfo(item: VisualItem): util.StringFormatter
-  protected def setGoalPath(item: VisualItem): Unit
-  protected def visualizeFixedNodesAction(): Action
-  
-  protected def customTreeLayout(): NodeLinkTreeLayout
-  protected def initialGoalPredicate(): ToExpandInfo
   
   private var edgeRenderer: EdgeRenderer = _
   private var nodeRenderer: LabelRenderer = _
   protected var orientation: Int = _
-  private var treeLayout: NodeLinkTreeLayout = _
+  private var treeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(orientation, 50, 0, 8)
+  protected def debug(msg: => String): Unit
   
-  def treeRoot(): Node = if (treeLayout != null) treeLayout.getLayoutRoot() else null
+  // TODO: reduce visibility?
+  def treeRoot(): NodeItem = treeLayout.getLayoutRoot()
   
-  private val collapsedTreeAction =  new CollapseTree(openGoalNodes, clickedNode)
-  def nodesAlwaysVisible: List[Node] = {
-    collapsedTreeAction.minimumVisibleNodes
+  
+  protected val lst = new CachedLeastSpanningTree()
+  def nodesAlwaysVisible: List[NodeItem] = {
+    lst.get()
   }
+  
+  def getBottomNode: NodeItem = {
+    lst.getRoot()
+  }
+  
   private val hoverController = new HoverTooltip() 
   def tooltipController = hoverController
   
   def adv: AdvancedOptions
+  private def isAdvEnabled(t: Tuple): Boolean = adv.isAdvancedOption(t) && adv.isOptionEnabled(t)
+  
+  protected def _goals(): List[NodeItem]
 
   def init () {
     setBackground(backgroundColor)
@@ -151,7 +155,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     m_vis.putAction("animatePaint", animatePaint)
   
     // create the tree layout action
-    treeLayout =  customTreeLayout()
+    //treeLayout =  customTreeLayout()
     treeLayout.setLayoutAnchor(new Point2D.Double(25,300))
     m_vis.putAction("treeLayout", treeLayout)
         
@@ -165,12 +169,12 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     // create the filtering and layout
     val filter = new ActionList()
     // Includes degree-of-interest factor
-    filter.add(visualizeFixedNodesAction())
+    filter.add(new VisualizeStickyNodes())
     filter.add(new UnfocusOnItems)
-    filter.add(new VisualizeNodesWithPred(new IsNodeOnGoalPath(openGoalNodes, nonGoalNodes)))
-    filter.add(new VisualizeNodes(linkGroupNodes))
+    filter.add(new VisualizeNodesWithPred(new IsNodeOnGoalPath()))
+    //filter.add(new VisualizeNodes(linkGroupNodes))
   
-    filter.add(new ShowAllGoalsAndEdges(clickedNode))
+    filter.add(new ShowAllGoalsAndEdges())
   
     filter.add(new FontAction(treeNodes, FontLib.getFont("Tahoma", 16)))
     filter.add(treeLayout)
@@ -202,7 +206,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   
     // We cache collapse tree because it has a minimal version of
     // the graph that contains all the errors and intermediate nodes leading to it.
-    m_vis.putAction("initial-goals", collapsedTreeAction)
+    m_vis.putAction("initial-goals", new CollapseTree())
    
     val zoomToFit = new ZoomToFitControl()
     zoomToFit.setZoomOverItem(false)
@@ -218,12 +222,15 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     addControlListener(new FocusControl(1, "filter"))
   
     setOrientation(typeDebuggerorientation)
-    m_vis.addFocusGroup(fixedNodes, new DefaultTupleSet())
+    m_vis.addFocusGroup(stickyNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(toRemoveNodes, new DefaultTupleSet())
-    m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
+    //m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
+    m_vis.addFocusGroup(visibleGroup, new DefaultTupleSet())
+    //m_vis.getFocusGroup(Visualization.FOCUS_ITEMS).addTupleSetListener(new SearchFor(826))
+    
   
     m_vis.putAction("advancedOptions", new CollapseDisabled())
     showPrefuseDisplay()
@@ -234,13 +241,24 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   }
   
   def reRenderView() {
+    debug("re-render view")
     m_vis.run("filter")
   }
   
   protected def showPrefuseDisplay() {
+    debug("generate full prefuse display")
     if (!showFullTree)
 	    m_vis.run("initial-goals")
 	  m_vis.run("filter")
+  }
+  
+  class SearchFor(id: Int) extends prefuse.data.event.TupleSetListener {
+    def tupleSetChanged(ts: prefuse.data.tuple.TupleSet, added: Array[Tuple], removed: Array[Tuple]) {
+      added.toList foreach { t =>
+        if (t.getRow == id)
+          println("Added the searched-for tuple " + t)
+      }
+    }
   }
 
   private def setOrientation(orientation0: Int) {
@@ -281,13 +299,14 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   }
   
   protected def flushVisCache() {
-    collapsedTreeAction.cachedMinimumSet = None
-    m_vis.getFocusGroup(fixedNodes).clear()
+    lst.clear()
+    m_vis.getFocusGroup(stickyNodes).clear()
     m_vis.getFocusGroup(openGoalNodes).clear()
     m_vis.getFocusGroup(nonGoalNodes).clear()
     m_vis.getFocusGroup(toRemoveNodes).clear()
-    m_vis.getFocusGroup(linkGroupNodes).clear()
+    //m_vis.getFocusGroup(linkGroupNodes).clear()
     m_vis.getFocusGroup(clickedNode).clear()
+    m_vis.getFocusGroup(visibleGroup).clear()
     m_vis.getFocusGroup(Visualization.FOCUS_ITEMS).clear()
   }
 
@@ -393,9 +412,9 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   
   // Add all NodeItems/EdgeItems for which predicate resolves true 
   // to the visible section of the graph
-  class VisualizeNodesWithPred(predicate: Predicate) extends Action{
+  class VisualizeNodesWithPred(predicate: Predicate) extends Action {
     def run(frac: Double) {
-      val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+      val ts = m_vis.getFocusGroup(visibleGroup)
       if (ts != null)
         for (item <- m_vis.items_[Tuple](predicate)) {
           ts.addTuple(item)
@@ -403,25 +422,20 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     }
   }
 
-  class UnfocusOnItems extends Action { 
-    object ToRemovePred extends AbstractPredicate {
-      override def getBoolean(t: Tuple): Boolean = {
-        // because we added nodeItem to the list, not visualItem which 't' is
-        val ts = m_vis.getFocusGroup(toRemoveNodes)
-        ts != null && isNode(t) && ts.containsTuple(extractPrefuseNode(t))
-      }
-    }
-
+  // cannot be an object, because of a bug in the compiler (#2296)
+  // illegal runtime access on m_vis
+  class UnfocusOnItems extends Action {
     def run(frac: Double) {
-      val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
-      if (ts != null) {
-        for (item <- m_vis.items_[NodeItem](ToRemovePred)) {
-          PrefuseLib.updateVisible(item, false)
-          item.setExpanded(false)
-          item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
-          item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
-          ts.removeTuple(item)
-        }
+      val ts = m_vis.getFocusGroup(visibleGroup)
+      val visItems = m_vis.items_[Node](toRemoveNodes).map(toVisualNode(_, m_vis))
+      for (item <- visItems) {
+        PrefuseLib.updateVisible(item, false)
+        item.setExpanded(false)
+        item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
+        item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
+        if (item.getParentEdge() != null)
+          PrefuseLib.updateVisible(toVisualEdge(item.getParentEdge(), m_vis), false)
+        ts.removeTuple(item)
       }
       m_vis.getFocusGroup(toRemoveNodes).clear()
     }
@@ -429,10 +443,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   
   // Need to show all the goals, all edges between them, 
   // as well as immediate (1-distance) subgoals of each goal
-  class ShowAllGoalsAndEdges(clickedNode: String) extends Action {
+  class ShowAllGoalsAndEdges() extends Action {
     
     def run(frac: Double) {
-      val ts = m_vis.getFocusGroup(Visualization.FOCUS_ITEMS)
+      val ts = m_vis.getFocusGroup(visibleGroup)
       
       if (ts.getTupleCount() == 0) {
         // in case of no visible nodes available
@@ -444,6 +458,7 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
         clickedTs.addTuple(root)
       }
       
+      debug("[make visible] " + ts.tuples().toList)
       for (item <- ts.tuples()) {
         item match {
           case item: NodeItem =>
@@ -461,9 +476,10 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
             }
             
             // If this is not a goal, then expand all the incoming edges as well
-            if (!isGoal(item))
+            val ts = m_vis.getFocusGroup(openGoalNodes)
+            if (!(ts containsTuple item.getSourceTuple))
               item.inEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, true))
-          case vItem: VisualItem =>
+          case vItem: EdgeItem =>
             PrefuseLib.updateVisible(vItem, true)
           case _ =>
         }
@@ -471,90 +487,173 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     }
   }
   
-  
-  // Collapse the whole tree initially so that only (hard) errors are visible
-  class CollapseTree(openGoalsGroup: String, clickedNode: String)
-    extends Action {
-    
-    private[PrefuseComponent] var cachedMinimumSet: Option[List[Node]] = None
-    
-    def minimumVisibleNodes: List[Node] = cachedMinimumSet match {
-      case Some(v) => v
-      case None =>
-        // cache was flushed, calculate from scratch
-        val all = allInitialGoals.toList
-        cachedMinimumSet = Some(findLeastCommonSpanningTree(all))
-        cachedMinimumSet.get
-    }
-    
-    private def allInitialGoals: TupleSet = m_vis.getFocusGroup(openGoalsGroup)
-
-    private def findLeastCommonSpanningTree(nodes: List[Node]): List[Node] = {
-      if (nodes.length == 1)
-        nodes
-      else {
-	      assert(nodes.length > 1)
-	      val idx: HashMap[Node, Int] = HashMap.empty
-	      var marked: List[Node] = Nil
-	      
-	      // with the first node go up to the root
-	      var start: Node = nodes.head
-	      while (start != null) {
-	        idx += start -> 1
-	        marked = start :: marked
-	        start = start.getParent()
-	      }
-	      
-	      nodes.tail.foreach( node => { 
-	        var start0 = node
-	        while (!idx.contains(start0)) {
-	          idx += start0 -> 1
-	          start0 = start0.getParent()
-	        }
-	        assert(idx.contains(start0))
-	        idx(start0) = idx(start0) + 1
-	      })
-	      
-	      // go backwards from initial list until counter > 1
-	      val notmarked = marked.takeWhile(node => idx(node) == 1)
-	      val spanningTreeNodes = idx -- notmarked
-	      spanningTreeNodes.keys.toList
+  // Spanning tree that wraps aroound goals/errors
+  class CachedLeastSpanningTree() {
+    private[this] var cachedMinimumSet: Option[(List[NodeItem], NodeItem)] = None
+    private[this] var cachedPathToTreeRoot: List[NodeItem] = Nil
+    @inline def ensureInitialized() {
+      cachedMinimumSet match {
+        case Some(_) =>
+        case None =>
+          // cache was flushed/not_initialized, calculate from scratch
+          cachedMinimumSet = Some(leastSpanningTree(_goals))
+          cachedPathToTreeRoot = pathToTreeRoot(cachedMinimumSet.get._2)
       }
     }
     
-    def run(frac: Double) {
-      val items = m_vis.items_[VisualItem](Visualization.ALL_ITEMS)
-      val ts = allInitialGoals
-      val predicate = initialGoalPredicate()
-      for (item <- items) {
-        val (visibleGoal, sibling) = predicate.isGoalOrSibling(item)
-        if (!visibleGoal) {
-          if (sibling) {
-            // add to goals group
-            ts.addTuple(extractPrefuseNode(item))
-          } else {
-            item match {
-              case item0: NodeItem =>
-                item0.setExpanded(false)
-              case _ =>
-            }
+    def get(): List[NodeItem] = {
+      ensureInitialized()
+      cachedMinimumSet.get._1
+    }
+    
+    def getRoot(): NodeItem = {
+      ensureInitialized()
+      cachedMinimumSet.get._2
+    }
+    
+    def getPathToRoot(): List[NodeItem] = {
+      ensureInitialized()
+      cachedPathToTreeRoot
+    }
+    
+    def clear() {
+      cachedMinimumSet = None
+    }
+    
+    private def pathToTreeRoot(start: NodeItem): List[NodeItem] = {
+      var buffer = new mutable.ListBuffer[NodeItem]()
+      var node = start
+      
+      while (node != null) {
+        buffer += node
+        node = node.getParent.asInstanceOf[NodeItem]
+      }
+      buffer.toList
+    }
+    
+    private def leastSpanningTree(nodes: List[NodeItem]): (List[NodeItem], NodeItem) = {
+      if (nodes.length == 1)
+        (nodes, nodes.head)
+      else {
+        assert(nodes.length > 1)
+        val idx = mutable.HashMap.empty[Node, Int]
+        var meetingPoint: Option[Node] = None
+        var maybeRoot: Node = null
+        
+        
+        def markPath(start: Node) {
+          var visited = new mutable.ListBuffer[Node]()
+          var current = start
+          // 1) we reached root
+          // 2) we reached node that was already on some root path
+          // 3) we reached advanced node that is not enabled
+          while (current != null && !idx.contains(current) && (!adv.isAdvancedOption(current) || adv.isOptionEnabled(current))) {
+            visited += current
+            current = current.getParent()
           }
-          PrefuseLib.updateVisible(item, sibling)
-        } else {
+          
+          if (current != null) {
+            if (idx.contains(current)) {
+              // 2)
+              visited foreach (v => idx += (v -> 1))
+              idx(current) += 1
+              meetingPoint match {
+                case Some(n) =>
+                  if (idx(n) < idx(current))
+                    meetingPoint = Some(current)
+                case None    =>
+                  meetingPoint = Some(current)
+              }
+              
+              // increase the counter for all the
+              // nodes above the join until we reach root
+              current = current.getParent()
+              while (current != null) {
+                idx(current) += 1
+                current = current.getParent()
+              }
+            } else {
+              // 3)
+            }
+          } else {
+            // 1)
+            maybeRoot = visited.last
+            visited foreach (v => idx += (v -> 1))
+          }
+        }
+        nodes foreach markPath
+        
+        def cleanupUpwards(root: Node) {
+          var start = root.getParent
+          while (start != null) {
+            idx -= start
+            start = start.getParent
+          }
+        }
+        val root = meetingPoint match {
+          case Some(n) =>
+            cleanupUpwards(n)
+            n
+          case None    =>
+            // some paths were invalidated
+            maybeRoot
+        }
+        
+        val res = idx.keys.toList map(toVisualNode(_, m_vis))
+        assert(root != null)
+        (res, toVisualNode(root, m_vis)) 
+      }
+    }
+  }
+  
+  class CustomNodeLinkTreeLayout(orientation: Int, dspace: Double, bspace: Double, tspace: Double)
+    extends NodeLinkTreeLayout(tree) {//, orientation, dspace, bspace, tspace) {
+    
+    // Anchor the layout root at the first error
+    // or show the synthetic root
+    // whenever we expand the type tree we update the root
+    override def getLayoutRoot() = {      
+      var item:Node = lst.getRoot()
+      if (item == null) {
+        super.getLayoutRoot()
+      } else {
+        while (item.getParent() != null && toVisualNode(item.getParent, m_vis).isVisible)
+          item = item.getParent()
+        toVisualNode(item, m_vis)
+      }
+    }
+    
+    override def getGraph(): Graph = {
+      m_vis.getGroup(visibleGroup).asInstanceOf[Graph]
+    }
+  }
+  
+  
+  // Collapse the whole tree initially so that only goals are visible (and paths to them)
+  class CollapseTree() extends Action {    
+    private def allInitialGoals: TupleSet = m_vis.getFocusGroup(openGoalNodes)
+
+    def run(frac: Double) {
+      val visibleItems = m_vis.items_[VisualItem](Visualization.ALL_ITEMS)
+      val ts = allInitialGoals
+      val min = lst.get()
+      for (item <- visibleItems) {
+        if (min contains item) {
           // Goal
           val panTs = m_vis.getFocusGroup(clickedNode)
           panTs.addTuple(item)
           if (isNode(item)) {
-            setGoalPath(item)
-            ts.addTuple(extractPrefuseNode(item))
+            ts.addTuple(item.getSourceTuple)
           }
+        } else {
+          item match {
+            case item0: NodeItem =>
+              item0.setExpanded(false)
+            case _ =>
+          }
+          PrefuseLib.updateVisible(item, false)
         }
       }
-      
-      // If there is more than one error we need to find
-      // the least common node between all initial goals
-      if (ts.getTupleCount() > 1)
-        minimumVisibleNodes.foreach(ts.addTuple)
     }
   }
   
@@ -585,18 +684,16 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   // ------------------------
       
   // Predicate returning true for goal and nongoal groups
-  class IsNodeOnGoalPath(openGoalsGroup: String, nonGoalsGroup: String) extends AbstractPredicate {
-    override def getBoolean(t: Tuple): Boolean = {
-      isNode(t) && {
-        val ts = m_vis.getFocusGroup(openGoalsGroup)
-        // because we added nodeItem to the list, not visualItem which 't' is
-        val nodeItem = extractPrefuseNode(t)
-        (ts != null && ts.containsTuple(nodeItem)) || {
-          // fallback, try non goal group
-          val ts2 = m_vis.getFocusGroup(nonGoalsGroup)
-          ts2 != null && ts2.containsTuple(nodeItem)
+  class IsNodeOnGoalPath() extends AbstractPredicate {
+    override def getBoolean(t: Tuple): Boolean = t match {
+      case item: NodeItem =>
+        val ts = m_vis.getFocusGroup(openGoalNodes)
+        ts.containsTuple(item.getSourceTuple) || {
+          val ts2 = m_vis.getFocusGroup(nonGoalNodes)
+          ts2.containsTuple(item.getSourceTuple)
         }
-      }
+      case _ =>
+        false
     }
   }
   
@@ -604,8 +701,54 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
   object IsEdgeOnGoalPath extends AbstractPredicate {
     override def getBoolean(t: Tuple): Boolean = t match {
       case edge: EdgeItem if isNode(edge.getSourceNode) =>
-        isGoal(edge.getTargetNode) && isGoal(edge.getSourceNode)
+        val ts = m_vis.getFocusGroup(openGoalNodes)
+        ts.containsTuple(edge.getTargetNode.asInstanceOf[VisualItem].getSourceTuple) &&
+        ts.containsTuple(edge.getSourceNode.asInstanceOf[VisualItem].getSourceTuple)
       case _ => false
     }
   }
+  
+  // Add all intermediate nodes that lead to the already visible nodes
+  // to the nonGoalGroup (i.e. not goals, but still visible)
+  class VisualizeStickyNodes() extends Action {    
+    override def run(frac: Double) {
+      val target = m_vis.getFocusGroup(stickyNodes)
+      target.foreach(addLinkPath)
+    }
+    
+    def addLinkPath(starting: NodeItem) {
+      var n: NodeItem = starting
+      val nonGoals = m_vis.getFocusGroup(nonGoalNodes)
+      val cachedPath = lst.getPathToRoot()
+      debug("[fixed nodes]: " + n)
+      while (!(cachedPath contains n) && n.getParent != null) {
+        nonGoals.addTuple(n.getSourceTuple)
+        n = n.getParent.asInstanceOf[NodeItem]
+      }
+      // some opengoals might have been removed in the meantime
+      // need to ensure that they are there
+      val goals = m_vis.getFocusGroup(openGoalNodes)
+      if (cachedPath contains n) {
+        // traverse from the root of the lst up to n
+        // and make sure that they are visible
+        var node = lst.getRoot()
+        while (node != n) {
+          goals.addTuple(node.getSourceTuple)
+          node = node.getParent.asInstanceOf[NodeItem]
+        }
+        goals.addTuple(node.getSourceTuple)
+      } else {
+        cachedPath foreach (goals.addTuple)
+      }
+    }
+  }
+  
+  class VisualizeNodes(groupName: String) extends Action {
+    def run(frac: Double) {
+      val target = m_vis.getFocusGroup(visibleGroup)
+      val ts = m_vis.getFocusGroup(groupName)
+      ts.tuples().foreach(n => target.addTuple(n.asInstanceOf[Tuple]))
+    }
+  }
+
 }
