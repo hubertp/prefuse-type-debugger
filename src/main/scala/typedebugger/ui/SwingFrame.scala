@@ -7,10 +7,10 @@ import javax.swing.{Action => swingAction, _}
 
 import scala.concurrent.Lock
 import scala.tools.nsc.io
+import scala.collection.mutable
 
-class SwingFrame(prefuseComponent: PrefuseComponent,
-                          frameName: String,
-                          filtState: Boolean) {
+class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
+                 filtState: Boolean, srcs: List[io.AbstractFile]) {
 
   val jframe = new JFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
@@ -18,6 +18,8 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
   val ASTViewer = new JTextArea(30, 90)
   val sCodeViewer = new JTextArea(30, 30)
   val statusBar = new JLabel()
+  
+  val prefuseDisplays = new mutable.HashMap[io.AbstractFile, prefuse.Display]()
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -26,15 +28,19 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
       override def windowClosed(e: WindowEvent): Unit = lock.release
     })
 
+    val tabDisplayFiles = new JTabbedPane() // switch between display corresponding to the units
+    populateDisplays(new prefuse.Visualization())
+    prefuseDisplays.foreach { case (file, display) =>
+      tabDisplayFiles.add(file.name, prefuseComponent) // FIXME: this assumes debugging only a single file
+    }
+    
+    
     val tabFolder = new JTabbedPane()
     // Split right part even further
-    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, prefuseComponent, new JScrollPane(tabFolder))
+    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
     topSplitPane.setResizeWeight(0.7)
     
     topPane.add(topSplitPane)
-//    val codeViewPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(sCodeViewer), infoViewer)
-//    codeViewPane.setResizeWeight(1.0)
-//    codeViewPane.setDividerLocation(0.1)
     tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
     sCodeViewer.setEditable(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
@@ -60,6 +66,12 @@ class SwingFrame(prefuseComponent: PrefuseComponent,
     jframe.getContentPane().add(topPane)
     jframe.pack()
     jframe.setVisible(true)
+  }
+  
+  def populateDisplays(vis: prefuse.Visualization) {
+    srcs foreach { src =>
+      prefuseDisplays += (src -> new prefuse.Display(vis))
+    }
   }
 
   def addFilteringOptions(parent: JMenu) {

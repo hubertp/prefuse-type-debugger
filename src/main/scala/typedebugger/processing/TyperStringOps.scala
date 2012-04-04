@@ -429,7 +429,7 @@ trait TyperStringOps {
               "to arguments " + app1.args.map(a => {val a0 = treeAt(a); anyString(a0) + ":" + snapshotAnyString(a0.tpe)}).mkString("(", ",", ")") +
               (e.e match {
                  case DefaultExplanation => ""
-                 case _ => "\n" + e.toString + (if (settings.debugTD.value) " expl: " + e.e.getClass else "")
+                 case _ => "\n" + e.toString + (if (settings.debugTD.value == "event") " expl: " + e.e.getClass else "")
               })
           }
         }

@@ -34,8 +34,7 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
     val target = context.unit.targetPos
     if (settings.withTargetThrow.value && target != NoPosition && context.unit.exists
         && result.pos.isOpaqueRange && (result.pos includes context.unit.targetPos)) {
-      if (settings.debugTD.value)
-        println("target debugging, typechecked required tree, abort")
+      debug("target debugging, typechecked required tree, abort", "event")
       val located = new Locator(target) locateIn result
       if (located != EmptyTree)
         throw new EV.TargetDebugDone(result)
@@ -118,7 +117,7 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   def targetDebugAt(pos: Position) {
     // pos.source unit has always been typechecked before
     // assert: pos is valid!
-    println("[debugging] at: " + pos)
+    debug("[debugging] at: " + pos, "event")
     
     // locate the tree
     reloadSource(pos.source)               // flush source info
@@ -148,5 +147,13 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
     validatePositions(unit.body) // needed?
     // todo: syncTopLevelSyms 
   }
+  
+  def debug(msg: => String, kind: String): Unit = {
+    if (settings.debugTD.value == "all" || settings.debugTD.value == kind) {
+      val prefix = if (kind == "") "" else "[" + kind + "]"
+      println("[debug]" + prefix + " " + msg)
+    }
+  }
+  def debug(msg: => String): Unit = debug(msg, "")
 
 }

@@ -45,7 +45,7 @@ trait PrefuseStructure extends IStructure {
             evTyped.expl + "\n\n" +
             "Typechecking tree: \n " +
             snapshotAnyString(evTyped.tree)(evTyped.time) + "\n\n" +
-            (if (settings.debugTD.value && evTyped.tree != null) "Tree class " + evTyped.tree.getClass + " with sym " + evTyped.tree.symbol else "") +
+            (if (settings.debugTD.value == "event" && evTyped.tree != null) "Tree class " + evTyped.tree.getClass + " with sym " + evTyped.tree.symbol else "") +
             "\nExpected type: " + (if (evTyped.pt == WildcardType) "None" else snapshotAnyString(evTyped.pt)(evTyped.time)) +
             (if (tpe != null) "\nType of tree set to: " + snapshotAnyString(tpe)(evTyped.time) else " Tree not yet typed")
 

@@ -12,7 +12,8 @@ import scala.collection.mutable
 trait CompilerInfo {
   val global: DebuggerGlobal
   def settings: Settings with TypeDebuggerSettings = global.settings
-  def debug(msg: => String) = if (global.settings.debugTD.value) println("[debug] " + msg)
+  def debug(msg: => String, kind: String): Unit = global.debug(msg, kind)
+  def debug(msg: => String): Unit = global.debug(msg)
   def targetedCompile(pos: global.Position): Unit
 }
 

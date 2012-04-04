@@ -31,7 +31,7 @@ trait SwingControllers {
   import PrefusePimping._
   
   class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
-    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", settings.advancedDebug.value) {
+    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", settings.advancedDebug.value, srcs) {
 
     var lastAccessed: Option[NodeItem] = None
     
@@ -514,7 +514,7 @@ trait SwingControllers {
 	  
 	  // only debugging information
     private def fullEventInfo(ev: Event) {
-	    if (settings.debugTD.value && ev != null) {
+	    if (settings.debugTD.value == "ui" && ev != null) {
 	      println("----------------")
 	      println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
 	      ev match {

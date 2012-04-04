@@ -96,7 +96,8 @@ trait StructureBuilders {
           top.children += createNode(ev, top)
         
         case _             =>
-          ev match {
+          previousLevel = level
+/*          ev match {
             // TODO: Not necessary anymore?
             case _: SecondTryTypedApplyStartTyper =>
               assert(false)
@@ -113,7 +114,7 @@ trait StructureBuilders {
               hook.resetIndentation(baseLevel)
             case _ =>
               previousLevel = level
-          }
+          }*/
           // this also handles the case when we just parsed DoneBlock
           assert(!currentNodes.isEmpty)
           val top = currentNodes.top

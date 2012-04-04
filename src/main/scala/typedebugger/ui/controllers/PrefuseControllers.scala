@@ -14,6 +14,7 @@ import prefuse.util.{ColorLib}
 import scala.collection.JavaConversions._
 
 import scala.collection.mutable
+import scala.tools.nsc.io
 
 trait PrefuseControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
@@ -37,14 +38,14 @@ trait PrefuseControllers {
     def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
   }
   
-  class PrefuseController(pTree: Tree, goals0: List[UINode[PrefuseEventNode]]) extends PrefuseComponent(pTree) {
+  class PrefuseController(pTree: Tree, goals0: List[UINode[PrefuseEventNode]], source: io.AbstractFile) extends PrefuseComponent(source, pTree) {
       // methods that are global specific
     def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes)
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isNode(t: Tuple): Boolean = containsDataNode(t)
     def eventInfo(item: VisualItem): util.StringFormatter = asDataNode(item).fullInfo
     def showFullTree = settings.fullTypechecking.value
-    def debug(msg: => String) = self.debug(msg)
+    def debug(msg: => String) = self.debug(msg, "ui")
 
     private[this] var verifiedGoals: List[NodeItem] = null
     private def initGoals(ls: List[UINode[PrefuseEventNode]]): Unit = {

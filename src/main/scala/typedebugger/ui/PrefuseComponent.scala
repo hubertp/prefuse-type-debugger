@@ -28,28 +28,24 @@ import javax.swing.event.TreeModelListener
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.tools.nsc.io
 
 import prefuse.render._
 
 
 
 object PrefuseComponent {
-  val tree = "tree"
-  val treeNodes = "tree.nodes"
-  val treeEdges = "tree.edges"
+  val tree = "tree"                       // data structure that stored the whole debugging tree
 
   val typeDebuggerorientation = Constants.ORIENT_BOTTOM_TOP
 
-  val stickyNodes = "tree.sticky"           // Nodes that are 'fixed' to be visible
+  val stickyNodes = "tree.sticky"         // Nodes that are 'fixed' to be visible
   val openGoalNodes = "tree.openGoals"
   val nonGoalNodes = "tree.openNods"      // Intermediate nodes on the path to the goal nodes
   val toRemoveNodes = "tree.removeNodes"  // Nodes to be removed on the refresh of UI
   //val linkGroupNodes = "tree.link"
   val clickedNode = "tree.clicked"
   val visibleGroup = "tree.visible"
-  
-  val typerNodes = "tree.typer"
-  val namerNodes = "tree.namer"
   
   val backgroundColor = Color.WHITE
   val foregroundColor = Color.BLACK
@@ -67,7 +63,7 @@ trait AdvancedOptions {
   def isAdvancedOption(t: Tuple): Boolean  
 }
 
-abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips {
+abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips {
   import PrefuseComponent._
   import PrefusePimping._
   
@@ -109,6 +105,9 @@ abstract class PrefuseComponent(t: Tree) extends Display(new Visualization()) wi
     setForeground(foregroundColor)
    
     m_vis.add(tree, t)
+    
+    val treeNodes = "tree.nodes"
+    val treeEdges = "tree.edges"
   
       // Set default node/edge renderer and orientation
     nodeRenderer = new LabelRenderer(label)

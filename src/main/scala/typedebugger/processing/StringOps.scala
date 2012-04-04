@@ -108,8 +108,7 @@ trait StringOps extends AnyRef
   }
   
   private def printDebug(ev: Explanation) {
-    if (settings.debugTD.value)
-      println("No explanation for " + ev.getClass)
+    debug("No explanation for " + ev.getClass, "ui")
   }
   
   // TODO incorporate into our string converter when

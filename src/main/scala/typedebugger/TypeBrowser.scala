@@ -52,7 +52,7 @@ abstract class TypeBrowser extends AnyRef
   }
   
   private def updateTreeAndProcess(pos: global.Position) = {
-    assert(builder != null, "need full compiler run first")
+    assert(builder != null, "need full compiler run first") // todo: remove restriction
     val overlappingTree = global.locate(pos) //global.locateStatement(pos)
     val treePos = if (overlappingTree.pos.isRange && !overlappingTree.pos.isTransparent) overlappingTree.pos else NoPosition
     builder.runTargeted(pos, treePos)
@@ -66,8 +66,7 @@ abstract class TypeBrowser extends AnyRef
   private def postProcess() = {
     val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
                                                        builder.initialGoals, label)
-    if (settings.debugTD.value)
-      println("[errors] " + initial.map(_.ev))
+    debug("[errors] " + initial.map(_.ev))
 
     if (settings.fullTypechecking.value) Nil else initial
   }
@@ -114,7 +113,7 @@ abstract class TypeBrowser extends AnyRef
     assert(srcs.length == 1, "[debugger limitation] restrict debugging to one file")
     val sources = realSources(srcs)
     val goals = compileFullAndProcess(sources, settings, filtr)
-    prefuseController = new PrefuseController(prefuseTree, goals)
+    prefuseController = new PrefuseController(prefuseTree, goals, sources.head) // fixme
     prefuseController.init()
     val swingController = new TypeDebuggerController(prefuseController, sources)
     swingController.initPrefuseListeners()
