@@ -30,12 +30,15 @@ trait SwingControllers {
   
   import PrefusePimping._
   
+  def debugUI(msg: => String) = global.debug(msg, "ui")
+  
   class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
     extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", settings.advancedDebug.value, srcs) {
 
     var lastAccessed: Option[NodeItem] = None
     
     val highlightContr = new HighlighterAndGeneralInfo()
+    val keyHandler = new KeyPressListener()
     
     private def codeHighlighter = sCodeViewer.getHighlighter()
     sCodeViewer.addCaretListener(new SelectionListener())
@@ -45,7 +48,7 @@ trait SwingControllers {
       prefuseComponent.addControlListener(new ClickedNodeListener())
       //prefuseComponent.addControlListener(new LinkNode())
       prefuseComponent.addControlListener(new StickyNode())
-      prefuseComponent.addControlListener(KeyPressAddGoal)
+      //prefuseComponent.addControlListener(keyHandler)
       prefuseComponent.addControlListener(HiddenEvents)
       
       if (srcs.isEmpty)
@@ -61,6 +64,11 @@ trait SwingControllers {
       else "Missing source code"
 
       sCodeViewer.setText(src)
+    }
+    
+    def processKeyEvent(k: KeyEvent) {
+      println("Multiple times?")
+      keyHandler.keyPressed(k)
     }
 
     
@@ -229,64 +237,84 @@ trait SwingControllers {
 	    }
 	  }
 	  
-	  object KeyPressAddGoal extends ControlAdapter {
-	    
-	    val validKeys = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT)
-	    def lastNode: Option[NodeItem] =
-	      if (lastAccessed.isDefined)
-          lastAccessed
-        else {
-          // Find bottom most event
-          val vis = prefuseComponent.getVisualization
-          val goals = prefuseComponent.getVisualization.getFocusGroup(PrefuseComponent.openGoalNodes)
-          val lowest = prefuseComponent.getBottomNode
-          if (lowest == null) None else Some(lowest)
-        }
+	  class KeyPressListener extends ControlAdapter {	    
+	    val keyFilter = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+	                         KeyEvent.VK_E, KeyEvent.VK_C, KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE)
 
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
-	    override def keyPressed(k: KeyEvent): Unit = lastNode match {
-	      case Some(last) =>
-	        debug("Key pressed. Last accessed event " + last)
-          val keyCode = k.getKeyCode	
-  	      val vis = last.getVisualization
-  	
-  	      prefuseComponent.tooltipController.clearTooltip()
-  	      keyCode match {
-  	        case KeyEvent.VK_DOWN =>
-  	          // expand down (if necessary)
-  	          if (last.getParent != null)
-  	            navigate(last.getParent.asInstanceOf[NodeItem], vis)
-  	          
-  	        case KeyEvent.VK_LEFT =>
-  	          // expand left neighbour (if possible)
-  	          val prevSibling = last.getPreviousSibling()
-  	          if (prevSibling != null)
-  	            navigate(prevSibling.asInstanceOf[NodeItem], vis)
-  	          
-  	        case KeyEvent.VK_RIGHT =>
-  	          // expand right neighbour (if possible)
-  	          val nextSibling = last.getNextSibling()
-  	          if (nextSibling != null)
-  	            navigate(nextSibling.asInstanceOf[NodeItem], vis)
-  	
-  	        case KeyEvent.VK_UP =>
-  	          if (last.getChildCount() > 0)
-  	            navigate(last.getFirstChild().asInstanceOf[NodeItem], vis)
-  
-  	        case KeyEvent.VK_E  => // expand
-  	          expand(last)
-  
-  	        case KeyEvent.VK_C  => // collapse
-  	          collapse(last)
-  
-  	        case other =>
-  	          controlKeyPressed(other, last)
+	    override def keyPressed(k: KeyEvent): Unit = {
+	      val keyCode = k.getKeyCode 
+	      if (!(keyFilter contains k.getKeyCode))
+	        return
 
-          }
-
-  	    case None =>
-
+	      lastAccessed match {
+  	      case Some(last) =>
+  	        debugUI("Key pressed. Last accessed event " + last)	
+    	      val vis = last.getVisualization
+    	
+    	      prefuseComponent.tooltipController.clearTooltip()
+    	      keyCode match {
+    	        case KeyEvent.VK_DOWN  =>
+    	          // expand down (if necessary)
+    	          if (last.getParent != null)
+    	            navigate(last.getParent.asInstanceOf[NodeItem], vis)
+    	          
+    	        case KeyEvent.VK_LEFT  =>
+    	          // expand left neighbour (if possible)
+    	          val prevSibling = last.getPreviousSibling()
+    	          if (prevSibling != null)
+    	            navigate(prevSibling.asInstanceOf[NodeItem], vis)
+    	          else {
+    	            // go around
+    	            val parent = last.getParent
+    	            if (parent != null) {
+    	              val lastSibling = parent.getLastChild()
+    	              if (lastSibling != last)
+    	                navigate(lastSibling.asInstanceOf[NodeItem], vis)
+    	            }
+    	          }
+    	          
+    	        case KeyEvent.VK_RIGHT =>
+    	          // expand right neighbour (if possible)
+    	          val nextSibling = last.getNextSibling()
+    	          if (nextSibling != null)
+    	            navigate(nextSibling.asInstanceOf[NodeItem], vis)
+    	          else {
+    	            // go around
+                  val parent = last.getParent
+                  if (parent != null) {
+                    val firstSibling = parent.getFirstChild()
+                    if (firstSibling != last)
+                      navigate(firstSibling.asInstanceOf[NodeItem], vis)
+                  }
+    	          }
+    	
+    	        case KeyEvent.VK_UP    =>
+    	          if (last.getChildCount() > 0)
+    	            navigate(last.getFirstChild().asInstanceOf[NodeItem], vis)
+    
+    	        case KeyEvent.VK_E     => // expand
+    	          expand(last)
+    
+    	        case KeyEvent.VK_C     => // collapse
+    	          collapse(last)
+    
+    	        case other =>
+    	          controlKeyPressed(other, last)
+  
+            }
+  
+    	    case None =>
+    	      keyCode match {
+    	        case KeyEvent.VK_DOWN =>
+                val lowest = prefuseComponent.getBottomNode
+                debugUI("Key pressed. Initial 'lowest' node: " + lowest)
+    	          if (lowest != null)
+    	            navigate(lowest, prefuseComponent.getVisualization)
+    	        case _                => // enable others
+    	      }
+        }
 	    }
 	    
 	    def controlKeyPressed(k: Int, node: NodeItem) = k match {
@@ -306,7 +334,7 @@ trait SwingControllers {
 	    }
 	    
 	    def navigate(target: NodeItem, vis: Visualization) {
-	      debug("navigate to: " + target)
+	      debug("navigate to: " + target, "ui")
 	      ClickedNodeListener.addClickedItem(target)
 	      highlightContr.itemEntered(target, null)
         // need to schedule the action by hand since keycontrol doesn't do it
@@ -491,7 +519,8 @@ trait SwingControllers {
           val parent = parent0 match {
             case visItem: NodeItem if visItem != null => visItem.getSourceTuple.asInstanceOf[Node]
             case parent0: Node     => parent0
-            case _                 => throw new Exception("Prefuse bug!")
+            case _                 =>
+              if (parent0 != null) throw new Exception("Prefuse bug!") else null
           }
           if (parent != null) {
             val cached = prefuseComponent.nodesAlwaysVisible

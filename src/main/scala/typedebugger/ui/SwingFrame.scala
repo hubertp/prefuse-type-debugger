@@ -2,14 +2,14 @@ package scala.typedebugger
 package ui
 
 import java.awt.{ BorderLayout, Dimension }
-import java.awt.event.{WindowAdapter, WindowEvent, ItemListener, ItemEvent}
+import java.awt.event.{WindowAdapter, WindowEvent, ItemListener, ItemEvent, KeyListener, KeyEvent, KeyAdapter}
 import javax.swing.{Action => swingAction, _}
 
 import scala.concurrent.Lock
 import scala.tools.nsc.io
 import scala.collection.mutable
 
-class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
+abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
                  filtState: Boolean, srcs: List[io.AbstractFile]) {
 
   val jframe = new JFrame(frameName)
@@ -20,6 +20,8 @@ class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
   val statusBar = new JLabel()
   
   val prefuseDisplays = new mutable.HashMap[io.AbstractFile, prefuse.Display]()
+  
+  def processKeyEvent(k: KeyEvent): Unit
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -29,15 +31,21 @@ class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
     })
 
     val tabDisplayFiles = new JTabbedPane() // switch between display corresponding to the units
-    populateDisplays(new prefuse.Visualization())
+    val vis = new prefuse.Visualization()
+    populateDisplays(vis)
     prefuseDisplays.foreach { case (file, display) =>
       tabDisplayFiles.add(file.name, prefuseComponent) // FIXME: this assumes debugging only a single file
     }
-    
+    tabDisplayFiles.addKeyListener(new KeyAdapter() {
+      override def keyPressed(k: KeyEvent): Unit = {
+        processKeyEvent(k)
+      }
+    })
     
     val tabFolder = new JTabbedPane()
     // Split right part even further
     val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
+    //val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, prefuseComponent, new JScrollPane(tabFolder))
     topSplitPane.setResizeWeight(0.7)
     
     topPane.add(topSplitPane)

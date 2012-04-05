@@ -228,7 +228,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     //m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
     m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
     m_vis.addFocusGroup(visibleGroup, new DefaultTupleSet())
-    //m_vis.getFocusGroup(Visualization.FOCUS_ITEMS).addTupleSetListener(new SearchFor(826))
+    //m_vis.getFocusGroup(visibleGroup).addTupleSetListener(new SearchFor(0))
     
   
     m_vis.putAction("advancedOptions", new CollapseDisabled())
@@ -251,6 +251,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
 	  m_vis.run("filter")
   }
   
+  // used for debugging
   class SearchFor(id: Int) extends prefuse.data.event.TupleSetListener {
     def tupleSetChanged(ts: prefuse.data.tuple.TupleSet, added: Array[Tuple], removed: Array[Tuple]) {
       added.toList foreach { t =>
