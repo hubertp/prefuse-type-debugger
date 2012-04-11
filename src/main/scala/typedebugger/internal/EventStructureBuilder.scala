@@ -5,7 +5,7 @@ import scala.tools.nsc.io
 import scala.collection.mutable.{ ListBuffer, Stack }
 
 trait StructureBuilders {
-  self: CompilerInfo with IStructure with Tools =>
+  self: CompilerInfo with IStructure with CompilationTools =>
     
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
@@ -15,11 +15,9 @@ trait StructureBuilders {
     
     //type ENode = EventNode
     
-    private var _root: BaseTreeNode[EventNode] = _
-    def root = _root
+    private[this] var _root: BaseTreeNode[EventNode] = _
     
-    private var errorNodes: List[BaseTreeNode[EventNode]] = Nil
-    def initialGoals = errorNodes.reverse
+    private[this] var errorNodes: List[BaseTreeNode[EventNode]] = Nil
 
     // List of nodes that are currently open
     private val currentNodes = new Stack[(BaseTreeNode[EventNode], Int)]()
@@ -123,21 +121,24 @@ trait StructureBuilders {
     }
   
     //def pf(fxn: Event =>? Boolean): Unit = apply(Filter pf fxn)
-    def run(srcs: List[io.AbstractFile]): Boolean = {
+    def run(srcs: List[io.AbstractFile]): CompilerRunResult = {
       EV.resetEventsCounter()
       // reset the intermediate structure
       _root = createNode(DummyRootEvent, null)(NoPosition)
+      errorNodes = Nil
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
         case ev if filt( ev )=> reportWithLevel(ev, level); NoResponse
       })
       hook hooking CompileWrapper.cc(srcs)
+      InstrumentedRunResult(_root, errorNodes.reverse)
     }
     
-    def runTargeted(pos: Position, expandPos: Position) = {
+    def runTargeted(pos: Position, expandPos: Position): CompilerRunResult = {
       EV.resetEventsCounter()
       _root = createNode(DummyRootEvent, null)(NoPosition)
+      errorNodes = Nil
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
@@ -145,6 +146,7 @@ trait StructureBuilders {
       })
       
       hook hooking CompileWrapper.targetC(pos)
+      InstrumentedRunResult(_root, errorNodes.reverse)
     }
   }
   
@@ -157,6 +159,11 @@ trait StructureBuilders {
     override def pos = global.NoPosition
     def participants = List()
   }
+  
+  private case class InstrumentedRunResult(
+      root: BaseTreeNode[EventNode],
+      goals: List[BaseTreeNode[EventNode]])
+    extends CompilerRunResult
   
   object CompileWrapper {
     def cc(files: List[io.AbstractFile]): Boolean = {

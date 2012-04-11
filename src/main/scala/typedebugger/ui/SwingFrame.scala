@@ -23,8 +23,9 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   
   protected val tabDisplayFiles = new JTabbedPane()
   
-  def processKeyEvent(k: KeyEvent, component: PrefuseComponent): Unit
+  def processKeyEvent(k: KeyEvent): Unit
   def advController: AdvancedOptionsController
+  def switchSources(comp: PrefuseComponent): Unit
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -43,7 +44,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
           case KeyEvent.VK_ALT =>
             currentAltKey = true
           case _ if currentAltKey =>
-            processKeyEvent(k, currentDisplay)
+            processKeyEvent(k)
           case _ =>
         }
       }
@@ -94,9 +95,9 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   }
   
   // todo: cache the result
-  protected def currentDisplay: PrefuseComponent =
-    tabDisplayFiles.getSelectedComponent.asInstanceOf[PrefuseComponent]
-  
+  protected def currentDisplay[T <: PrefuseComponent]: T =
+    tabDisplayFiles.getSelectedComponent.asInstanceOf[T]
+
   class TabbedListener(startIndex: Int) extends ChangeListener {
     var selected = startIndex
     def stateChanged(change: ChangeEvent) {
@@ -108,6 +109,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
         val display = pane.getComponentAt(newComponentId).asInstanceOf[PrefuseComponent]
         oldDisplay.hideView()
         loadSourceFile(display.source)
+        switchSources(display)
         display.reRenderView()
         selected = newComponentId
       }

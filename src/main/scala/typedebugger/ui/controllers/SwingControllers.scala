@@ -22,7 +22,7 @@ import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
 trait SwingControllers {
   self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure
-    with internal.EventFiltering with PrefuseControllers =>
+    with internal.EventFiltering with PrefuseControllers with processing.Hooks =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -41,6 +41,7 @@ trait SwingControllers {
     val advController = new AdvController() 
     
     val highlightContr = new HighlighterAndGeneralInfo()
+    private val highlightsInfo = new mutable.HashMap[Int, Position]()
     val keyHandler = new KeyPressListener()
     
     private def codeHighlighter = sCodeViewer.getHighlighter()
@@ -81,40 +82,54 @@ trait SwingControllers {
       }
     }
     
-    def processKeyEvent(k: KeyEvent, component: PrefuseComponent) {
+    def processKeyEvent(k: KeyEvent) {
       keyHandler.keyPressed(k)
     }
     
-    // specific adapters, actions
+    def switchSources(display: PrefuseComponent) {
+
+      // restore highlight
+      highlightContr.clearHighlight(true)
+      val pos = highlightsInfo.getOrElse(tabDisplayFiles.getSelectedIndex, null)
+      if (pos != null) {
+        val ref = highlightContr.highlight(pos, highlightContr.TargetDebuggingHighlighter)
+        highlightContr.activeSelection = ref
+      }
+    }
+    
     class SelectionListener() extends CaretListener {
       
       private def orderedPos(e: CaretEvent): (Int, Int) = 
         if (e.getDot > e.getMark) (e.getMark, e.getDot)
         else (e.getDot, e.getMark)
+        
+      private def postCompHook: PostCompilationHook = new PostCompilationHook {
+        def info(goals: List[UINode[PrefuseEventNode]]) {
+          debug("Updated goals: " + goals)
+          currentDisplay[PrefuseController].updateGoals(goals)
+          currentDisplay.reRenderView()
+        }
+      }
       
       def caretUpdate(e: CaretEvent) {
-        debug("Caret update: " + e.getDot + " .... " + e.getMark)
-        // locate tree
-        srcs match {
-          case List(oneSource) =>
-            val sFile = new BatchSourceFile(oneSource)
-            val (start, end) = orderedPos(e)
-            val position = global.rangePos(sFile, start, start, end)
-            debug("Selection position: " + position)
-            val t = global.locate(position)
-            currentDisplay.grabFocus() // fix focus for key navigation
-            debug("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
-            if (t != EmptyTree) {
-              highlightContr.clearHighlight(true)
-              val ref = highlightContr.highlight(position, highlightContr.TargetDebuggingHighlighter)
-              highlightContr.activeSelection = ref
-              targetedCompile(position)
-            } else
-              debug("invalid selection")
-
-          case _ => // not supported yet
-
-        }
+        debugUI("Caret update: " + e.getDot + " .... " + e.getMark)
+        val sFile = new BatchSourceFile(currentDisplay.source)
+        val (start, end) = orderedPos(e)
+        val position = global.rangePos(sFile, start, start, end)
+        debugUI("Selection position: " + position)
+        val t = global.locate(position)
+        tabDisplayFiles.grabFocus() // fix focus for key navigation
+        debugUI("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
+        // setText can invoke CaretListener, therefore we have to guard against
+        // such situation (positions diff is 0)
+        if (t != EmptyTree && ((end - start) > 0)) {
+          highlightContr.clearHighlight(true)
+          val ref = highlightContr.highlight(position, highlightContr.TargetDebuggingHighlighter)
+          highlightContr.activeSelection = ref
+          highlightsInfo(tabDisplayFiles.getSelectedIndex) = position
+          targetedCompile(position, postCompHook)
+        } else
+          debugUI("invalid selection")
       }
     }
     
@@ -177,7 +192,7 @@ trait SwingControllers {
 	      clearHighlight()
 	    }
       
-      private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter): AnyRef = 
+      private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter): AnyRef =
         if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
         else null
   
@@ -223,7 +238,7 @@ trait SwingControllers {
 
         item0 match {
           case item: NodeItem =>
-            val display = currentDisplay
+            val display = currentDisplay[PrefuseComponent]
             val vis = item.getVisualization
             val fGroup = vis.getFocusGroup(display.stickyNodes)
             if (fGroup.containsTuple(item)) {
@@ -254,7 +269,7 @@ trait SwingControllers {
 	  class KeyPressListener extends ControlAdapter {
 	    val keyFilter = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
 	                         KeyEvent.VK_E, KeyEvent.VK_C, KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE)
-	    def display = currentDisplay
+	    def display = currentDisplay[PrefuseComponent]
 
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
