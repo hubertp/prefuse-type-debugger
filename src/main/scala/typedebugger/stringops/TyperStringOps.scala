@@ -1,5 +1,5 @@
 package scala.typedebugger
-package processing
+package stringops
 
 import util.StringFormatter
 

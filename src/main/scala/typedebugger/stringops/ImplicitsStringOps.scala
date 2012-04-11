@@ -1,5 +1,5 @@
 package scala.typedebugger
-package processing
+package stringops
 
 trait ImplicitsStringOps {
   self: StringOps with internal.CompilerInfo =>

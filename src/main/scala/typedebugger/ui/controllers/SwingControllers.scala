@@ -469,7 +469,8 @@ trait SwingControllers {
 	  }*/
 	  
     // Handle action on the node of the graph.
-    // Expand the node that was just clicked. Also cleanup all the intermediate nodes leading to it.
+    // Expand the node that was just clicked.
+    // Also cleanup all the intermediate nodes leading to it.
     class ClickedNodeListener() extends ControlAdapter {
       import ClickedNodeListener._
       override def itemClicked(item0: VisualItem, e: MouseEvent) {

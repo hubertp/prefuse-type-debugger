@@ -11,7 +11,7 @@ import scala.tools.nsc.util.{ SourceFile, BatchSourceFile }
 
 import scala.collection.mutable
 
-class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: Reporter)
+class DebuggerGlobal(_settings: Settings with DebuggerSettings, _reporter: Reporter)
   extends scala.tools.nsc.Global(_settings, _reporter)
     with EventsGlobal
     with DebuggerCompilationUnits
@@ -26,7 +26,7 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
     override def instrumentingOn = instrumenting
   }
   
-  override def settings: Settings with TypeDebuggerSettings = _settings
+  override def settings: Settings with DebuggerSettings = _settings
   
   // optional approach to target debugging, when we abort further typechecking
   // once we are done with the searched for tree `result`
@@ -64,7 +64,7 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   initRun()
   
   class DebuggerRun extends Run {
-    override def canRedefine(sym: Symbol) = true // does this affect typechecking info produced
+    override def canRedefine(sym: Symbol) = true // todo: does this affect typechecking info produced
     
     def typeCheck(unit: CompilationUnit): Unit = {
       atPhase(typerPhase) { typerPhase.asInstanceOf[GlobalPhase] applyPhase unit }
@@ -84,13 +84,12 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
     }
     // use parseAndEnter
     // and then typeCheck for each unit
-    withInstrumentingOn { // todo: turn off
+    withInstrumentingOn { // todo: turn off eventually
       _compilerRun.compileUnits(units)
     }
   }
   
-  // some of the code here is a duplicate of interactive.Global
-  // but we cannot/do not want to use it, so that is acceptable
+  // similar code to interactive.Global
   def reloadSource(source: SourceFile) {
     val unit = new DebuggerCompilationUnit(source)
     unitOfFile(source.file) = unit
@@ -119,9 +118,10 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   def targetDebugAt(pos: Position) {
     // pos.source unit has always been typechecked before
     // assert: pos is valid!
+    assert(pos != NoPosition)
     debug("[debugging] at: " + pos, "event")
     
-    // locate the tree
+    // locate the unit
     reloadSource(pos.source)               // flush source info
     globalPhase = _compilerRun.typerPhase  // if run uses typeCheck this will be no longer necessary
     val unit = unitOfFile(pos.source.file)
@@ -146,7 +146,7 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   
   def parseAndEnter(unit: DebuggerCompilationUnit) {
     _compilerRun.compileLate(unit)
-    validatePositions(unit.body) // needed?
+    validatePositions(unit.body)
     // todo: syncTopLevelSyms 
   }
   

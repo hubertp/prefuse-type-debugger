@@ -1,6 +1,7 @@
 package scala.typedebugger
+package internal
 
-trait TypeDebuggerSettings {
+trait DebuggerSettings {
   self: scala.tools.nsc.settings.MutableSettings =>
   
   val fullTypechecking = BooleanSetting("-XfullTypecheck", "Type debugger option to show the whole tree")

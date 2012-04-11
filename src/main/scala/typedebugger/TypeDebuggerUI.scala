@@ -6,7 +6,7 @@ import scala.tools.nsc.reporters.{ ConsoleReporter }
 object TypeDebuggerUI {
   def main(args: Array[String]) {
     // parse input: sources, cp, d
-    val settings0 = new Settings() with TypeDebuggerSettings
+    val settings0 = new Settings() with internal.DebuggerSettings
     settings0.Yrangepos.value = true // redundant?
     settings0.stopAfter.value = List("typer")
     

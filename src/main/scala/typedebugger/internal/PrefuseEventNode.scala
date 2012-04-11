@@ -6,12 +6,10 @@ import scala.collection.mutable
 import mutable.{ ListBuffer }
 
 trait PrefuseStructure extends IStructure {
-  self: CompilerInfo with processing.StringOps with EventFiltering =>
+  self: CompilerInfo with stringops.StringOps with EventFiltering =>
     
   import global._
   import EV._
-  
-  val COLUMN_PREFUSENODE_CLASS = (new PrefuseEventNode(null, null, null)).getClass
   
   trait UINodeLike[T, Container[X]] extends BaseTreeNodeLike[T, Container] {
     val pfuseNode: Node
@@ -54,8 +52,6 @@ trait PrefuseStructure extends IStructure {
         }
       else "Typecheck full tree" // root
     
-    // Determine initial state for the node
-    // This can change by enabling options explicitly
     lazy val advanced: Boolean = FilteringOps.map.isDefinedAt(ev)
   }
 }

@@ -35,17 +35,7 @@ import prefuse.render._
 
 
 object PrefuseComponent {
-  //val tree = "tree"                       // data structure that stored the whole debugging tree
-
-  val typeDebuggerorientation = Constants.ORIENT_BOTTOM_TOP
-
-  /*val stickyNodes = "tree.sticky"         // Nodes that are 'fixed' to be visible
-  val openGoalNodes = "tree.openGoals"
-  val nonGoalNodes = "tree.openNods"      // Intermediate nodes on the path to the goal nodes
-  val toRemoveNodes = "tree.removeNodes"  // Nodes to be removed on the refresh of UI
-  //val linkGroupNodes = "tree.link"
-  val clickedNode = "tree.clicked"
-  val visibleGroup = "tree.visible"*/
+  val typeDebuggerOrientation = Constants.ORIENT_BOTTOM_TOP
   
   val backgroundColor = Color.WHITE
   val foregroundColor = Color.BLACK
@@ -236,7 +226,7 @@ abstract class PrefuseComponent(source0: io.AbstractFile, t: Tree, vis: TypeDebu
     addControlListener(tooltipController)
     addControlListener(TypeDebuggerFocusControl(1, PrefuseActions.filter))
   
-    setOrientation(typeDebuggerorientation)
+    setOrientation(typeDebuggerOrientation)
     vis.addFocusGroup(stickyNodes, new DefaultTupleSet())
     vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
     vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())

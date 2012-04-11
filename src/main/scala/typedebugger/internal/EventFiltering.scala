@@ -17,7 +17,7 @@ trait EventFiltering {
     private lazy val fromEventToEnum0 = new EventToEnumFunc()
     
     class EventToEnumFunc extends PartialFunction[Event, Filtering.Value] {
-      // TODO: ideally size limited cache
+      // TODO: ideally size limited soft-references cache
       private[this] var cache = new mutable.WeakHashMap[Event, Option[Filtering.Value]]()
       
       def isDefinedAt(e: Event): Boolean = {

@@ -6,7 +6,7 @@ import scala.tools.nsc.io
 trait CompilationTools {
   self: CompilerInfo with IStructure =>
     
-  trait CompilerWithEventInfo {
+  trait CompilerRunWithEventInfo {
     def run(srcs: List[io.AbstractFile]): CompilerRunResult
     def runTargeted(pos: global.Position, expandPos: global.Position): CompilerRunResult
   }

@@ -1,7 +1,6 @@
 package scala.typedebugger
 
 import java.awt.{List => awtList, _}
-import java.awt.geom.{Point2D, Rectangle2D}
 import java.awt.event._
 
 import java.io.File
@@ -11,8 +10,8 @@ import scala.collection.mutable
 import scala.tools.nsc.io
 
 import prefuse.data.Tree
-import prefuse.Visualization
-import ui.{UIConfig, SwingFrame}
+
+import internal.DebuggerSettings
 
 // combine all parts into a single module
 abstract class TypeBrowser extends AnyRef
@@ -22,31 +21,29 @@ abstract class TypeBrowser extends AnyRef
                            with internal.CompilationTools
                            with internal.EventFiltering
                            with processing.PrefusePostProcessors
-                           with processing.StringOps
                            with processing.Hooks
+                           with stringops.StringOps
                            with ui.controllers.PrefuseControllers
                            with ui.controllers.SwingControllers
                            with ui.UIUtils {
   import global.{EV, NoPosition}
   import EV._
   
-  import UIConfig.{nodesLabel => label}
+  import ui.UIConfig.{nodesLabel => label}
   
-  private var builder: CompilerWithEventInfo = _
-    
+  private var builder: CompilerRunWithEventInfo = _
   private val prefuseTrees = new mutable.HashMap[io.AbstractFile, Tree]()
 
-  def compileFullAndProcess(srcs: List[io.AbstractFile], settings: TypeDebuggerSettings, fxn: Filter) = {
-    builder = new CompilerRunWithEvents(label, fxn)
+  def compileFullAndProcess(srcs: List[io.AbstractFile], settings: DebuggerSettings, fxn: Filter) = {
+    builder = new InstrumentedRun(label, fxn)
     //TODO include settings
     val result = builder.run(srcs)
     postProcess(result)
   }
-
   
   def targetedCompile(pos: global.Position, hook: PostCompilationHook) = {
     debug("Targeted compile: " + pos)
-    assert(builder != null, "need full compiler run first") // todo: remove restriction
+    assert(builder != null, "need full compiler run first")
     val overlappingTree = global.locate(pos) //global.locateStatement(pos)
     val treePos = if (overlappingTree.pos.isRange && !overlappingTree.pos.isTransparent) overlappingTree.pos else NoPosition
     val result = builder.runTargeted(pos, treePos)
@@ -59,11 +56,11 @@ abstract class TypeBrowser extends AnyRef
 
   // provide prefuse-specific structure
   private def postProcess(res: CompilerRunResult) = {
-    val initial = EventNodeProcessor.processTree(prefuseTrees.toMap, res.root,
+    val goals = EventNodeProcessor.processTree(prefuseTrees.toMap, res.root,
                                                  res.goals, label)
-    debug("[errors] " + initial.map(_.ev))
+    debug("[goals-in-focus] " + goals.map(_.ev))
 
-    if (settings.fullTypechecking.value) Nil else initial
+    if (settings.fullTypechecking.value) Nil else goals
   }
   
   private def realSources(srcRoots: List[String]): List[io.AbstractFile] = {
@@ -77,9 +74,9 @@ abstract class TypeBrowser extends AnyRef
     srcs.toList.distinct.map(s => io.AbstractFile.getFile(s))
   }
 
-  def compileAndShow(srcs: List[String], settings: TypeDebuggerSettings) {
+  def compileAndShow(srcs: List[String], settings: DebuggerSettings) {
     val filtr =  Filter.and(Filter pf {
-      // TODO shouldn't filter out accidentally the events 
+      // shouldn't filter out accidentally the events 
       // that open/close blocks -> this can cause unexpected graphs
       case _: TyperTypeSet                => false
       case _: DebugEvent                  => false
@@ -99,9 +96,7 @@ abstract class TypeBrowser extends AnyRef
       case _: ContextTypeError            => true
       case _: LubEvent                    => true
       case _: TypesEvent                  => true
-      case _: RecoveryEvent               => true // TODO need to remove that dependency
-                                                  // but then it brakes our indentation mechanism
-                                                  // indentation needs to be separated from filtering stuff
+      case _: RecoveryEvent               => true // indentation needs to be separated from filtering logic
                                                   // ATM opening/closing events cannot be filtered out at this point
       case _: NamerApplyPhase             => false
       case uDone: UnitApplyDone if uDone.phase.name == "namer" => false // should rather expose the current
@@ -109,18 +104,16 @@ abstract class TypeBrowser extends AnyRef
       case _: CompilationUnitEvent        => true
     }, EVDSL.ph <= 4)
 
-    //assert(srcs.length == 1, "[debugger limitation] restrict debugging to one file")
     val sources = realSources(srcs)
-    // init data trees
     sources foreach (src => prefuseTrees(src) = new Tree())
     
     val goals = compileFullAndProcess(sources, settings, filtr)
     
     val swingController = new SwingController(sources)
     swingController.initAllDisplays(prefuseTrees, goals)
+    
     val lock = new Lock()
     swingController.createFrame(lock)
-    //frame.createFrame(lock)
     lock.acquire
   }
 }

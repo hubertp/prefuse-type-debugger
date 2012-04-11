@@ -5,7 +5,7 @@ import scala.tools.nsc.Settings
 
 trait CompilerInfo {
   val global: DebuggerGlobal
-  def settings: Settings with TypeDebuggerSettings = global.settings
+  def settings: Settings with DebuggerSettings = global.settings
   def debug(msg: => String, kind: String): Unit = global.debug(msg, kind)
   def debug(msg: => String): Unit = global.debug(msg)
 }

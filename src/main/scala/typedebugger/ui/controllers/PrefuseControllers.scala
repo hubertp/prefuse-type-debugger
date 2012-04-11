@@ -56,8 +56,6 @@ trait PrefuseControllers {
       debug("[prefuse] update initial goals to: " + gs)
       initGoals(gs)
       flushVisCache()
-      // fixme: enable?
-      //showPrefuseDisplay()
     }
 
     protected def adv: AdvancedOptionsController = contr
