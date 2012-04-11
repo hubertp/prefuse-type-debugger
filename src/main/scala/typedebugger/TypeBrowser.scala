@@ -7,10 +7,11 @@ import java.awt.event._
 import java.io.File
 
 import scala.concurrent.Lock
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 import scala.tools.nsc.io
 
 import prefuse.data.Tree
+import prefuse.Visualization
 import ui.{UIConfig, SwingFrame}
 
 // combine all parts into a single module
@@ -35,8 +36,7 @@ abstract class TypeBrowser extends AnyRef
     def initialGoals: List[BaseTreeNode[EventNode]]
   } = _
     
-  private val prefuseTree = new Tree()
-  private var prefuseController: PrefuseController = _
+  private val prefuseTrees = new mutable.HashMap[io.AbstractFile, Tree]()
 
   def compileFullAndProcess(srcs: List[io.AbstractFile], settings: TypeDebuggerSettings, fxn: Filter) = {
     builder = new CompilerRunWithEvents(label, fxn)
@@ -53,26 +53,26 @@ abstract class TypeBrowser extends AnyRef
   
   private def updateTreeAndProcess(pos: global.Position) = {
     assert(builder != null, "need full compiler run first") // todo: remove restriction
-    val overlappingTree = global.locate(pos) //global.locateStatement(pos)
+    /*val overlappingTree = global.locate(pos) //global.locateStatement(pos)
     val treePos = if (overlappingTree.pos.isRange && !overlappingTree.pos.isTransparent) overlappingTree.pos else NoPosition
     builder.runTargeted(pos, treePos)
     prefuseTree.clear()
     EventDescriptors.clearCache()
     val processedGoals = postProcess()
-    prefuseController.updateGoals(processedGoals)
+    prefuseController.updateGoals(processedGoals)*/
   }
 
   // provide prefuse-specific structure
   private def postProcess() = {
-    val (root, initial) = EventNodeProcessor.processTree(prefuseTree, builder.root,
-                                                       builder.initialGoals, label)
+    val initial = EventNodeProcessor.processTree(prefuseTrees.toMap, builder.root,
+                                                 builder.initialGoals, label)
     debug("[errors] " + initial.map(_.ev))
 
     if (settings.fullTypechecking.value) Nil else initial
   }
   
   private def realSources(srcRoots: List[String]): List[io.AbstractFile] = {
-    val srcs = new ListBuffer[String]
+    val srcs = new mutable.ListBuffer[String]
     srcRoots foreach { p =>
       io.Path(p).walk foreach { x =>
         if (x.isFile && x.hasExtension("scala", "java"))
@@ -108,15 +108,21 @@ abstract class TypeBrowser extends AnyRef
                                                   // but then it brakes our indentation mechanism
                                                   // indentation needs to be separated from filtering stuff
                                                   // ATM opening/closing events cannot be filtered out at this point
+      case _: NamerApplyPhase             => false
+      case uDone: UnitApplyDone if uDone.phase.name == "namer" => false // should rather expose the current
+                                                                        // in global and use namerPhase?
+      case _: CompilationUnitEvent        => true
     }, EVDSL.ph <= 4)
 
-    assert(srcs.length == 1, "[debugger limitation] restrict debugging to one file")
+    //assert(srcs.length == 1, "[debugger limitation] restrict debugging to one file")
     val sources = realSources(srcs)
+    // init data trees
+    sources foreach (src => prefuseTrees(src) = new Tree())
+    
     val goals = compileFullAndProcess(sources, settings, filtr)
-    prefuseController = new PrefuseController(prefuseTree, goals, sources.head) // fixme
-    prefuseController.init()
-    val swingController = new TypeDebuggerController(prefuseController, sources)
-    swingController.initPrefuseListeners()
+    
+    val swingController = new SwingController(sources)
+    swingController.initAllDisplays(prefuseTrees, goals)
     val lock = new Lock()
     swingController.createFrame(lock)
     //frame.createFrame(lock)

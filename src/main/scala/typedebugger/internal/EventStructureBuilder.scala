@@ -126,7 +126,7 @@ trait StructureBuilders {
     def run(srcs: List[io.AbstractFile]): Boolean = {
       EV.resetEventsCounter()
       // reset the intermediate structure
-      _root = createNode(null, null)(NoPosition)
+      _root = createNode(DummyRootEvent, null)(NoPosition)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
@@ -137,7 +137,7 @@ trait StructureBuilders {
     
     def runTargeted(pos: Position, expandPos: Position) = {
       EV.resetEventsCounter()
-      _root = createNode(null, null)(NoPosition)
+      _root = createNode(DummyRootEvent, null)(NoPosition)
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
       hook = Hook.indentation((level: Int) => {
@@ -146,6 +146,16 @@ trait StructureBuilders {
       
       hook hooking CompileWrapper.targetC(pos)
     }
+  }
+  
+  private case object DummyRootEvent extends global.EV.Event {
+    def tag = "dummy-root"
+    override val phase = scala.tools.nsc.NoPhase
+    override val unit = global.NoCompilationUnit
+    override val file = None
+    override def defaultPos = global.NoPosition
+    override def pos = global.NoPosition
+    def participants = List()
   }
   
   object CompileWrapper {

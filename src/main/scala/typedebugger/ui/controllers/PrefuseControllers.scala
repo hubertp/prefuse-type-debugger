@@ -25,22 +25,12 @@ trait PrefuseControllers {
   import global.{Tree => STree, _}
   import EV._
   
-  class AdvancedOptionsController extends AdvancedOptions {
-    private val advFilter = new mutable.BitSet()
+  class PrefuseController(idx: Int, source: io.AbstractFile, pTree: Tree, vis: TypeDebuggerVisualization,
+    goals0: List[UINode[PrefuseEventNode]], contr: AdvancedOptionsController)
+    extends PrefuseComponent(source, pTree, vis)(idx) {
     
-    def enableOption(v: Filtering.Value) { advFilter += v.id }
-    def disableOption(v: Filtering.Value) { advFilter -= v.id}
-    
-    def isOptionEnabled(t: Tuple): Boolean = {
-      val ev = asDataNode(t).ev
-      FilteringOps.map.isDefinedAt(ev) && advFilter(FilteringOps.map(ev).id)
-    }
-    def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
-  }
-  
-  class PrefuseController(pTree: Tree, goals0: List[UINode[PrefuseEventNode]], source: io.AbstractFile) extends PrefuseComponent(source, pTree) {
-      // methods that are global specific
-    def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes)
+    // methods that are global specific
+    def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes, this)
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isNode(t: Tuple): Boolean = containsDataNode(t)
     def eventInfo(item: VisualItem): util.StringFormatter = asDataNode(item).fullInfo
@@ -51,7 +41,7 @@ trait PrefuseControllers {
     private def initGoals(ls: List[UINode[PrefuseEventNode]]): Unit = {
       def verifyUpToRoot(n: UINode[PrefuseEventNode]): Boolean = 
         !n.advanced && (!n.parent.isDefined || verifyUpToRoot(n.parent.get)) 
-      val pNodes = ls filter verifyUpToRoot map (node => toVisualNode(node.pfuseNode, m_vis))
+      val pNodes = ls filter verifyUpToRoot map (node => toVisualNode(node.pfuseNode, m_vis, dataGroupName))
       debug("verified initial goals: " + pNodes)
       verifiedGoals = pNodes
     }
@@ -66,10 +56,11 @@ trait PrefuseControllers {
       debug("[prefuse] update initial goals to: " + gs)
       initGoals(gs)
       flushVisCache()
-      showPrefuseDisplay()
+      // fixme: enable?
+      //showPrefuseDisplay()
     }
 
-    val adv: AdvancedOptions = new AdvancedOptionsController()
+    protected def adv: AdvancedOptionsController = contr
   }
   
   object NodeColorAction {
@@ -78,7 +69,7 @@ trait PrefuseControllers {
       Map((global.currentRun.namerPhase, (192, 255, 193)), (global.currentRun.typerPhase, (238, 230, 133)))
   }
 
-  class NodeColorAction(group: String) extends ColorAction(group, VisualItem.FILLCOLOR) {
+  class NodeColorAction(group: String, display: PrefuseComponent) extends ColorAction(group, VisualItem.FILLCOLOR) {
     import NodeColorAction._
     private def retrieveEvent(item: VisualItem): Option[Event] =
       if (containsDataNode(item)) Some(asDataNode(item).ev)
@@ -88,7 +79,7 @@ trait PrefuseControllers {
     override def getColor(item: VisualItem): Int = {
       val event = retrieveEvent(item)
       event match {
-        case _ if ( m_vis.isInGroup(item, PrefuseComponent.clickedNode)) =>
+        case _ if ( m_vis.isInGroup(item, display.clickedNode)) =>
           ColorLib.rgb(198, 229, 250) // Make it always visible
         case Some(ev: HardErrorEvent) =>
           ColorLib.rgba(255, 0, 0, 150)
@@ -108,11 +99,11 @@ trait PrefuseControllers {
           // search currently not supported
           if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
             ColorLib.rgb(255,190,190)
-          else if ( m_vis.isInGroup(item, stickyNodes) )
+          else if ( m_vis.isInGroup(item, display.stickyNodes) )
             ColorLib.rgb(204, 255, 51)
           else if ( m_vis.isInGroup(item, Visualization.FOCUS_ITEMS) )
             ColorLib.rgb(198,229,229)
-          else if ( m_vis.isInGroup(item, visibleGroup) )
+          else if ( m_vis.isInGroup(item, display.visibleGroup) )
             ColorLib.rgb(198,229,229)
             // provide different colors for phases and types of events
           else if ( item.getDOI() > -1 )

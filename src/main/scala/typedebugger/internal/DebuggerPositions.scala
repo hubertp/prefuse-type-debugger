@@ -2,6 +2,7 @@ package scala.typedebugger
 package internal
 
 import scala.tools.nsc.Global
+import scala.tools.nsc.io.AbstractFile
 
 trait DebuggerPositions {
   self: Global =>
@@ -28,6 +29,10 @@ trait DebuggerPositions {
         }
       )
     }
+  }
+  
+  def positionToFile(pos: Position): AbstractFile = {
+    pos.source.file
   }
 
 }

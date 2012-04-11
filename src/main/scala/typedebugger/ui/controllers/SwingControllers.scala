@@ -16,11 +16,13 @@ import javax.swing.text.Highlighter
 import javax.swing.event.{CaretListener, CaretEvent}
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.tools.nsc.io
 import scala.tools.nsc.util.{SourceFile, BatchSourceFile}
 
 trait SwingControllers {
-  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
+  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure
+    with internal.EventFiltering with PrefuseControllers =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -32,45 +34,56 @@ trait SwingControllers {
   
   def debugUI(msg: => String) = global.debug(msg, "ui")
   
-  class TypeDebuggerController(prefuseComponent: PrefuseComponent, srcs: List[io.AbstractFile])
-    extends SwingFrame(prefuseComponent,"Type debugger 0.0.3", settings.advancedDebug.value, srcs) {
+  class SwingController(srcs: List[io.AbstractFile])
+    extends SwingFrame("Type debugger 0.0.3", settings.advancedDebug.value, srcs) {
 
     var lastAccessed: Option[NodeItem] = None
+    val advController = new AdvController() 
     
     val highlightContr = new HighlighterAndGeneralInfo()
     val keyHandler = new KeyPressListener()
     
     private def codeHighlighter = sCodeViewer.getHighlighter()
     sCodeViewer.addCaretListener(new SelectionListener())
-   
-    def initPrefuseListeners() {
-      prefuseComponent.addControlListener(highlightContr)
-      prefuseComponent.addControlListener(new ClickedNodeListener())
-      //prefuseComponent.addControlListener(new LinkNode())
-      prefuseComponent.addControlListener(new StickyNode())
-      //prefuseComponent.addControlListener(keyHandler)
-      prefuseComponent.addControlListener(HiddenEvents)
+
+    
+    def initAllDisplays(tree: io.AbstractFile => Tree, allGoals: List[UINode[PrefuseEventNode]]) {
+      val groupedGoals: Map[io.AbstractFile, List[UINode[PrefuseEventNode]]] = allGoals groupBy { (node: UINode[PrefuseEventNode]) =>
+        node.ev.file match {
+          case Some(absFile) => absFile
+          case None          => scala.tools.nsc.util.NoFile
+        }
+      }
+      val vis = new TypeDebuggerVisualization()
+      srcs.zipWithIndex foreach { case (src, idx) =>
+        val component = new PrefuseController(idx, src, tree(src), vis,
+                                              groupedGoals.getOrElse(src, Nil), advController)
+        component.init()
+        debug("Initialised prefuse tree component for " + src)
+        
+        component.addControlListener(highlightContr)
+        component.addControlListener(new ClickedNodeListener())    
+        component.addControlListener(new StickyNode())
+        component.addControlListener(HiddenEvents)
+
+        //component.addControlListener(new LinkNode())
+        //component.addControlListener(keyHandler)
+        tabDisplayFiles.add(src.name, component)
+        if (idx < 9)
+          tabDisplayFiles.setMnemonicAt(idx, 48 + idx)
+      }
       
       if (srcs.isEmpty)
         println("[Warning] No files specified for debugging.")
-      else 
-        loadSourceFile(srcs.head) // TODO: remove restriction
+      else {
+        loadSourceFile(srcs.head)
+        currentDisplay.reRenderView()
+      }
     }
     
-    private def loadSourceFile(absFile: io.AbstractFile) {
-      // at the moment we only ensure that there is only one
-      val src = if (absFile.file.exists)
-        io.File(absFile.file).slurp
-      else "Missing source code"
-
-      sCodeViewer.setText(src)
-    }
-    
-    def processKeyEvent(k: KeyEvent) {
-      println("Multiple times?")
+    def processKeyEvent(k: KeyEvent, component: PrefuseComponent) {
       keyHandler.keyPressed(k)
     }
-
     
     // specific adapters, actions
     class SelectionListener() extends CaretListener {
@@ -89,7 +102,7 @@ trait SwingControllers {
             val position = global.rangePos(sFile, start, start, end)
             debug("Selection position: " + position)
             val t = global.locate(position)
-            prefuseComponent.grabFocus() // fix focus for key navigation
+            currentDisplay.grabFocus() // fix focus for key navigation
             debug("Overlapping tree: " + t + "\n with pos " + t.pos + " treeOfClass " + t.getClass)
             if (t != EmptyTree) {
               highlightContr.clearHighlight(true)
@@ -186,7 +199,7 @@ trait SwingControllers {
           case node: NodeItem =>
             // display information about hidden events (if any)
             val children = node.children_[NodeItem].flatMap { ch =>
-              if (!ch.isVisible && asDataNode(ch).advanced && !prefuseComponent.adv.isOptionEnabled(ch))
+              if (!ch.isVisible && asDataNode(ch).advanced && !advController.isOptionEnabled(ch))
                 Some(FilteringOps.map(asDataNode(ch).ev))
               else None
             }.toList
@@ -210,12 +223,13 @@ trait SwingControllers {
 
         item0 match {
           case item: NodeItem =>
+            val display = currentDisplay
             val vis = item.getVisualization
-            val fGroup = vis.getFocusGroup(PrefuseComponent.stickyNodes)
+            val fGroup = vis.getFocusGroup(display.stickyNodes)
             if (fGroup.containsTuple(item)) {
               fGroup.removeTuple(item)
-              vis.getFocusGroup(PrefuseComponent.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
-              cleanup(item.getSourceTuple.asInstanceOf[Node], vis)
+              vis.getFocusGroup(display.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
+              cleanup(item.getSourceTuple.asInstanceOf[Node], vis, display)
             } else {
               fGroup.addTuple(item)
             }
@@ -224,11 +238,11 @@ trait SwingControllers {
         }
       }
 	    
-	    def cleanup(starting: Node, vis: Visualization) {
+	    def cleanup(starting: Node, vis: Visualization, display: PrefuseComponent) {
 	      var node = starting
-	      val tsNonGoal = vis.getFocusGroup(PrefuseComponent.nonGoalNodes)
-	      val tsRemove = vis.getFocusGroup(PrefuseComponent.toRemoveNodes)
-	      val tsGoal = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
+	      val tsNonGoal = vis.getFocusGroup(display.nonGoalNodes)
+	      val tsRemove = vis.getFocusGroup(display.toRemoveNodes)
+	      val tsGoal = vis.getFocusGroup(display.openGoalNodes)
 	      while (!(tsGoal containsTuple node) && node.getParent != null) {
 	        tsNonGoal.removeTuple(node)
 	        tsRemove.addTuple(node)
@@ -237,9 +251,10 @@ trait SwingControllers {
 	    }
 	  }
 	  
-	  class KeyPressListener extends ControlAdapter {	    
+	  class KeyPressListener extends ControlAdapter {
 	    val keyFilter = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
 	                         KeyEvent.VK_E, KeyEvent.VK_C, KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE)
+	    def display = currentDisplay
 
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
@@ -253,7 +268,7 @@ trait SwingControllers {
   	        debugUI("Key pressed. Last accessed event " + last)	
     	      val vis = last.getVisualization
     	
-    	      prefuseComponent.tooltipController.clearTooltip()
+    	      display.tooltipController.clearTooltip()
     	      keyCode match {
     	        case KeyEvent.VK_DOWN  =>
     	          // expand down (if necessary)
@@ -308,10 +323,10 @@ trait SwingControllers {
     	    case None =>
     	      keyCode match {
     	        case KeyEvent.VK_DOWN =>
-                val lowest = prefuseComponent.getBottomNode
+                val lowest = display.getBottomNode
                 debugUI("Key pressed. Initial 'lowest' node: " + lowest)
     	          if (lowest != null)
-    	            navigate(lowest, prefuseComponent.getVisualization)
+    	            navigate(lowest, display.getVisualization)
     	        case _                => // enable others
     	      }
         }
@@ -320,14 +335,15 @@ trait SwingControllers {
 	    def controlKeyPressed(k: Int, node: NodeItem) = k match {
 	      case KeyEvent.VK_ENTER =>
 	        val pNode = asDataNode(node).pfuseNode
+	        // FIXME
 	        node.getVisualization.items(new VisualItemSearchPred(pNode)).toList match {
 	          case List(single: VisualItem) =>
-	            prefuseComponent.tooltipController.showItemTooltip(single)
+	            display.tooltipController.showItemTooltip(single)
 	          case _ =>
 	        }
 	        
 	      case KeyEvent.VK_ESCAPE =>
-	        prefuseComponent.tooltipController.clearTooltip()
+	        display.tooltipController.clearTooltip()
 	      
 	      case _ =>
 	        
@@ -335,25 +351,25 @@ trait SwingControllers {
 	    
 	    def navigate(target: NodeItem, vis: Visualization) {
 	      debug("navigate to: " + target, "ui")
-	      ClickedNodeListener.addClickedItem(target)
+	      ClickedNodeListener.addClickedItem(target, display)
 	      highlightContr.itemEntered(target, null)
         // need to schedule the action by hand since keycontrol doesn't do it
-        prefuseComponent.reRenderView()
+        display.reRenderView()
 	    }
 	    
 	    def expand(last: NodeItem) = {
 	      val nodes = advancedNodes(!_.isVisible, last) 
 	      if (nodes.nonEmpty) {
-	        nodes.distinct foreach prefuseComponent.adv.enableOption
-	        prefuseComponent.reRenderView()
+	        nodes.distinct foreach advController.enableOption
+	        display.reRenderView()
 	      }
 	    }
 	    
 	    def collapse(last: NodeItem) = {
         val nodes = advancedNodes(_.isVisible, last) 
         if (nodes.nonEmpty) {
-          nodes.distinct foreach prefuseComponent.adv.disableOption
-          prefuseComponent.reRenderView()
+          nodes.distinct foreach advController.disableOption
+          display.reRenderView()
         }
       }
 	    
@@ -447,21 +463,21 @@ trait SwingControllers {
           
         item0 match {
           case item: NodeItem =>
-            addClickedItem(item)
+            addClickedItem(item, currentDisplay)
           case _ =>
         }
       }      
     }
   
 	  object ClickedNodeListener {
-	    def addClickedItem(node: NodeItem) {
+	    def addClickedItem(node: NodeItem, comp: PrefuseComponent) {
 	      // Add or remove from focus group
 	      debug("Add clicked item " + node)
 	      val vis = node.getVisualization
-	      val ts1 = vis.getFocusGroup(PrefuseComponent.openGoalNodes)
-	      val clicked = vis.getFocusGroup(PrefuseComponent.clickedNode)
+	      val ts1 = vis.getFocusGroup(comp.openGoalNodes)
+	      val clicked = vis.getFocusGroup(comp.clickedNode)
 	
-	      CleanupAction.clean(node)
+	      CleanupAction.clean(node, comp)
 	      clicked.clear()
 	      clicked.addTuple(node)
 	      
@@ -482,7 +498,7 @@ trait SwingControllers {
           // this means adding all non-goals on the path from this node upwards upto a goal node
           // (the latter is guaranteed to be reached since we wouldn't be able to reach item0 otherwise)
           // This is cleaner than complicating the logic for the removal
-	        val ts2 = vis.getFocusGroup(PrefuseComponent.nonGoalNodes)
+	        val ts2 = vis.getFocusGroup(comp.nonGoalNodes)
           while (item != null && !ts1.containsTuple(item)) {
             ts2.addTuple(item)
             item = item.getParent()
@@ -493,16 +509,15 @@ trait SwingControllers {
 	  }
 	  
 	  object CleanupAction {
-	    import PrefuseComponent._
-	    def clean(item0: VisualItem) {
+	    def clean(item0: VisualItem, comp: PrefuseComponent) {
 	      if (!containsDataNode(item0))
 	        return
 	
 	      val vis = item0.getVisualization
 	      //val List(ts1, ts2, ts3, tsRemove) =
-	      val ts1 = vis.getFocusGroup(openGoalNodes)
-	      val ts2 = vis.getFocusGroup(nonGoalNodes)
-	      val tsRemove = vis.getFocusGroup(toRemoveNodes)
+	      val ts1 = vis.getFocusGroup(comp.openGoalNodes)
+	      val ts2 = vis.getFocusGroup(comp.nonGoalNodes)
+	      val tsRemove = vis.getFocusGroup(comp.toRemoveNodes)
 	        //List(openGoalNodes, nonGoalNodes, linkGroupNodes, toRemoveNodes).map(vis.getFocusGroup(_))
 	      
 	      // Remove all the link nodes
@@ -523,13 +538,13 @@ trait SwingControllers {
               if (parent0 != null) throw new Exception("Prefuse bug!") else null
           }
           if (parent != null) {
-            val cached = prefuseComponent.nodesAlwaysVisible
+            val cached = comp.nodesAlwaysVisible
             var item = parent
-            val ts1 = vis.getFocusGroup(openGoalNodes)
+            val ts1 = vis.getFocusGroup(comp.openGoalNodes)
             while (item.getParent != null && ts1.containsTuple(item.getParent)) {            
               item = item.getParent
               // keep the minimal subset always expanded
-              if (!cached.contains(toVisualNode(item, vis))) {
+              if (!cached.contains(toVisualNode(item, vis, comp.dataGroupName))) {
                 ts1.removeTuple(item)
                 tsRemove.addTuple(item)
               }
@@ -568,5 +583,18 @@ trait SwingControllers {
 	      println("----------------")
 	    }
 	  }
+  }
+  
+  class AdvController extends AdvancedOptionsController {
+    private val advFilter = new mutable.BitSet()
+    
+    def enableOption(v: Filtering.Value) { advFilter += v.id }
+    def disableOption(v: Filtering.Value) { advFilter -= v.id}
+    
+    def isOptionEnabled(t: Tuple): Boolean = {
+      val ev = asDataNode(t).ev
+      FilteringOps.map.isDefinedAt(ev) && advFilter(FilteringOps.map(ev).id)
+    }
+    def isAdvancedOption(t: Tuple): Boolean = asDataNode(t).advanced
   }
 }

@@ -2,15 +2,17 @@ package scala.typedebugger
 package ui
 
 import java.awt.{ BorderLayout, Dimension }
-import java.awt.event.{WindowAdapter, WindowEvent, ItemListener, ItemEvent, KeyListener, KeyEvent, KeyAdapter}
+import java.awt.event.{WindowAdapter, WindowEvent, ItemListener,
+                       ItemEvent, KeyListener, KeyEvent, KeyAdapter}
 import javax.swing.{Action => swingAction, _}
+import event.{ ChangeListener, ChangeEvent }
 
 import scala.concurrent.Lock
 import scala.tools.nsc.io
 import scala.collection.mutable
 
-abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
-                 filtState: Boolean, srcs: List[io.AbstractFile]) {
+abstract class SwingFrame(frameName: String, filtState: Boolean,
+    srcs: List[io.AbstractFile]) {
 
   val jframe = new JFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
@@ -19,9 +21,10 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
   val sCodeViewer = new JTextArea(30, 30)
   val statusBar = new JLabel()
   
-  val prefuseDisplays = new mutable.HashMap[io.AbstractFile, prefuse.Display]()
+  protected val tabDisplayFiles = new JTabbedPane()
   
-  def processKeyEvent(k: KeyEvent): Unit
+  def processKeyEvent(k: KeyEvent, component: PrefuseComponent): Unit
+  def advController: AdvancedOptionsController
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -30,28 +33,42 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
       override def windowClosed(e: WindowEvent): Unit = lock.release
     })
 
-    val tabDisplayFiles = new JTabbedPane() // switch between display corresponding to the units
-    val vis = new prefuse.Visualization()
-    populateDisplays(vis)
-    prefuseDisplays.foreach { case (file, display) =>
-      tabDisplayFiles.add(file.name, prefuseComponent) // FIXME: this assumes debugging only a single file
-    }
+
     tabDisplayFiles.addKeyListener(new KeyAdapter() {
+      var currentAltKey: Boolean = false
+      // conflicts with our navigation for Left <-> Right in tabs,
+      // so requires Alt
       override def keyPressed(k: KeyEvent): Unit = {
-        processKeyEvent(k)
+        k.getKeyCode match {
+          case KeyEvent.VK_ALT =>
+            currentAltKey = true
+          case _ if currentAltKey =>
+            processKeyEvent(k, currentDisplay)
+          case _ =>
+        }
+      }
+      
+      override def keyReleased(k: KeyEvent): Unit = {
+        k.getKeyCode match {
+          case KeyEvent.VK_ALT =>
+            currentAltKey = false
+          case _ =>
+        }
       }
     })
     
-    val tabFolder = new JTabbedPane()
-    // Split right part even further
-    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
-    //val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, prefuseComponent, new JScrollPane(tabFolder))
-    topSplitPane.setResizeWeight(0.7)
+    tabDisplayFiles.addChangeListener(new TabbedListener(0))
     
-    topPane.add(topSplitPane)
+
+    
+    val tabFolder = new JTabbedPane()
     tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
     sCodeViewer.setEditable(false)
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    
+    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
+    topSplitPane.setResizeWeight(0.7)
+    topPane.add(topSplitPane)
     
     // add menu
     val menuBar = new JMenuBar()
@@ -76,10 +93,32 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
     jframe.setVisible(true)
   }
   
-  def populateDisplays(vis: prefuse.Visualization) {
-    srcs foreach { src =>
-      prefuseDisplays += (src -> new prefuse.Display(vis))
+  // todo: cache the result
+  protected def currentDisplay: PrefuseComponent =
+    tabDisplayFiles.getSelectedComponent.asInstanceOf[PrefuseComponent]
+  
+  class TabbedListener(startIndex: Int) extends ChangeListener {
+    var selected = startIndex
+    def stateChanged(change: ChangeEvent) {
+      val pane = change.getSource.asInstanceOf[JTabbedPane]
+      val newComponentId = pane.getSelectedIndex
+      if (selected != newComponentId) {
+        // fade out old display, fade in the new one
+        val oldDisplay = pane.getComponentAt(selected).asInstanceOf[PrefuseComponent]
+        val display = pane.getComponentAt(newComponentId).asInstanceOf[PrefuseComponent]
+        oldDisplay.hideView()
+        loadSourceFile(display.source)
+        display.reRenderView()
+        selected = newComponentId
+      }
     }
+  }
+  
+  protected def loadSourceFile(absFile: io.AbstractFile) {
+    val src = if (absFile.file.exists)
+      io.File(absFile.file).slurp
+    else "Missing source code"
+   sCodeViewer.setText(src)
   }
 
   def addFilteringOptions(parent: JMenu) {
@@ -97,7 +136,7 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
         val item = new JCheckBoxMenuItem(v.toString)
         if (filtState) {
           item.setState(filtState)
-          prefuseComponent.adv.enableOption(v)
+          advController.enableOption(v)
         }
         item.addItemListener(filteringBoxListener)
         groupMenu.add(item)
@@ -112,12 +151,12 @@ abstract class SwingFrame(prefuseComponent: PrefuseComponent,frameName: String,
       val checkItem = e.getItem.asInstanceOf[JCheckBoxMenuItem]
       val option = Filtering.withName(checkItem.getText)
       if (e.getStateChange() == ItemEvent.SELECTED) {
-        prefuseComponent.adv.enableOption(option)
+        advController.enableOption(option)
       } else {
-        prefuseComponent.adv.disableOption(option)
-        prefuseComponent.reRenderDisabledEvents()
+        advController.disableOption(option)
+        currentDisplay.reRenderDisabledEvents() // fixme: should do that for all displays?
       }
-      prefuseComponent.reRenderView()
+      currentDisplay.reRenderView()
     }
   }
 

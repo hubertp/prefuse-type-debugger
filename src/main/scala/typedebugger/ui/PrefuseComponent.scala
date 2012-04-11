@@ -35,35 +35,30 @@ import prefuse.render._
 
 
 object PrefuseComponent {
-  val tree = "tree"                       // data structure that stored the whole debugging tree
+  //val tree = "tree"                       // data structure that stored the whole debugging tree
 
   val typeDebuggerorientation = Constants.ORIENT_BOTTOM_TOP
 
-  val stickyNodes = "tree.sticky"         // Nodes that are 'fixed' to be visible
+  /*val stickyNodes = "tree.sticky"         // Nodes that are 'fixed' to be visible
   val openGoalNodes = "tree.openGoals"
   val nonGoalNodes = "tree.openNods"      // Intermediate nodes on the path to the goal nodes
   val toRemoveNodes = "tree.removeNodes"  // Nodes to be removed on the refresh of UI
   //val linkGroupNodes = "tree.link"
   val clickedNode = "tree.clicked"
-  val visibleGroup = "tree.visible"
+  val visibleGroup = "tree.visible"*/
   
   val backgroundColor = Color.WHITE
   val foregroundColor = Color.BLACK
   
-  def toVisualNode(node: Node, vis: Visualization): NodeItem = vis.getVisualItem(tree, node).asInstanceOf[NodeItem]
-  def toVisualEdge(edge: Edge, vis: Visualization): EdgeItem = vis.getVisualItem(tree, edge).asInstanceOf[EdgeItem]
+  def toVisualNode(node: Node, vis: Visualization, group: String): NodeItem = vis.getVisualItem(group, node).asInstanceOf[NodeItem]
+  def toVisualEdge(edge: Edge, vis: Visualization, group: String): EdgeItem = vis.getVisualItem(group, edge).asInstanceOf[EdgeItem]
 }
 
 import UIConfig.{nodesLabel => label} // todo: remove
 
-trait AdvancedOptions {
-  def enableOption(v: Filtering.Value): Unit
-  def disableOption(v: Filtering.Value): Unit
-  def isOptionEnabled(t: Tuple): Boolean
-  def isAdvancedOption(t: Tuple): Boolean  
-}
+abstract class PrefuseComponent(source0: io.AbstractFile, t: Tree, vis: TypeDebuggerVisualization)(implicit idx: Int) extends Display(vis) with ui.PrefuseTooltips {
+  self =>
 
-abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Display(new Visualization()) with ui.PrefuseTooltips {
   import PrefuseComponent._
   import PrefusePimping._
   
@@ -77,7 +72,9 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
   private var nodeRenderer: LabelRenderer = _
   protected var orientation: Int = _
   private var treeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(orientation, 50, 0, 8)
+  
   protected def debug(msg: => String): Unit
+  def source = source0
   
   // TODO: reduce visibility?
   def treeRoot(): NodeItem = treeLayout.getLayoutRoot()
@@ -95,19 +92,35 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
   private val hoverController = new HoverTooltip() 
   def tooltipController = hoverController
   
-  def adv: AdvancedOptions
+  protected def adv: AdvancedOptionsController
   private def isAdvEnabled(t: Tuple): Boolean = adv.isAdvancedOption(t) && adv.isOptionEnabled(t)
   
   protected def _goals(): List[NodeItem]
+  
+  lazy val dataGroupName = "tree" + idx
+  
+  // todo: move to separate maps
+  lazy val stickyNodes = "tree" + idx + ".sticky"         // Nodes that are 'fixed' to be visible
+  lazy val openGoalNodes = "tree" + idx + ".openGoals"
+  lazy val nonGoalNodes = "tree" + idx + ".openNods"// + idx      // Intermediate nodes on the path to the goal nodes
+  lazy val toRemoveNodes = "tree" + idx + ".removeNodes"// + idx  // Nodes to be removed on the refresh of UI
+  //val linkGroupNodes = "tree" + idx + ".link"
+  lazy val clickedNode = "tree" + idx + ".clicked"// + idx
+  lazy val visibleGroup = "tree" + idx + ".visible"// + idx
+  
+  protected def dataAwareAction(action: String): String = action + idx
+  
+  private[this] var displayed: Boolean = false
 
   def init () {
     setBackground(backgroundColor)
     setForeground(foregroundColor)
    
-    m_vis.add(tree, t)
+    m_vis.add(dataGroupName, t)
+    debug("Number of potential nodes: " + t.tuples().size)
     
-    val treeNodes = "tree.nodes"
-    val treeEdges = "tree.edges"
+    val treeNodes = "tree" + idx + ".nodes"
+    val treeEdges = "tree" + idx + ".edges"
   
       // Set default node/edge renderer and orientation
     nodeRenderer = new LabelRenderer(label)
@@ -127,7 +140,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     val nodeColor:ItemAction = nodeColorAction(treeNodes)
     val textColor:ItemAction = new ColorAction(treeNodes,
                 VisualItem.TEXTCOLOR, ColorLib.rgb(0,0,0))
-    m_vis.putAction("textColor", textColor)
+    vis.putAction(PrefuseActions.textColor, textColor)
         
     val edgeColorAction = new ColorAction(treeEdges,
                 VisualItem.STROKECOLOR, ColorLib.rgb(194, 194, 194))
@@ -140,28 +153,27 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     val repaint0 = new ActionList()
     repaint0.add(nodeColor)
     repaint0.add(new RepaintAction())
-    m_vis.putAction("repaint", repaint0)
+    vis.putAction(PrefuseActions.repaint, repaint0)
         
     // full paint
     val fullPaint = new ActionList()
     fullPaint.add(nodeColor)
-    m_vis.putAction("fullPaint", fullPaint)
+    vis.putAction(PrefuseActions.fullPaint, fullPaint)
         
     // animate paint change
     val animatePaint = new ActionList(400)
     animatePaint.add(new ColorAnimator(treeNodes))
     animatePaint.add(new RepaintAction())
-    m_vis.putAction("animatePaint", animatePaint)
+    vis.putAction(PrefuseActions.animatePaint, animatePaint)
   
     // create the tree layout action
-    //treeLayout =  customTreeLayout()
     treeLayout.setLayoutAnchor(new Point2D.Double(25,300))
-    m_vis.putAction("treeLayout", treeLayout)
+    vis.putAction(PrefuseActions.treeLayout, treeLayout)
         
     // Animation that handles collapsing/opening nodes 
     // Need to adapt it so that not all non-goal nodes are expanded
-    val subLayout = new CollapsedSubtreeLayout(tree, orientation)
-    m_vis.putAction("subLayout", subLayout)
+    val subLayout = new CollapsedSubtreeLayout(dataGroupName, orientation)
+    vis.putAction(PrefuseActions.subLayout, subLayout)
   
     val autoPan = new AutoPanAction()
   
@@ -180,19 +192,19 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     filter.add(textColor)
     filter.add(nodeColor)
     filter.add(edgeColor)
-    m_vis.putAction("filter", filter)
+    vis.putAction(PrefuseActions.filter, filter)
         
     // animated transition
     val animate = new ActionList(1000)
     animate.setPacingFunction(new SlowInSlowOutPacer())
     animate.add(autoPan)
     animate.add(new QualityControlAnimator())
-    animate.add(new VisibilityAnimator(tree))
+    animate.add(new VisibilityAnimator(dataGroupName))
     animate.add(new LocationAnimator(treeNodes))
     animate.add(new ColorAnimator(treeNodes))
     animate.add(new RepaintAction())
-    m_vis.putAction("animate", animate)
-    m_vis.alwaysRunAfter("filter", "animate")
+    vis.putAction(PrefuseActions.animate, animate)
+    vis.alwaysRunAfter(PrefuseActions.filter, PrefuseActions.animate)
         
     // create animator for orientation changes
     val orient = new ActionList(2000)
@@ -201,11 +213,15 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     orient.add(new QualityControlAnimator())
     orient.add(new LocationAnimator(treeNodes))
     orient.add(new RepaintAction())
-    m_vis.putAction("orient", orient)
+    vis.putAction(PrefuseActions.orient, orient)
   
     // We cache collapse tree because it has a minimal version of
     // the graph that contains all the errors and intermediate nodes leading to it.
-    m_vis.putAction("initial-goals", new CollapseTree())
+    vis.putAction(PrefuseActions.initialGoals, new CollapseTree())
+    
+    // proper collapse/expansion on filtering selection
+    vis.putAction(PrefuseActions.advancedOptions, new CollapseDisabled())
+    vis.putAction(PrefuseActions.hideAll, new HideAll(visibleGroup))
    
     val zoomToFit = new ZoomToFitControl()
     zoomToFit.setZoomOverItem(false)
@@ -218,37 +234,34 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     addControlListener(new WheelZoomControl())
     addControlListener(new PanControl())
     addControlListener(tooltipController)
-    addControlListener(new FocusControl(1, "filter"))
+    addControlListener(TypeDebuggerFocusControl(1, PrefuseActions.filter))
   
     setOrientation(typeDebuggerorientation)
-    m_vis.addFocusGroup(stickyNodes, new DefaultTupleSet())
-    m_vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
-    m_vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())
-    m_vis.addFocusGroup(toRemoveNodes, new DefaultTupleSet())
-    //m_vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
-    m_vis.addFocusGroup(clickedNode, new DefaultTupleSet())
-    m_vis.addFocusGroup(visibleGroup, new DefaultTupleSet())
-    //m_vis.getFocusGroup(visibleGroup).addTupleSetListener(new SearchFor(0))
-    
-  
-    m_vis.putAction("advancedOptions", new CollapseDisabled())
-    showPrefuseDisplay()
+    vis.addFocusGroup(stickyNodes, new DefaultTupleSet())
+    vis.addFocusGroup(openGoalNodes, new DefaultTupleSet())
+    vis.addFocusGroup(nonGoalNodes, new DefaultTupleSet())
+    vis.addFocusGroup(toRemoveNodes, new DefaultTupleSet())
+    //vis.addFocusGroup(linkGroupNodes, new DefaultTupleSet())
+    vis.addFocusGroup(clickedNode, new DefaultTupleSet())
+    vis.addFocusGroup(visibleGroup, new DefaultTupleSet())
+    //vis.getFocusGroup(visibleGroup).addTupleSetListener(new SearchFor(0))
   }
   
   def reRenderDisabledEvents() {
-    m_vis.run("advancedOptions")
+    vis.run(PrefuseActions.advancedOptions)
   }
   
   def reRenderView() {
-    debug("re-render view")
-    m_vis.run("filter")
+    debug("re-render view for " + source + ", initial goals only: " + (!displayed && !showFullTree))
+    if (!displayed && !showFullTree) {
+      vis.run(PrefuseActions.initialGoals)
+      displayed = true
+    }
+    vis.run(PrefuseActions.filter)
   }
   
-  protected def showPrefuseDisplay() {
-    debug("generate full prefuse display")
-    if (!showFullTree)
-	    m_vis.run("initial-goals")
-	  m_vis.run("filter")
+  def hideView() {
+    vis.run(PrefuseActions.hideAll)
   }
   
   // used for debugging
@@ -256,14 +269,14 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     def tupleSetChanged(ts: prefuse.data.tuple.TupleSet, added: Array[Tuple], removed: Array[Tuple]) {
       added.toList foreach { t =>
         if (t.getRow == id)
-          println("Added the searched-for tuple " + t)
+          debug("Added the searched-for tuple " + t)
       }
     }
   }
 
   private def setOrientation(orientation0: Int) {
-    val rtl = m_vis.getAction("treeLayout").asInstanceOf[NodeLinkTreeLayout]
-    val stl = m_vis.getAction("subLayout").asInstanceOf[CollapsedSubtreeLayout]
+    val rtl = vis.getAction(PrefuseActions.treeLayout).asInstanceOf[NodeLinkTreeLayout]
+    val stl = vis.getAction(PrefuseActions.subLayout).asInstanceOf[CollapsedSubtreeLayout]
     orientation0 match {
       case Constants.ORIENT_LEFT_RIGHT =>
         nodeRenderer.setHorizontalAlignment(Constants.LEFT)
@@ -308,6 +321,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
     m_vis.getFocusGroup(clickedNode).clear()
     m_vis.getFocusGroup(visibleGroup).clear()
     m_vis.getFocusGroup(Visualization.FOCUS_ITEMS).clear()
+    displayed = false
   }
 
 
@@ -316,9 +330,9 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
   class OrientAction(var orientation: Int) extends AbstractAction {
     def actionPerformed(evt: ActionEvent) {
       setOrientation(orientation)
-      getVisualization().cancel("orient")
-      getVisualization().run("treeLayout")
-      getVisualization().run("orient")
+      vis.cancel(PrefuseActions.orient)
+      vis.run(PrefuseActions.treeLayout)
+      vis.run(PrefuseActions.orient)
     }
   }
   
@@ -389,7 +403,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
       val v = item.getVisualization()
       val info = eventInfo(item)
       
-      showTooltip(new NodeTooltip(eventInfo(item), 100, 100, v.getDisplay(0)),
+      showTooltip(new NodeTooltip(eventInfo(item), 100, 100, self),
                   item, coordX, coordY)
     }
     
@@ -414,6 +428,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
   // to the visible section of the graph
   class VisualizeNodesWithPred(predicate: Predicate) extends Action {
     def run(frac: Double) {
+      debug("[visualize nodes with predicate]")
       val ts = m_vis.getFocusGroup(visibleGroup)
       if (ts != null)
         for (item <- m_vis.items_[Tuple](predicate)) {
@@ -427,14 +442,15 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
   class UnfocusOnItems extends Action {
     def run(frac: Double) {
       val ts = m_vis.getFocusGroup(visibleGroup)
-      val visItems = m_vis.items_[Node](toRemoveNodes).map(toVisualNode(_, m_vis))
+      val visItems = m_vis.items_[Node](toRemoveNodes).map(toVisualNode(_, m_vis, dataGroupName))
+      debug("[unfocus]: " + visItems)
       for (item <- visItems) {
         PrefuseLib.updateVisible(item, false)
         item.setExpanded(false)
         item.childEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
         item.outNeighbors_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
         if (item.getParentEdge() != null)
-          PrefuseLib.updateVisible(toVisualEdge(item.getParentEdge(), m_vis), false)
+          PrefuseLib.updateVisible(toVisualEdge(item.getParentEdge(), m_vis, dataGroupName), false)
         ts.removeTuple(item)
       }
       m_vis.getFocusGroup(toRemoveNodes).clear()
@@ -531,11 +547,13 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
       buffer.toList
     }
     
-    private def leastSpanningTree(nodes: List[NodeItem]): (List[NodeItem], NodeItem) = {
-      if (nodes.length == 1)
-        (nodes, nodes.head)
-      else {
-        assert(nodes.length > 1)
+    private def leastSpanningTree(nodes0: List[NodeItem]): (List[NodeItem], NodeItem) = nodes0 match {
+      case Nil =>
+        val root = toVisualNode(t.getRoot, m_vis, dataGroupName)
+        (List(root), root)
+      case List(single) =>
+        (nodes0, single)
+      case nodes =>
         val idx = mutable.HashMap.empty[Node, Int]
         var meetingPoint: Option[Node] = None
         var maybeRoot: Node = null
@@ -599,15 +617,14 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
             maybeRoot
         }
         
-        val res = idx.keys.toList map(toVisualNode(_, m_vis))
+        val res = idx.keys.toList map(toVisualNode(_, m_vis, dataGroupName))
         assert(root != null)
-        (res, toVisualNode(root, m_vis)) 
-      }
+        (res, toVisualNode(root, m_vis, dataGroupName)) 
     }
   }
   
   class CustomNodeLinkTreeLayout(orientation: Int, dspace: Double, bspace: Double, tspace: Double)
-    extends NodeLinkTreeLayout(tree) {//, orientation, dspace, bspace, tspace) {
+    extends NodeLinkTreeLayout(dataGroupName) {//, orientation, dspace, bspace, tspace) {
     
     // Anchor the layout root at the first error
     // or show the synthetic root
@@ -617,9 +634,9 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
       if (item == null) {
         super.getLayoutRoot()
       } else {
-        while (item.getParent() != null && toVisualNode(item.getParent, m_vis).isVisible)
+        while (item.getParent() != null && toVisualNode(item.getParent, m_vis, dataGroupName).isVisible)
           item = item.getParent()
-        toVisualNode(item, m_vis)
+        toVisualNode(item, m_vis, dataGroupName)
       }
     }
     
@@ -720,7 +737,7 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
       var n: NodeItem = starting
       val nonGoals = m_vis.getFocusGroup(nonGoalNodes)
       val cachedPath = lst.getPathToRoot()
-      debug("[fixed nodes]: " + n)
+      debug("[sticky nodes]: " + n)
       while (!(cachedPath contains n) && n.getParent != null) {
         nonGoals.addTuple(n.getSourceTuple)
         n = n.getParent.asInstanceOf[NodeItem]
@@ -748,6 +765,20 @@ abstract class PrefuseComponent(source: io.AbstractFile, t: Tree) extends Displa
       val target = m_vis.getFocusGroup(visibleGroup)
       val ts = m_vis.getFocusGroup(groupName)
       ts.tuples().foreach(n => target.addTuple(n.asInstanceOf[Tuple]))
+    }
+  }
+  
+  class HideAll(groupName: String) extends Action {
+    def run(frac: Double) {
+      m_vis.getFocusGroup(groupName).tuples().foreach {
+        case (elem: NodeItem) =>
+          PrefuseLib.updateVisible(elem, false)
+          elem.childEdges_[EdgeItem]().foreach(PrefuseLib.updateVisible(_, false))
+          elem.outNeighbors_[NodeItem]().foreach(PrefuseLib.updateVisible(_, false))
+          elem.inEdges_[VisualItem]().foreach(PrefuseLib.updateVisible(_, false))
+        case (elem: EdgeItem) =>
+          PrefuseLib.updateVisible(elem, false)
+      }
     }
   }
 

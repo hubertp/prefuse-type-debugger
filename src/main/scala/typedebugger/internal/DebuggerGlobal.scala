@@ -72,6 +72,8 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   }
   
   def run(files: List[io.AbstractFile]) {
+    assert(files.nonEmpty, "No files to compile")
+      
     unitOfFile.clear()
     
     val units = files map {f => 
@@ -149,7 +151,8 @@ class DebuggerGlobal(_settings: Settings with TypeDebuggerSettings, _reporter: R
   }
   
   def debug(msg: => String, kind: String): Unit = {
-    if (settings.debugTD.value == "all" || settings.debugTD.value == kind) {
+    val debugVal = settings.debugTD.value
+    if ( debugVal != "" && (debugVal == "all" || debugVal == kind) ) {
       val prefix = if (kind == "") "" else "[" + kind + "]"
       println("[debug]" + prefix + " " + msg)
     }
