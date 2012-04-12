@@ -25,7 +25,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   
   def processKeyEvent(k: KeyEvent): Unit
   def advController: AdvancedOptionsController
-  def switchSources(comp: PrefuseComponent): Unit
+  def switchSources(display: PrefuseDisplay): Unit
 
   def createFrame(lock: Lock): Unit = {
     lock.acquire // keep the lock until the user closes the window
@@ -95,7 +95,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   }
   
   // todo: cache the result
-  protected def currentDisplay[T <: PrefuseComponent]: T =
+  protected def currentDisplay[T <: PrefuseDisplay]: T =
     tabDisplayFiles.getSelectedComponent.asInstanceOf[T]
 
   class TabbedListener(startIndex: Int) extends ChangeListener {
@@ -105,8 +105,8 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
       val newComponentId = pane.getSelectedIndex
       if (selected != newComponentId) {
         // fade out old display, fade in the new one
-        val oldDisplay = pane.getComponentAt(selected).asInstanceOf[PrefuseComponent]
-        val display = pane.getComponentAt(newComponentId).asInstanceOf[PrefuseComponent]
+        val oldDisplay = pane.getComponentAt(selected).asInstanceOf[PrefuseDisplay]
+        val display = pane.getComponentAt(newComponentId).asInstanceOf[PrefuseDisplay]
         oldDisplay.hideView()
         loadSourceFile(display.source)
         switchSources(display)

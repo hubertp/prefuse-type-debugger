@@ -15,17 +15,18 @@ import internal.DebuggerSettings
 
 // combine all parts into a single module
 abstract class TypeBrowser extends AnyRef
-                           with internal.CompilerInfo
-                           with internal.PrefuseStructure
-                           with internal.StructureBuilders
-                           with internal.CompilationTools
-                           with internal.EventFiltering
-                           with processing.PrefusePostProcessors
-                           with processing.Hooks
-                           with stringops.StringOps
-                           with ui.controllers.PrefuseControllers
-                           with ui.controllers.SwingControllers
-                           with ui.UIUtils {
+   with internal.CompilerInfo
+   with internal.PrefuseStructure
+   with internal.StructureBuilders
+   with internal.CompilationTools
+   with internal.EventFiltering
+   with processing.PrefusePostProcessors
+   with processing.Hooks
+   with stringops.StringOps
+   with ui.controllers.PrefuseControllers
+   with ui.controllers.SwingControllers
+   with ui.controllers.PrefuseStringOps
+   with ui.UIUtils {
   import global.{EV, NoPosition}
   import EV._
   
@@ -59,7 +60,6 @@ abstract class TypeBrowser extends AnyRef
     val goals = EventNodeProcessor.processTree(prefuseTrees.toMap, res.root,
                                                  res.goals, label)
     debug("[goals-in-focus] " + goals.map(_.ev))
-
     if (settings.fullTypechecking.value) Nil else goals
   }
   

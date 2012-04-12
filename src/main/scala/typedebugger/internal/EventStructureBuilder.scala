@@ -6,7 +6,7 @@ import scala.collection.mutable.{ ListBuffer, Stack }
 
 trait StructureBuilders {
   self: CompilerInfo with IStructure with CompilationTools =>
-    
+
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
   class InstrumentedRun(nodesLabel: String, filt: global.EV.Filter) extends CompilerRunWithEventInfo {
@@ -27,20 +27,22 @@ trait StructureBuilders {
                            (implicit statPos: Position): BaseTreeNode[EventNode] = {
       val evNode = new EventNode(ev, new ListBuffer(), if (parentENode == null) None else Some(parentENode))
       // We want them in the order of appearance
-      ev match {
+      val addToGoals = ev match {
         case _: HardErrorEvent =>
-          _errorNodes = evNode::_errorNodes
+          true
         case e: ContextTypeError if (e.errType == ErrorLevel.Hard) =>
-          _errorNodes = evNode::_errorNodes
+          true
         case e: TyperTyped if statPos != NoPosition && e.tree.pos.sameRange(statPos) =>
-          /*e.expl match {
-            case expl: StatementExplanation if expl.stat.pos.sameRange(statPos) =>
-              errorNodes = evNode::errorNodes
-            case _ =>
-          }*/
-          _errorNodes = evNode::_errorNodes
+          true
+          //e.expl match {
+          //  case expl: StatementExplanation if expl.stat.pos.sameRange(statPos) =>
+          //    errorNodes = evNode::errorNodes
+          //  case _ =>
+          //}
         case _ =>
+          false
       }
+      if (addToGoals) _errorNodes = evNode::_errorNodes
       evNode
     }
    
@@ -98,29 +100,31 @@ trait StructureBuilders {
     }
   
     def run(srcs: List[io.AbstractFile]): CompilerRunResult = {
-      EV.resetEventsCounter()
-      _root = createNode(DummyRootEvent, null)(NoPosition)
-      _errorNodes = Nil
-      previousLevel = -1
-      currentNodes.push((_root, previousLevel))
-      hook = Hook.indentation((level: Int) => {
-        case ev if filt( ev )=> reportWithLevel(ev, level); NoResponse
-      })
-      hook hooking CompileWrapper.cc(srcs)
-      InstrumentedRunResult(_root, _errorNodes.reverse)
+      defaultRun {
+        hook = Hook.indentation((level: Int) => {
+          case ev if filt( ev ) => reportWithLevel(ev, level); NoResponse
+        })
+        hook hooking CompileWrapper.cc(srcs)
+      }
     }
     
     def runTargeted(pos: Position, expandPos: Position): CompilerRunResult = {
+      println("RUN TARGET: " + expandPos)
+      defaultRun {
+        hook = Hook.indentation((level: Int) => {
+          case ev if filt( ev ) => reportWithLevel(ev, level)(expandPos); NoResponse
+        })
+        hook hooking CompileWrapper.targetC(pos)
+      }
+    }
+    
+    private def defaultRun[T](compile: => T): CompilerRunResult = {
       EV.resetEventsCounter()
       _root = createNode(DummyRootEvent, null)(NoPosition)
       _errorNodes = Nil
       previousLevel = -1
       currentNodes.push((_root, previousLevel))
-      hook = Hook.indentation((level: Int) => {
-        case ev if filt( ev )=> reportWithLevel(ev, level)(expandPos); NoResponse
-      })
-      
-      hook hooking CompileWrapper.targetC(pos)
+      compile
       InstrumentedRunResult(_root, _errorNodes.reverse)
     }
   }

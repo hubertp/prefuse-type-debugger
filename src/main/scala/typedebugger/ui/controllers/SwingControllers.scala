@@ -28,7 +28,7 @@ trait SwingControllers {
   import EV._
   import UIConfig.{nodesLabel => label}
   
-  import PrefuseComponent.toVisualNode
+  import PrefuseDisplay.toVisualNode
   
   import PrefusePimping._
   
@@ -37,7 +37,6 @@ trait SwingControllers {
   class SwingController(srcs: List[io.AbstractFile])
     extends SwingFrame("Type debugger 0.0.3", settings.advancedDebug.value, srcs) {
 
-    var lastAccessed: Option[NodeItem] = None
     val advController = new AdvController() 
     
     val highlightContr = new HighlighterAndGeneralInfo()
@@ -57,19 +56,19 @@ trait SwingControllers {
       }
       val vis = new TypeDebuggerVisualization()
       srcs.zipWithIndex foreach { case (src, idx) =>
-        val component = new PrefuseController(idx, src, tree(src), vis,
+        val display = new PrefuseController(idx, src, tree(src), vis,
                                               groupedGoals.getOrElse(src, Nil), advController)
-        component.init()
+        display.init()
         debug("Initialised prefuse tree component for " + src)
         
-        component.addControlListener(highlightContr)
-        component.addControlListener(new ClickedNodeListener())    
-        component.addControlListener(new StickyNode())
-        component.addControlListener(HiddenEvents)
+        display.addControlListener(highlightContr)
+        display.addControlListener(new ClickedNodeListener())    
+        display.addControlListener(new StickyNode())
+        display.addControlListener(HiddenEvents)
 
         //component.addControlListener(new LinkNode())
         //component.addControlListener(keyHandler)
-        tabDisplayFiles.add(src.name, component)
+        tabDisplayFiles.add(src.name, display)
         if (idx < 9)
           tabDisplayFiles.setMnemonicAt(idx, 48 + idx)
       }
@@ -82,12 +81,9 @@ trait SwingControllers {
       }
     }
     
-    def processKeyEvent(k: KeyEvent) {
-      keyHandler.keyPressed(k)
-    }
+    def processKeyEvent(k: KeyEvent) { keyHandler.keyPressed(k) }
     
-    def switchSources(display: PrefuseComponent) {
-
+    def switchSources(display: PrefuseDisplay) {
       // restore highlight
       highlightContr.clearHighlight(true)
       val pos = highlightsInfo.getOrElse(tabDisplayFiles.getSelectedIndex, null)
@@ -238,7 +234,7 @@ trait SwingControllers {
 
         item0 match {
           case item: NodeItem =>
-            val display = currentDisplay[PrefuseComponent]
+            val display = currentDisplay[PrefuseDisplay]
             val vis = item.getVisualization
             val fGroup = vis.getFocusGroup(display.stickyNodes)
             if (fGroup.containsTuple(item)) {
@@ -248,12 +244,12 @@ trait SwingControllers {
             } else {
               fGroup.addTuple(item)
             }
-            lastAccessed = Some(item)
+            display.lastItem = item
           case _ =>   
         }
       }
 	    
-	    def cleanup(starting: Node, vis: Visualization, display: PrefuseComponent) {
+	    def cleanup(starting: Node, vis: Visualization, display: PrefuseDisplay) {
 	      var node = starting
 	      val tsNonGoal = vis.getFocusGroup(display.nonGoalNodes)
 	      val tsRemove = vis.getFocusGroup(display.toRemoveNodes)
@@ -267,9 +263,45 @@ trait SwingControllers {
 	  }
 	  
 	  class KeyPressListener extends ControlAdapter {
+	    object Direction extends Enumeration {
+	      val Left, Right, Up = Value
+	    }
+	    import Direction._
+	    
+      def moveLeftRight(init: NodeItem, next: NodeItem => NodeItem, cycleNext: NodeItem => NodeItem)(implicit direction: Direction.Value, cyclesAllowed: Boolean = true): Option[NodeItem] = {
+        val sibling = next(init)
+        if (sibling != null) {
+          navigateTo(sibling, true) 
+        } else if (cyclesAllowed) {
+          val parent = init.getParent()
+          if (parent != null) {
+            val firstOrLast = cycleNext(parent.asInstanceOf[NodeItem])
+            navigateTo(firstOrLast, true)(direction, false)
+          } else None
+        } else None
+      }
+	    
+      def navigateTo(init: NodeItem, returnInit: Boolean = false)(implicit direction: Direction.Value, cycles: Boolean = true): Option[NodeItem] =
+	      if (init == null)
+	        None
+	      else if (returnInit && isValidItem(init))
+	        Some(init)
+	      else direction match {
+          case Left  =>
+            moveLeftRight(init, _.getPreviousSibling().asInstanceOf[NodeItem], _.getLastChild().asInstanceOf[NodeItem])
+          case Right =>
+            moveLeftRight(init, _.getNextSibling().asInstanceOf[NodeItem], _.getFirstChild().asInstanceOf[NodeItem])
+          case Up    =>
+            if (init.getChildCount() > 0)
+              navigateTo(init.getFirstChild().asInstanceOf[NodeItem], true)(Right, false)
+            else None
+	    }
+	    
+	    def isValidItem(item: NodeItem): Boolean = !advController.isAdvancedOption(item) || advController.isOptionEnabled(item)
+	    
 	    val keyFilter = List(KeyEvent.VK_DOWN, KeyEvent.VK_UP, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
 	                         KeyEvent.VK_E, KeyEvent.VK_C, KeyEvent.VK_ENTER, KeyEvent.VK_ESCAPE)
-	    def display = currentDisplay[PrefuseComponent]
+	    def display = currentDisplay[PrefuseDisplay]
 
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
@@ -278,7 +310,7 @@ trait SwingControllers {
 	      if (!(keyFilter contains k.getKeyCode))
 	        return
 
-	      lastAccessed match {
+	      display.lastItem match {
   	      case Some(last) =>
   	        debugUI("Key pressed. Last accessed event " + last)	
     	      val vis = last.getVisualization
@@ -291,39 +323,23 @@ trait SwingControllers {
     	            navigate(last.getParent.asInstanceOf[NodeItem], vis)
     	          
     	        case KeyEvent.VK_LEFT  =>
-    	          // expand left neighbour (if possible)
-    	          val prevSibling = last.getPreviousSibling()
-    	          if (prevSibling != null)
-    	            navigate(prevSibling.asInstanceOf[NodeItem], vis)
-    	          else {
-    	            // go around
-    	            val parent = last.getParent
-    	            if (parent != null) {
-    	              val lastSibling = parent.getLastChild()
-    	              if (lastSibling != last)
-    	                navigate(lastSibling.asInstanceOf[NodeItem], vis)
-    	            }
+    	          navigateTo(last)(Left) match {
+    	            case Some(target) => navigate(target, vis)
+    	            case None         =>  
     	          }
     	          
     	        case KeyEvent.VK_RIGHT =>
-    	          // expand right neighbour (if possible)
-    	          val nextSibling = last.getNextSibling()
-    	          if (nextSibling != null)
-    	            navigate(nextSibling.asInstanceOf[NodeItem], vis)
-    	          else {
-    	            // go around
-                  val parent = last.getParent
-                  if (parent != null) {
-                    val firstSibling = parent.getFirstChild()
-                    if (firstSibling != last)
-                      navigate(firstSibling.asInstanceOf[NodeItem], vis)
-                  }
-    	          }
+    	          navigateTo(last)(Right) match {
+                  case Some(target) => navigate(target, vis)
+                  case None         =>  
+                }
     	
     	        case KeyEvent.VK_UP    =>
-    	          if (last.getChildCount() > 0)
-    	            navigate(last.getFirstChild().asInstanceOf[NodeItem], vis)
-    
+    	          navigateTo(last)(Up) match {
+    	            case Some(target) => navigate(target, vis)
+    	            case None         =>
+    	          }
+   
     	        case KeyEvent.VK_E     => // expand
     	          expand(last)
     
@@ -342,7 +358,14 @@ trait SwingControllers {
                 debugUI("Key pressed. Initial 'lowest' node: " + lowest)
     	          if (lowest != null)
     	            navigate(lowest, display.getVisualization)
-    	        case _                => // enable others
+    	        case KeyEvent.VK_UP   =>
+    	          val lowest = display.getBottomNode
+    	          debugUI("Key pressed. Initial 'lowest' node: " + lowest)
+    	          if (lowest != null)
+    	            navigateTo(lowest)(Up) match {
+    	              case Some(target) => navigate(target, display.getVisualization)
+    	              case None         =>
+    	            }
     	      }
         }
 	    }
@@ -486,14 +509,14 @@ trait SwingControllers {
     }
   
 	  object ClickedNodeListener {
-	    def addClickedItem(node: NodeItem, comp: PrefuseComponent) {
+	    def addClickedItem(node: NodeItem, disp: PrefuseDisplay) {
 	      // Add or remove from focus group
 	      debug("Add clicked item " + node)
 	      val vis = node.getVisualization
-	      val ts1 = vis.getFocusGroup(comp.openGoalNodes)
-	      val clicked = vis.getFocusGroup(comp.clickedNode)
+	      val ts1 = vis.getFocusGroup(disp.openGoalNodes)
+	      val clicked = vis.getFocusGroup(disp.clickedNodes)
 	
-	      CleanupAction.clean(node, comp)
+	      CleanupAction.clean(node, disp)
 	      clicked.clear()
 	      clicked.addTuple(node)
 	      
@@ -514,26 +537,26 @@ trait SwingControllers {
           // this means adding all non-goals on the path from this node upwards upto a goal node
           // (the latter is guaranteed to be reached since we wouldn't be able to reach item0 otherwise)
           // This is cleaner than complicating the logic for the removal
-	        val ts2 = vis.getFocusGroup(comp.nonGoalNodes)
+	        val ts2 = vis.getFocusGroup(disp.nonGoalNodes)
           while (item != null && !ts1.containsTuple(item)) {
             ts2.addTuple(item)
             item = item.getParent()
           }
 	      }
-	      lastAccessed = Some(node)        
+	      disp.lastItem = node        
 	    }
 	  }
 	  
 	  object CleanupAction {
-	    def clean(item0: VisualItem, comp: PrefuseComponent) {
+	    def clean(item0: VisualItem, disp: PrefuseDisplay) {
 	      if (!containsDataNode(item0))
 	        return
 	
 	      val vis = item0.getVisualization
 	      //val List(ts1, ts2, ts3, tsRemove) =
-	      val ts1 = vis.getFocusGroup(comp.openGoalNodes)
-	      val ts2 = vis.getFocusGroup(comp.nonGoalNodes)
-	      val tsRemove = vis.getFocusGroup(comp.toRemoveNodes)
+	      val ts1 = vis.getFocusGroup(disp.openGoalNodes)
+	      val ts2 = vis.getFocusGroup(disp.nonGoalNodes)
+	      val tsRemove = vis.getFocusGroup(disp.toRemoveNodes)
 	        //List(openGoalNodes, nonGoalNodes, linkGroupNodes, toRemoveNodes).map(vis.getFocusGroup(_))
 	      
 	      // Remove all the link nodes
@@ -554,13 +577,13 @@ trait SwingControllers {
               if (parent0 != null) throw new Exception("Prefuse bug!") else null
           }
           if (parent != null) {
-            val cached = comp.nodesAlwaysVisible
+            val cached = disp.nodesAlwaysVisible
             var item = parent
-            val ts1 = vis.getFocusGroup(comp.openGoalNodes)
+            val ts1 = vis.getFocusGroup(disp.openGoalNodes)
             while (item.getParent != null && ts1.containsTuple(item.getParent)) {            
               item = item.getParent
               // keep the minimal subset always expanded
-              if (!cached.contains(toVisualNode(item, vis, comp.dataGroupName))) {
+              if (!cached.contains(toVisualNode(item, vis, disp.dataGroupName))) {
                 ts1.removeTuple(item)
                 tsRemove.addTuple(item)
               }

@@ -17,9 +17,10 @@ import scala.collection.mutable
 import scala.tools.nsc.io
 
 trait PrefuseControllers {
-  self: internal.CompilerInfo with UIUtils with internal.PrefuseStructure with internal.EventFiltering =>
+  self: internal.CompilerInfo with UIUtils with internal.EventFiltering 
+    with internal.PrefuseStructure with PrefuseStringOps =>
     
-  import PrefuseComponent._
+  import PrefuseDisplay._
   import PrefusePimping._
    
   import global.{Tree => STree, _}
@@ -27,15 +28,17 @@ trait PrefuseControllers {
   
   class PrefuseController(idx: Int, source: io.AbstractFile, pTree: Tree, vis: TypeDebuggerVisualization,
     goals0: List[UINode[PrefuseEventNode]], contr: AdvancedOptionsController)
-    extends PrefuseComponent(source, pTree, vis)(idx) {
+    extends PrefuseDisplay(source, pTree, vis)(idx) {
     
     // methods that are global specific
     def nodeColorAction(nodes: String): ItemAction = new NodeColorAction(nodes, this)
     def extractPrefuseNode(t: Tuple): Node = asDataNode(t).pfuseNode
     def isNode(t: Tuple): Boolean = containsDataNode(t)
-    def eventInfo(item: VisualItem): util.StringFormatter = asDataNode(item).fullInfo
     def showFullTree = settings.fullTypechecking.value
     def debug(msg: => String) = self.debug(msg, "ui")
+    
+    def eventFullInfo(item: VisualItem): util.StringFormatter = fullStringOps(item)
+    def eventShortInfo(item: VisualItem): String = shortStringOps(item)
 
     private[this] var verifiedGoals: List[NodeItem] = null
     private def initGoals(ls: List[UINode[PrefuseEventNode]]): Unit = {
@@ -67,7 +70,7 @@ trait PrefuseControllers {
       Map((global.currentRun.namerPhase, (192, 255, 193)), (global.currentRun.typerPhase, (238, 230, 133)))
   }
 
-  class NodeColorAction(group: String, display: PrefuseComponent) extends ColorAction(group, VisualItem.FILLCOLOR) {
+  class NodeColorAction(group: String, display: PrefuseDisplay) extends ColorAction(group, VisualItem.FILLCOLOR) {
     import NodeColorAction._
     private def retrieveEvent(item: VisualItem): Option[Event] =
       if (containsDataNode(item)) Some(asDataNode(item).ev)
@@ -77,7 +80,7 @@ trait PrefuseControllers {
     override def getColor(item: VisualItem): Int = {
       val event = retrieveEvent(item)
       event match {
-        case _ if ( m_vis.isInGroup(item, display.clickedNode)) =>
+        case _ if ( m_vis.isInGroup(item, display.clickedNodes)) =>
           ColorLib.rgb(198, 229, 250) // Make it always visible
         case Some(ev: HardErrorEvent) =>
           ColorLib.rgba(255, 0, 0, 150)
