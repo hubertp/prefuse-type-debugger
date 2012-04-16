@@ -12,10 +12,10 @@ case class StringFormatter(text: List[String], title: Option[String], args: List
 }
 
 object StringFormatter {
-  implicit def toSimpleFormatter(text: String): StringFormatter = {
-    StringFormatter(List(text), None, Nil)
-  }
   
+  // ideally the implicits below would not have to be explicitly imported
+  // but be available in the context of String object
+  implicit def toSimpleFormatter(text: String): StringFormatter = StringFormatter(List(text), None, Nil)
   implicit def toFormatter(text: String): FormatableText = new FormatableText(text)
   
   class FormatableText(text0: String) {

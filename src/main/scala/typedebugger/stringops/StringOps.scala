@@ -14,7 +14,7 @@ trait StringOps extends AnyRef
                 with ImplicitsStringOps
                 with NamerStringOps
                 with TypesStringOps {
-  self: internal.CompilerInfo =>
+  self: internal.CompilerInfo with internal.SyntheticEvents =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -55,6 +55,7 @@ trait StringOps extends AnyRef
                 with ImplicitsEventsOps
                 with NamerEventsOps
                 with TypesEventsOps
+                with SyntheticStringOps
                 with Descriptors {
 
     private[this] val cache = new mutable.WeakHashMap[Int, WeakReference[Descriptor]]()
@@ -99,12 +100,14 @@ trait StringOps extends AnyRef
         explainLubGlbEvent(ev)
       case ev: TypesEvent        =>
         explainTypesEvent(ev)
+      case ev: SyntheticEvent    =>
+        explainSyntheticEvent(ev)
       case _                     =>
         new Descriptor {
           def basicInfo = e formattedString Formatting.fmt
           def fullInfo  = e formattedString Formatting.fmtFull
         }
-    }    
+    }
   }
   
   private def printDebug(ev: Explanation) {
@@ -139,10 +142,11 @@ trait StringOps extends AnyRef
   }
   
   def snapshotAnyString(x: Any)(implicit c: Clock): String = x match {
-    case t: STree    => anyString(treeAt(t))
-    case tp: Type    => anyString(TypeSnapshot(tp))
-    case sym: Symbol => anyString(SymbolSnapshot(sym)) 
-    case _ => anyString(x)
+    case list: List[_] => list.map(snapshotAnyString).mkString
+    case t: STree      => anyString(treeAt(t))
+    case tp: Type      => anyString(TypeSnapshot(tp))
+    case sym: Symbol   => anyString(SymbolSnapshot(sym)) 
+    case _             => anyString(x)
   }
   
   // not efficient if we are getting the snapshot of x as well in the event 
@@ -444,6 +448,30 @@ trait StringOps extends AnyRef
         printDebug(ev)
         "Typecheck ?"
 
+    }
+  }
+  
+  trait SyntheticStringOps {
+    self: Descriptors =>
+    def explainSyntheticEvent(ev: SyntheticEvent) = ev match {
+      case GroupEligibleImplicits(src) =>
+        new Descriptor {
+          def basicInfo = "Eligible " + sourceRep(src)
+          def fullInfo  = "" // explain more for each kind
+        }
+      case _ =>
+        new Descriptor {
+          def basicInfo = ev formattedString Formatting.fmt
+          def fullInfo  = ev formattedString Formatting.fmtFull
+        }
+    }
+    
+    def sourceRep(s: ImplicitInfoSource): String = s match {
+      case MemberS        => "member implicits"
+      case LocalS         => "local implicits"
+      case ImportS        => "imported implicits"
+      case PackageObjectS => "package object implicits"
+      case UnknownS       => "implicits" 
     }
   }
   

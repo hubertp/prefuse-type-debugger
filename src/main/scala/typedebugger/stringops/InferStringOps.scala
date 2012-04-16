@@ -6,6 +6,7 @@ trait InferStringOps {
     
   import global._
   import EV._
+  import util.StringFormatter._
   
   trait InferEventsOps {
     self: Descriptors =>
@@ -69,7 +70,8 @@ trait InferStringOps {
         case e: SetInstantiateTypeConstraint =>
           new Descriptor {
             def basicInfo = "Set instantiation for type constraint\n=> " + tvarSetInstExpl(e.reason)
-            def fullInfo  = ""
+            def fullInfo  = "Instantiated type constraint for type variable %tpe".
+              dFormat(Some("Instantiate type constraint"), snapshotAnyString(e.tvar))
           }
            
         case e: WildcardLenientTArg =>
@@ -114,11 +116,13 @@ trait InferStringOps {
            
         case e: AddBoundTypeVar =>
           new Descriptor {
+            val boundType = if (e.upperBound) "upper" else "lower"
             def basicInfo = {
-              val boundType = if (e.upperBound) "upper" else "lower"
               "Register " + boundType + " bound\nof type " + snapshotAnyString(e.bound)
             }
-            def fullInfo  = ""
+            def fullInfo  = "Register " + boundType + " bound of type %tpe" +
+            		"\nfor type variable %tpe".dFormat(Some("Register bound"),
+            		snapshotAnyString(e), snapshotAnyString(e.tvar))
           }
 
         case e:InferExprInstance =>
@@ -268,9 +272,12 @@ trait InferStringOps {
         case e:VerifyMethodAlternative =>
           new Descriptor {
             def basicInfo = "Verify alternative"
-            def fullInfo  = "Check if method alternative " + e.alternative + " of type " + combinedSnapshotAnyString(e.alternative)(_.tpe) +
-              " is applicable for arguments' types " + e.argsTypes.map(snapshotAnyString) +
-              "\nand conforms to the actual expected type " + snapshotAnyString(e.pt)
+            def fullInfo  = 
+                "Check if method alternative %sym of type %tpe" +
+                "is applicable for types of the arguments: %tpe\n" +
+                "and conforms to the expected type %tpe".dFormat(Some("Verify alternative"),
+                    snapshotAnyString(e.alternative), combinedSnapshotAnyString(e.alternative)(_.tpe),
+                    e.argsTypes.map(snapshotAnyString).mkString, snapshotAnyString(e.pt))
           }
            
         case e:PossiblyValidAlternative =>
@@ -306,7 +313,7 @@ trait InferStringOps {
         case e:ImprovesAlternativesCheck =>
           new Descriptor {
             def basicInfo = "Compare conflicting alternatives"
-            def fullInfo  = "Compare conflicting, both applicable alternatives\nfor " + snapshotAnyString(e.tree)
+            def fullInfo  = "Compare conflicting alternatives, both applicable for %tree".dFormat(Some("Compare alternatives"), snapshotAnyString(e.tree))
           }
            
         case e:AlternativesCheck =>

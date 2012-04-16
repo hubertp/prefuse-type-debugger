@@ -5,7 +5,7 @@ import scala.tools.nsc.io
 import scala.collection.mutable.{ ListBuffer, Stack }
 
 trait StructureBuilders {
-  self: CompilerInfo with IStructure with CompilationTools =>
+  self: CompilerInfo with IStructure with CompilationTools with SyntheticEvents =>
 
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
@@ -109,7 +109,6 @@ trait StructureBuilders {
     }
     
     def runTargeted(pos: Position, expandPos: Position): CompilerRunResult = {
-      println("RUN TARGET: " + expandPos)
       defaultRun {
         hook = Hook.indentation((level: Int) => {
           case ev if filt( ev ) => reportWithLevel(ev, level)(expandPos); NoResponse
@@ -128,16 +127,7 @@ trait StructureBuilders {
       InstrumentedRunResult(_root, _errorNodes.reverse)
     }
   }
-  
-  private case object DummyRootEvent extends global.EV.Event {
-    def tag = "dummy-root"
-    override val phase = scala.tools.nsc.NoPhase
-    override val unit = global.NoCompilationUnit
-    override val file = None
-    override def defaultPos = global.NoPosition
-    override def pos = global.NoPosition
-    def participants = List()
-  }
+
   
   private case class InstrumentedRunResult(
       root: BaseTreeNode[EventNode],

@@ -1,14 +1,13 @@
 package scala.typedebugger
 package stringops
 
-import util.StringFormatter
 
 trait TyperStringOps {
   self: StringOps with internal.CompilerInfo =>
     
   import global._
   import EV._
-  import StringFormatter._ // shouldn't implicit figure out it automatically
+  import util.StringFormatter._ // shouldn't implicit figure out it automatically
     
   trait TyperEventsOps {
     self: Descriptors =>
@@ -18,16 +17,27 @@ trait TyperStringOps {
     def explainTyperEvent(ev: Event)(implicit time: Clock = ev.time): Descriptor = ev match {
       case e: TyperTyped =>
         new Descriptor(){
+          
+          
           def basicInfo = {
             val treeToString: String = (if (e.tree.symbol != NoSymbol && e.tree.symbol != null) " " + e.tree.symbol else "")
             "Typecheck " + treeToString
           }
           
           def fullInfo = {
-            "Typecheck tree\n" +
-            snapshotAnyString(e.tree) + "\n" +
-            "with expected type " + snapshotAnyString(e.pt) + "\n" +
-            e.expl
+            val tree0 = treeAt(e.tree)
+            val tpe0 = TypeSnapshot(tree0.tpe)
+            val sym0 = if (tree0.symbol != null) SymbolSnapshot(tree0.symbol) else null
+            val tpe = if (tpe0 != null) tpe0 else if (sym0 != null) TypeSnapshot(sym0.tpe) else null
+            val tpeRes = if (e.tree.tpe != null) e.tree.tpe else (if (e.tree.symbol != null) e.tree.symbol.tpe else null)
+            debug(if (tree0 != null) "Tree class " + tree0.getClass + " with sym " + sym0 else "", "event")
+            (e.expl + "\n\n" +
+             "Typechecking tree: %tree" +
+             "Expected type: %tpe" +
+             "\n" +
+             "Type of tree at the entry point: %tpe" +
+             "Result type of the tree: %tpe").dFormat(Some("Typecheck tree"),
+             anyString(tree0), snapshotAnyString(e.pt), anyString(tpe), anyString(tpeRes))
           }
         }
 
@@ -35,41 +45,45 @@ trait TyperStringOps {
         new Descriptor() {
           def basicInfo = "Type tree"
           def fullInfo  = {
-            "Type tree " + snapshotAnyString(e.tree) +
-            "\nwith expected type: " + snapshotAnyString(e.pt)
+            "Type tree %tree" +
+            "Expected type: %tpe".dFormat(Some("Type Tree"), snapshotAnyString(e.tree), snapshotAnyString(e.pt))
+            //"Type tree " + snapshotAnyString(e.tree) +
+            //"\nwith expected type: " + snapshotAnyString(e.pt)
           }
         }
        
       case e: SymInitializeTyper =>
         new Descriptor() {
-          def basicInfo = "Initialize tree's symbol type"
-          def fullInfo  = "Initializing symbol will force its lazy type to be resolved"
+          def basicInfo = "Initialize the type of the symbol of the tree"
+          def fullInfo  = 
+            "Initializing symbol will force its lazy type to be resolved".dFormat(Some("Initialize lazy type"))
         }
 
       case e: TyperOmittedStatement =>
         new Descriptor() {
-          def basicInfo = "Statement not typechecked"
-          def fullInfo  = "Statement:\n" + anyString(e.tree) +
-                          "\nwas not typechecked as targeted debugging was used.\n" +
-                          "Statement was not on an direct path to the target selection"
+          def basicInfo = "Typechecking omitted"
+          def fullInfo  = "Statement %tree" +
+                          "was not typechecked as targeted debugging was used.\n" +
+                          "Statement was not on a direct path to the target selection".dFormat(Some("Omitted typechecking"),
+                            anyString(e.tree))
         }
         
       case e: PackageTyper =>
         new Descriptor() {
           def basicInfo = "Type package"
-          def fullInfo  = "Type package " + e.tree.asInstanceOf[RefTree].name.toString
+          def fullInfo  = "Type package %tree".dFormat(e.tree.asInstanceOf[RefTree].name.toString)
         }
         
       case e: ClassTyper =>
         new Descriptor() {
           def basicInfo = "Type class"
-          def fullInfo  = "Type class " + snapshotAnyString(e.tree)
+          def fullInfo  = "Type class %tree".dFormat(snapshotAnyString(e.tree))
         }
       
       case e: ModuleTyper =>
         new Descriptor() {
           def basicInfo = "Type object"
-          def fullInfo  = "Type object " + snapshotAnyString(e.tree)
+          def fullInfo  = "Type object %tree".dFormat(snapshotAnyString(e.tree))
         }
         
       case e: InitializedCompanionClassConstrs =>
@@ -81,8 +95,8 @@ trait TyperStringOps {
         
       case e: ParentTypesTyper =>
         new Descriptor() {
-          def basicInfo = "Determine parents' types"
-          def fullInfo  = "Parents: " + e.parents.map(snapshotAnyString)
+          def basicInfo = "Determine types of the parents"
+          def fullInfo  = "Determine types the parents: %tree".dFormat(e.parents.map(snapshotAnyString).mkString)
         }
       
       case e: TypeInitialSuperTpeTyper =>
@@ -90,8 +104,8 @@ trait TyperStringOps {
           def basicInfo = "Type first parent\n as supertype"
           def fullInfo  = {
             val t = treeAt(e.tree)
-            "Preliminary super-type: " + anyString(t) +
-            " with type " + snapshotAnyString(t.tpe)
+            "Preliminary super-type %tree" +
+            "of type %tpe".dFormat(Some("Initial super type"), anyString(t), snapshotAnyString(t.tpe))
           }
         }
          
@@ -118,17 +132,15 @@ trait TyperStringOps {
       case e: ValidateParentClass =>
         new Descriptor() {
           def basicInfo = "Validate parent class"
-          def fullInfo  = "Validate parent class: " + snapshotAnyString(e.parent)
+          def fullInfo  = "Validate parent class %tree".dFormat(Some("Validate parent"), snapshotAnyString(e.parent))
         }
         
       case e: ValidateSelfTpeSubtypingTyper =>
         new Descriptor() {
-          def basicInfo = "Self-type is a subtype of parent type"
-          def fullInfo  = "Self-type: " + snapshotAnyString(e.selfTpe) + ", " +
-                          e.selfTpe.getClass + 
-                          "\nParent type: " + snapshotAnyString(e.parentTpe) + ", " +
-                          e.parentTpe.getClass + 
-                          "\nSubtypes: " + e.subtypingRes
+          def basicInfo = "Self-type is a subtype of the parent type"
+          def fullInfo  = "Self-type: %tpe" +
+                          "is " + (if (e.subtypingRes) "" else "not") + "\n" +
+                          "\nParent type %tpe".dFormat(Some("Self-type check"), snapshotAnyString(e.selfTpe), snapshotAnyString(e.parentTpe))
         }
        
       case e: ValDefTyper =>
@@ -138,19 +150,19 @@ trait TyperStringOps {
             val sym = SymbolSnapshot(tree.symbol)
             "Type value definition" + safeTypePrint(sym.tpe, "\n(typed as ", ")")
           }
-          def fullInfo  = "Type value definition \n" + anyString(tree)
+          def fullInfo  = "Type value definition %tree".dFormat(Some("Type value definition"), anyString(tree))
         }
         
       case e: DefDefTyper =>
         new Descriptor() {
           def basicInfo = "Type definition"
-          def fullInfo  = "Type definition \n" + snapshotAnyString(e.tree)
+          def fullInfo  = "Type definition %tree".dFormat(Some("Type Definition"), snapshotAnyString(e.tree))
         }
         
       case e: TypeDefTyper =>
         new Descriptor() {
           def basicInfo = "Type type definition"
-          def fullInfo  = "Type type definiton \n" + snapshotAnyString(e.tree)
+          def fullInfo  = "Type type definiton %tree".dFormat(Some("Type type definition"), snapshotAnyString(e.tree))
         }
 
 ///--------------------------------------
@@ -159,7 +171,7 @@ trait TyperStringOps {
       case e: LabelDefTyper =>
         new Descriptor() {
           def basicInfo = "Type label"
-          def fullInfo  = "Type label " + snapshotAnyString(e.tree)
+          def fullInfo  = "Type label %tree".dFormat(Some("Type label"), snapshotAnyString(e.tree))
         }
             
       case e: DocDefTyper =>
@@ -174,7 +186,7 @@ trait TyperStringOps {
       case e: BlockTyper =>
         new Descriptor() {
           def basicInfo = "Type block of statements"
-          def fullInfo  = ""
+          def fullInfo  = "%tree".dFormat(Some("Type block"), snapshotAnyString(e.tree))
         }
         
       case e: AlternativeTyper =>
@@ -194,8 +206,9 @@ trait TyperStringOps {
         
       case e: FunctionTyper =>
         new Descriptor() {
-          def basicInfo = if (e.constr) "Type constructor" else "Type function"
-          def fullInfo  = snapshotAnyString(e.tree)
+          def rep = if (e.constr) "Type constructor" else "Type function"
+          def basicInfo = rep
+          def fullInfo  = "%tree".dFormat(Some(rep), snapshotAnyString(e.tree))
         }
 
       case e: AssignTyper =>
@@ -297,16 +310,16 @@ trait TyperStringOps {
           def basicInfo = "Perform eta-expansion adaption for method" 
           def fullInfo  = {
             val t = treeAt(e.tree)
-            "Eta-expand " + anyString(t) + "\n" + 
-            "with type " + snapshotAnyString(t.tpe) + "\n" +
-            "and params: " + e.params.map(snapshotAnyString)
+            "Eta-expand %tree" + 
+            "with type %tpe" +
+            "and parameters %sym".dFormat(Some("Eta-expand tree"), anyString(t), snapshotAnyString(t.tpe), e.params.map(snapshotAnyString).mkString(", "))
           }
         }
          
       case e:TryTypedArgsTyper =>
         new Descriptor() {
           def basicInfo = "Typecheck arguments individually first"
-          def fullInfo  = ""
+          def fullInfo  = "Typecheck arguments without taking into account expected type".dFormat(Some("Typecheck arguments"))
         }
         
       case e:TryTypedApplyTyper =>
@@ -406,8 +419,9 @@ trait TyperStringOps {
       case e:SuccessTypedApplyFunTyper =>
         new Descriptor() {
           def basicInfo = "Successfully typed function as\n " + snapshotAnyString(e.expectedFunPt)
-          def fullInfo  = ("Function %tree was typed as %tpe " +
-                          "in the context of the expected type %tpe").dFormat(Some("Typed function"), snapshotAnyString(e.tree), snapshotAnyString(e.expectedFunPt), snapshotAnyString(e.pt))
+          def fullInfo  = ("Function %tree was typed as %tpe" +
+                          "in the context of the expected type %tpe").dFormat(
+                            Some("Typed function"), snapshotAnyString(e.tree), snapshotAnyString(e.expectedFunPt), snapshotAnyString(e.pt))
         }
         
       case e:TypedApplyToAssignment =>
@@ -649,9 +663,10 @@ trait TyperStringOps {
             anyString(a0) + ": " + (if (a0.tpe == null) "?" else snapshotAnyString(a0.tpe))
             }).mkString("(", ",", ")")
           def basicInfo = "Typecheck application of\n function to arguments"
-          def fullInfo  = "Typecheck application of function: '" + snapshotAnyString(e.fun) + "'" + 
-                          "\nto arguments '" + argsToString(e.args) + "'" + 
-                          "\nwith expected type: " + snapshotAnyString(e.pt)
+          def fullInfo  = ("Typecheck application of function %tree" +
+                           "to arguments %tree" +
+                           "with expected type: %tpe").dFormat(Some("Application of function to arguments"),
+                              snapshotAnyString(e.fun), argsToString(e.args), snapshotAnyString(e.pt))
         }
          
       case e:OverloadedSymDoTypedApply =>
@@ -774,9 +789,13 @@ trait TyperStringOps {
       case e:MethodTpeWithUndetTpeParamsDoTypedApply =>
         new Descriptor() {
           def basicInfo = "Method Type with undetermined type parameters.\nNeed to resolve them first."
-          def fullInfo  = "Expression \n" + snapshotAnyString(e.tree) + "\n" +
-                          "with Method Type\n with undetermined type parameters: '" + e.tparams.map(snapshotAnyString).mkString(",") + "'\n" +
-                          "and formal parameters: " + e.formals.map(snapshotAnyString).mkString("[", ",", "]")
+          def fullInfo  = ("Expression %tree" +
+                           "of Method Type\n with\n" +
+                           "- undetermined type parameters: %sym" + 
+                           "- types of formal parameters %tpe").dFormat(Some("Method Type with unresolved type parameters"),
+                              snapshotAnyString(e.tree), e.tparams.map(snapshotAnyString).mkString(","),
+                              e.formals.map(snapshotAnyString).mkString("[", ",", "]"))
+                          
         }
 
       case e:ProtoTypeArgsDoTypedApply =>

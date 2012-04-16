@@ -21,7 +21,7 @@ trait PrefuseStructure extends IStructure {
                          val pfuseNode: Node) extends UINode[PrefuseEventNode] {
     val children = ListBuffer[UINode[PrefuseEventNode]]()
     
-    override def toString: String = "[prefuse node] " + ev
+    override def toString: String = "[prefuse node] " + ev + " " + ev.getClass
     
     lazy val advanced: Boolean = FilteringOps.map.isDefinedAt(ev)
   }

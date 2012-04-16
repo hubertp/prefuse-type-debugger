@@ -1,7 +1,7 @@
 package scala.typedebugger
 package processing
 
-import internal.{ CompilerInfo, IStructure, PrefuseStructure }
+import internal.{ CompilerInfo, IStructure, PrefuseStructure, SyntheticEvents}
 
 import prefuse.data.Tree
 
@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.tools.nsc.io
 
 trait PrefusePostProcessors {
-  self: CompilerInfo with IStructure with PrefuseStructure =>
+  self: CompilerInfo with IStructure with PrefuseStructure with SyntheticEvents =>
     
   import global.{Tree => STree, _}
   import EV._
@@ -37,7 +37,7 @@ trait PrefusePostProcessors {
     // Do not show all nodes in the UI, not necessary
     // Have to be done or ensure that there is no other node attached to them
     // because they cannot be parents
-    def visibleNodes: PartialFunction[Event, Boolean] = {
+    lazy val visibleNodes: PartialFunction[Event, Boolean] = {
        case _: TyperTypeSet => 
          false
        case _: TyperTyped1Done => // typing event
@@ -65,6 +65,11 @@ trait PrefusePostProcessors {
        case _: UnitApplyDone =>
          false
        case _: NamerApplyPhase =>
+         false
+       case init: SymInitializeTyper if init.sym.isInitialized =>
+         false
+         
+       case alts: ImprovesAlternativesCheck if alts.alt1 == NoSymbol || alts.alt2 == NoSymbol =>
          false
     }
   
@@ -104,18 +109,18 @@ trait PrefusePostProcessors {
           } else if (validEvent(child.ev))  {
             val child1 = new PrefuseEventNode(child.ev, Some(parent), tree(absFile).addChild(parent.pfuseNode))
             child1.pfuseNode.set(label, child1)
-            child1.children ++= child.children.map(processChildren(child1, _)).flatten
             // mapping of error/goal nodes
             if (errorNodes0.contains(child)) {
               errorNodes += child1
             }
+            child1.children ++= mapNodeChildren(child1, child.children.toList, tree(absFile)).flatten
             Some(child1)
           } else if (child.children.length > 0) {
             // Get single child that is visible
-            def breadthFirstSearch[T](node: BaseTreeNode[T]): List[BaseTreeNode[T]] =
-              node.children.toList.flatMap(c => if (validEvent(c.ev)) List(c) else breadthFirstSearch(c))
+            def bfs[T](node: BaseTreeNode[T]): List[BaseTreeNode[T]] =
+              node.children.toList.flatMap(c => if (validEvent(c.ev)) List(c) else bfs(c))
   
-            breadthFirstSearch(child) match {
+            bfs(child) match {
               case single::Nil =>
                 val child1 = new PrefuseEventNode(single.ev, Some(parent), tree(absFile).addChild(parent.pfuseNode))
                 child1.pfuseNode.set(label, child1)
@@ -154,6 +159,35 @@ trait PrefusePostProcessors {
           top.children --= toRemove
           //top.children = top.children.filterNot(toRemove contains)
       }
+      // this assumes that AllEligibleImplicits contain CategorizeImplicits and InfoEligibleTest only
+      def mapNodeChildren(node: UINode[PrefuseEventNode], children: List[BaseTreeNode[EventNode]], root: Tree) = node.ev match {
+        case _: AllEligibleImplicits =>
+          groupEligibleEvents(node, children, root)
+        case _                       => // default
+          children.map(processChildren(node, _))
+      }
+      
+      def groupEligibleEvents(parent: UINode[PrefuseEventNode], children: List[BaseTreeNode[EventNode]], root: Tree) = {
+        val groupedChildren = children.foldRight(List(List[BaseTreeNode[EventNode]]()))((curr, acc) =>
+          if (curr.ev == EV.CategorizeImplicits) List()::acc else (curr :: (acc.head))::acc.tail
+        )
+        groupedChildren.map { group =>
+          group match {
+            case h::_   =>
+              h.ev match {
+                case first: InfoEligibleTest =>
+                  val group0Node = new PrefuseEventNode(new GroupEligibleImplicits(first.info.sourceInfo), Some(parent), root.addChild(parent.pfuseNode))
+                  group0Node.pfuseNode.set(label, group0Node)
+                  group0Node.children ++= group.map(processChildren(group0Node, _)).flatten
+                  Some(group0Node)
+                case _ =>
+                  None
+              }
+            case Nil    =>
+              None
+          }
+        }
+      }
       
       def filterOutStructure(node: UINode[PrefuseEventNode]): Boolean = {
         node.ev match {
@@ -176,6 +210,13 @@ trait PrefusePostProcessors {
             false
         }
         // Also with adapt-typeTree
+      }
+      
+      def splitAt(ev: Event, list: List[BaseTreeNode[EventNode]]): List[List[BaseTreeNode[EventNode]]] = {
+        // the first will be empty thanks to foldRight
+        list.foldRight(List(List[BaseTreeNode[EventNode]]()))((curr, acc) =>
+          if (curr.ev == ev) List()::acc else (curr :: (acc.head))::acc.tail
+        )
       }
     }
   }

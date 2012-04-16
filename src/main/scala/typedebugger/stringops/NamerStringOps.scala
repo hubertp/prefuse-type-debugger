@@ -6,6 +6,7 @@ trait NamerStringOps {
     
   import global._
   import EV._
+  import util.StringFormatter._
     
   trait NamerEventsOps {
     self: Descriptors =>
@@ -18,14 +19,15 @@ trait NamerStringOps {
       case e: TypeSigNamer =>
         new Descriptor {
           def basicInfo = "Typing of\n type's signature"
-          def fullInfo  = "Tree to be typed: " + snapshotAnyString(e.tree)
+          def fullInfo  = "Tree to be typed: %tree".dFormat(Some("Signature of type"), snapshotAnyString(e.tree))
         }
        
       case e: ClassSigNamer =>
         new Descriptor {
           def basicInfo = "Typing of\n class' signature"
-          def fullInfo  = "Completing class " + snapshotAnyString(e.templ) +
-            " with type params: " + e.tparams.map(snapshotAnyString)
+          def fullInfo  = ("Completing class %tree" +
+          		             "with type params: %tree").dFormat(Some("Signature of class"),
+          		                 snapshotAnyString(e.templ), e.tparams.map(snapshotAnyString).mkString)
         }
        
       case e: MethodSigNamer =>

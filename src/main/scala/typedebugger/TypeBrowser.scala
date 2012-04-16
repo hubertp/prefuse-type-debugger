@@ -20,6 +20,7 @@ abstract class TypeBrowser extends AnyRef
    with internal.StructureBuilders
    with internal.CompilationTools
    with internal.EventFiltering
+   with internal.SyntheticEvents
    with processing.PrefusePostProcessors
    with processing.Hooks
    with stringops.StringOps

@@ -6,6 +6,7 @@ trait AdaptStringOps {
     
   import global._
   import EV._
+  import util.StringFormatter._
   
   trait AdaptEventsOps {
     self: Descriptors =>
@@ -19,9 +20,10 @@ trait AdaptStringOps {
                           else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
-            "Adapt expression's type (if necessary) to the expected type.\n" + 
-            "Found:    " + snapshotAnyString(tree1.tpe) + "\n" + 
-            "Expected: " + snapshotAnyString(e.pt)
+            ("Adapt the type of the expression (if necessary) to the expected type.\n" + 
+             "Found: %tpe" +
+             "Expected: %tpe").dFormat(Some("Adapt expression"),
+              snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt))
           }
         }
         
@@ -57,12 +59,14 @@ trait AdaptStringOps {
        
       case e:PolyTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt polymorphic type"
+          def basicInfo = "Adapt an expression with polymorphic type"
           def fullInfo  =
-            "\nType-parameters: '" + snapshotAnyString(e.tparams) + "' " + 
-            "\nResult type: '" + snapshotAnyString(e.tpe) + "'" +
-            "\nFor type tree: " + snapshotAnyString(e.typeTree) +
-            " undetermined context type-parameters: " + e.undetTParams
+            ("Type-parameters: %tpe" + 
+            "Result type: %tpe" + 
+            "For type tree: %tree" + 
+            "Undetermined context type-parameters: %sym").dFormat(Some("Adapt an expression with polymorphic type"),
+                snapshotAnyString(e.tparams), snapshotAnyString(e.tpe),
+                snapshotAnyString(e.typeTree), snapshotAnyString(e.undetTParams))
         }
 
       case e:ImplicitMethodTpeAdapt =>

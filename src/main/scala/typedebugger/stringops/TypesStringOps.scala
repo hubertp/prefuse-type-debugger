@@ -6,6 +6,7 @@ trait TypesStringOps {
     
   import global._
   import EV._
+  import util.StringFormatter._
     
   trait TypesEventsOps extends AnyRef with SubtypingInfo {
     self: Descriptors =>
@@ -15,7 +16,8 @@ trait TypesStringOps {
       case e: SubTypeCheck =>
         new Descriptor {
           def basicInfo = "Subtyping check" + truncateStringRep(safeTypePrint(e.lhs, truncate=false),safeTypePrint(e.rhs, truncate=false), " <: ", "\n")
-          def fullInfo  = "Subtype check for\n" + snapshotAnyString(e.lhs) + " <: " + snapshotAnyString(e.rhs)
+          def fullInfo  = "Subtype check between %tpe and %tpe".dFormat(Some("Subtype check"),
+              snapshotAnyString(e.lhs), snapshotAnyString(e.rhs))
         }
 
       case e: SubTypeCheckRes =>

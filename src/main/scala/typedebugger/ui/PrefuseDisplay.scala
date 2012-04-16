@@ -411,11 +411,12 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     
     private def showTooltip(ptt: PrefuseTooltip, item: VisualItem, coordX: Int, coordY: Int) {
       clearTooltip()
-      
-      activeTooltip = ptt
-      activeTooltip.startShowing(coordX + 10, coordY + 5,
-          (getWidth()/2) < coordX,
-          (getHeight()/2) < coordY)
+      if (ptt.init()) {
+        activeTooltip = ptt
+        activeTooltip.startShowing(coordX + 10, coordY + 5,
+            (getWidth()/2) < coordX,
+            (getHeight()/2) < coordY)
+      }
     }
   }
 
@@ -663,6 +664,10 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
           panTs.addTuple(item)
           if (isNode(item)) {
             ts.addTuple(item.getSourceTuple)
+            // add its immediate parent as well
+            val nodeItem = item.asInstanceOf[NodeItem]
+            if (nodeItem.getParent != null)
+              ts.addTuple(nodeItem.getParent.asInstanceOf[NodeItem].getSourceTuple)
           }
         } else {
           item match {

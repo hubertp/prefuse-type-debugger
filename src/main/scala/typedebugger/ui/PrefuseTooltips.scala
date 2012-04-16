@@ -10,7 +10,7 @@ import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 import javax.swing.border._
 
 import scala.collection.mutable
-import util.StringFormatter
+import util._
 
 trait PrefuseTooltips {
   abstract class PrefuseTooltip(
@@ -20,6 +20,7 @@ trait PrefuseTooltips {
     protected var popup: JPanel = _
     
     protected def getContents(): java.awt.Component
+    def init(): Boolean
     
     class ShowTimerAction(showTimer: Boolean) extends ActionListener {
       override def actionPerformed(e: ActionEvent ) =
@@ -99,37 +100,38 @@ trait PrefuseTooltips {
     final val constTextFact = 1.5
     final val newLine = System.getProperty("line.separator")
     
-    init()
-    
-    def init() {
+    def init(): Boolean =  {
       val textArea = swingFormattedText(contents, findAreaMaxHeight(), findAreaMaxWidth())
-      textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
-      textArea.setEditable(false)
-      textArea.setLineWrap(true)
-
-      contents.title match {
-        case Some(title) =>
-          val titleBorder = BorderFactory.createTitledBorder(title)
-          titleBorder.setTitleJustification(TitledBorder.LEFT)
-          contentsPanel.setBorder(BorderFactory.createCompoundBorder(
-                        titleBorder,
-                        BorderFactory.createEmptyBorder(2, 2, 2, 2)))
-        case None        =>
-          contentsPanel.setBorder(BorderFactory.createLineBorder(Color.gray));
-          contentsPanel.setLayout(new BorderLayout())
+      (textArea != null) && {
+        textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
+        textArea.setEditable(false)
+        textArea.setLineWrap(true)
+  
+        contents.title match {
+          case Some(title) =>
+            val titleBorder = BorderFactory.createTitledBorder(title)
+            titleBorder.setTitleJustification(TitledBorder.LEFT)
+            contentsPanel.setBorder(BorderFactory.createCompoundBorder(
+                          titleBorder,
+                          BorderFactory.createEmptyBorder(2, 2, 2, 2)))
+          case None        =>
+            contentsPanel.setBorder(BorderFactory.createLineBorder(Color.gray));
+            contentsPanel.setLayout(new BorderLayout())
+        }
+        contentsPanel.add(new JScrollPane(textArea))
+        true
       }
-      contentsPanel.add(new JScrollPane(textArea))
     }
     
     private def findAreaMaxWidth(areaMax: Int = 80, margin: Int = 2): Int = {
       var maxWidth = 0
       contents.text foreach { elem =>
-        val localMax = (elem.split(newLine).max.length * constTextFact).toInt
+        val localMax = (elem.split(newLine).maxBy(_.length).length * constTextFact).toInt
         if (localMax > maxWidth)
           maxWidth = localMax min areaMax
       }
       contents.args foreach { elem =>
-        val argMax = (elem.toString.split(newLine).max.length * constTextFact).toInt
+        val argMax = (elem.toString.split(newLine).maxBy(_.length).length * constTextFact).toInt
         if (argMax > maxWidth)
           maxWidth = argMax min areaMax
       }
@@ -153,12 +155,20 @@ trait PrefuseTooltips {
       val positions = new mutable.ListBuffer[(Int, Int)]()
       val color = new DefaultHighlightPainter(Color.lightGray)
       
+      // todo: probably something more complicated will need to be added
+      // if we are dealing with longish signatures
+      def maybeAddNewLine(s: String, t: CustomArg): String = t match {
+        case tag@TypeText(_) => s
+        case tag@SymText(_)  => s
+        case _               => addNewLine(s)
+      }
+      
       def addNewLine(s: String): String = {
         if (!s.endsWith(newLine)) s + newLine else s
       }
       
       var text = (formatter.text zip formatter.args).foldLeft("") { (x, y) =>
-        val upto = x + addNewLine(y._1) // only text
+        val upto = x + maybeAddNewLine(y._1, y._2) // only text
         val withArg = upto + y._2 // tree/tpe/symbol
         positions += ((upto.length, withArg.length))
         addNewLine(withArg)
@@ -167,10 +177,13 @@ trait PrefuseTooltips {
       textArea.setMargin(new Insets(2, 2, 2, 2));
       if (formatter.text.length != formatter.args.length) // add missing bit after zip
         text = text + addNewLine(formatter.text.last)
-      textArea.setText(text)
-      positions.foreach(poss => textArea.getHighlighter.addHighlight(poss._1, poss._2, color))
-      textArea
+      if (text != "") {
+        textArea.setText(text)
+        positions.foreach(poss => textArea.getHighlighter.addHighlight(poss._1, poss._2, color))
+        textArea
+      } else null
     }
+      
   
     protected def getContents() = contentsPanel
   }
