@@ -42,8 +42,8 @@ trait TypesStringOps {
       case e: CompareTypes =>
         new Descriptor {
           def basicInfo = explainSubtyping(e.compType, e.which)
-          def fullInfo  = "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot(e.tp1)) +
-                          " <:< " + snapshotAnyString(TypeSnapshot(e.tp2))
+          def fullInfo  = "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot.mapOver(e.tp1)) +
+                          " <:< " + snapshotAnyString(TypeSnapshot.mapOver(e.tp2))
         }
       
       case e: CompareDone =>

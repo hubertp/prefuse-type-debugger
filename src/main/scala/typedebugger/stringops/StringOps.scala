@@ -19,6 +19,8 @@ trait StringOps extends AnyRef
   import global.{Tree => STree, _}
   import EV._
   
+  //implicit val snapshotOpenTypes: List[Type] = Nil
+  
   object Formatting {
     //val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
     //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
@@ -144,8 +146,8 @@ trait StringOps extends AnyRef
   def snapshotAnyString(x: Any)(implicit c: Clock): String = x match {
     case list: List[_] => list.map(snapshotAnyString).mkString
     case t: STree      => anyString(treeAt(t))
-    case tp: Type      => anyString(TypeSnapshot(tp))
-    case sym: Symbol   => anyString(SymbolSnapshot(sym)) 
+    case tp: Type      => anyString(TypeSnapshot.mapOver(tp))
+    case sym: Symbol   => anyString(SymbolSnapshot.mapOver(sym)) 
     case _             => anyString(x)
   }
   
@@ -157,10 +159,10 @@ trait StringOps extends AnyRef
         val t1 = treeAt(t).asInstanceOf[T]
         snapshotAnyString(y(t1))
       case tp: Type => 
-        val tp1 = TypeSnapshot(tp).asInstanceOf[T]
+        val tp1 = TypeSnapshot.mapOver(tp).asInstanceOf[T]
         snapshotAnyString(y(tp1))
       case sym: Symbol =>
-        val sym1 = SymbolSnapshot(sym).asInstanceOf[T]
+        val sym1 = SymbolSnapshot.mapOver(sym).asInstanceOf[T]
         snapshotAnyString(y(sym1))
       case _ => snapshotAnyString(y(x))
     }

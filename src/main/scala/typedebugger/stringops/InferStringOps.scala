@@ -48,12 +48,12 @@ trait InferStringOps {
           new Descriptor {
             def basicInfo = "Instantiate type variables"
             def fullInfo  = "Instantiate type variables: " +
-                            e.tvars.map(tvar => {val tvar0 = TypeSnapshot(tvar); anyString(tvar0) + " => " +
+                            e.tvars.map(tvar => {val tvar0 = TypeSnapshot.mapOver(tvar); anyString(tvar0) + " => " +
                                                  snapshotAnyString(tvar0.constr.inst)}).mkString("[", ",", "]")
           }
            
         case e: InstantiateTypeVar =>
-          val tvar1 = TypeSnapshot(e.tvar)
+          val tvar1 = TypeSnapshot.mapOver(e.tvar)
           new Descriptor {
             def basicInfo = "Instantiate type variable " + anyString(tvar1)
             def fullInfo  = "Instantiate type variable: " + anyString(tvar1) +
@@ -93,7 +93,7 @@ trait InferStringOps {
         case e: InstantiateGlbOrLub =>
           val instType = if (e.up) "greater lower bound (glb)" else "lower upper bound (lub)"
           def pos = if (e.up) "non-contravariant position" else "contravariant position"
-          def tvar1 = TypeSnapshot(e.tvar)
+          def tvar1 = TypeSnapshot.mapOver(e.tvar)
           new Descriptor {
             def basicInfo = "Calculate " + instType + "\nbecause type parameter is in\n" + pos
             def fullInfo  = {

@@ -26,9 +26,9 @@ trait TyperStringOps {
           
           def fullInfo = {
             val tree0 = treeAt(e.tree)
-            val tpe0 = TypeSnapshot(tree0.tpe)
-            val sym0 = if (tree0.symbol != null) SymbolSnapshot(tree0.symbol) else null
-            val tpe = if (tpe0 != null) tpe0 else if (sym0 != null) TypeSnapshot(sym0.tpe) else null
+            val tpe0 = TypeSnapshot.mapOver(tree0.tpe)
+            val sym0 = if (tree0.symbol != null) SymbolSnapshot.mapOver(tree0.symbol) else null
+            val tpe = if (tpe0 != null) tpe0 else if (sym0 != null) TypeSnapshot.mapOver(sym0.tpe) else null
             val tpeRes = if (e.tree.tpe != null) e.tree.tpe else (if (e.tree.symbol != null) e.tree.symbol.tpe else null)
             debug(if (tree0 != null) "Tree class " + tree0.getClass + " with sym " + sym0 else "", "event")
             (e.expl + "\n\n" +
@@ -126,7 +126,7 @@ trait TyperStringOps {
       case e: ConvertConstrBody =>
         new Descriptor() {
           def basicInfo = "Convert constructor"
-          def fullInfo  = "Convert constructor body\n" + snapshotAnyString(e.tree)
+          def fullInfo  = "Convert constructor body %tree".dFormat(Some("Transforming constructor"), snapshotAnyString(e.tree))
         }
         
       case e: ValidateParentClass =>
@@ -147,7 +147,7 @@ trait TyperStringOps {
         new Descriptor() {
           val tree = treeAt(e.valdef)
           def basicInfo = {
-            val sym = SymbolSnapshot(tree.symbol)
+            val sym = SymbolSnapshot.mapOver(tree.symbol)
             "Type value definition" + safeTypePrint(sym.tpe, "\n(typed as ", ")")
           }
           def fullInfo  = "Type value definition %tree".dFormat(Some("Type value definition"), anyString(tree))
@@ -177,7 +177,7 @@ trait TyperStringOps {
       case e: DocDefTyper =>
         new Descriptor() {
           def basicInfo = "Type documentation definition"
-          def fullInfo  = "Documentation " + snapshotAnyString(e.tree)
+          def fullInfo  = "Documentation %tree".dFormat(Some("Type documentation"), snapshotAnyString(e.tree))
         }
 
       case e: AnnotatedTyper =>
@@ -214,15 +214,8 @@ trait TyperStringOps {
       case e: AssignTyper =>
         new Descriptor() {
           def basicInfo = "Type assignment"
-          def fullInfo  = "Type assignment of \n" + snapshotAnyString(e.value1) +
-                          "\nto " + snapshotAnyString(e.value2) 
-        }
-        
-      case e: AssignLeftTyper =>
-        new Descriptor() {
-          def basicInfo = "Type left side of the assignment"
-          def fullInfo  = "Type left side of the assignment of symbol " +
-                          snapshotAnyString(e.treeSym)
+          def fullInfo  = "Type assignment of %tree" +
+                          "to %tree".dFormat(Some("Type assignment"), snapshotAnyString(e.value1), snapshotAnyString(e.value2)) 
         }
 
       case e: AssignGetterTyper =>
@@ -252,17 +245,19 @@ trait TyperStringOps {
       case e:IfBranchTyper =>
         new Descriptor() {
           def basicInfo = "Type " + (if (e.cond) "then" else "else") + " branch"
-          def fullInfo  = "With expected type: " + snapshotAnyString(e.pt)
+          def fullInfo  = "Expected type %tpe".dFormat(Some("Type 'if' branch"), snapshotAnyString(e.pt))
         }
         
       case e:IfLubTyper =>
         new Descriptor() {
-          def basicInfo = "Determine least-upper-bound for if conditional"
-          def fullInfo  = snapshotAnyString(e.tree1) + ": " + snapshotAnyString(e.value1) +
-                          " and " +
-                          snapshotAnyString(e.tree2) + ": " + snapshotAnyString(e.value2) + "\n" +
-                          "with expected type: " + snapshotAnyString(e.pt)
-
+          def basicInfo = "Determine least upper bound for if conditional"
+          def fullInfo  = "Least upper bound for branches:" +
+          		            "%tree with type %tpe\n" +
+          		            " and %tree with type %tpe\n" +
+          		            "Expected type $tpe".dFormat(Some("Least upper bound for 'if' conditional"),
+          		                snapshotAnyString(e.tree1), snapshotAnyString(e.value1),
+          		                snapshotAnyString(e.tree2), snapshotAnyString(e.value2),
+          		                snapshotAnyString(e.pt))
         }
         
       case e:MatchTyper =>
@@ -281,7 +276,7 @@ trait TyperStringOps {
       case e:NewTyper =>
         new Descriptor() {
           def basicInfo = "Type new instance"
-          def fullInfo  = snapshotAnyString(e.tree)
+          def fullInfo  = "Type the new instance of %tree".dFormat(Some("Type 'new'"), snapshotAnyString(e.tree))
         }
 
       case e:NewTypeCtorTyper =>
@@ -329,42 +324,42 @@ trait TyperStringOps {
                           val t = treeAt(e.tree)
                           "Typecheck application of function to the arguments.\n" +
                           "If that fails adapt function to the arguments.\n" +
-                          "Function: " + anyString(t) + "\n" +
-                          "of type: " + snapshotAnyString(t.tpe) + "\n" +
-                          "arguments: " + e.args.mkString("(", ",", ")") + "\n" + 
-                          "with expected type " + snapshotAnyString(e.pt)
+                          "Function: %tree" +
+                          "of type: %tpe" + 
+                          "arguments: %tree" +  
+                          "Expected type %tpe".dFormat(Some("Typechecking application"), anyString(t), snapshotAnyString(t.tpe), e.args.mkString("(", ",", ")"), snapshotAnyString(e.pt))
           }
         }
 
       case e:SuccessTryTypedApplyTyper =>
         new Descriptor() {
           def basicInfo = "Typed application"
-          def fullInfo  = ""
+          def fullInfo  = "Successfully typed application %tree as %tpe".dFormat(Some("Typed application"), snapshotAnyString(e.tree), snapshotAnyString(e.tpe))
         }
         
       case e:SecondTryTypedApplyStartTyper =>
         new Descriptor() {
-          def basicInfo = "Second attempt: \n " +
+          def basicInfo = "Fallback: \n " +
                           "Try adapting function to the given arguments"
-          def fullInfo  = "Since first adapt at simply typing application of function\n" +
-                          snapshotAnyString(e.fun) + "\n to arguments " +
-                          e.args.map(snapshotAnyString).mkString("'", ",", "'") + "\n" +
-                          "failed, try adapting function to the arguments"
+          def fullInfo  = "Typing application %tree to argumentns %tree failed.\n" +
+          		            "Try adapting function to arguments.".dFormat(
+          		                Some("Adapt function to arguments"), snapshotAnyString(e.fun),
+                              e.args.map(snapshotAnyString).mkString("'", ",", "'"))
         }
 
       case e:SecondTryTypedApplyTyper =>
         new Descriptor() {
-          def basicInfo = "Second attempt: \nType application of adapted function to arguments"
-          def fullInfo  = "Second attempt at applying adapted function  '" + snapshotAnyString(e.qual1) +
-                          "' to arguments '" + snapshotAnyString(e.args1) + "'"
+          def basicInfo = "Type application of adapted function to arguments"
+          def fullInfo  = "Type application of adapted function %tree to arguments %tree".dFormat(Some("Type application of adapted function"), 
+                          snapshotAnyString(e.qual1), snapshotAnyString(e.args1))
         }          
 
       case e:FailedSecondTryTypedApplyTyper =>
         new Descriptor() {
           def basicInfo = "Failed adapting function to the arguments"
-          def fullInfo  = (if (e.args1 eq null) "Failed typing arguments '"
-                          else "Failed adapting qualifier to arguments '") +
-                          e.args1.map(snapshotAnyString).mkString("[", ",", "]") + "'"
+          def fullInfo  = ((if (e.args1 eq null) "Failed typing arguments "
+                          else "Failed adapting function to the arguments ") + "%tree").dFormat(
+                            Some("Failed adaptation"), e.args1.map(snapshotAnyString).mkString("[", ",", "]"))
         }
 
       case e:FailedTryTypedApplyTyper =>
@@ -381,7 +376,7 @@ trait TyperStringOps {
           def basicInfo = "Type expression and \n eta-expand it"
           def fullInfo  = {
             val expr  = treeAt(e.expr)
-            val exprTpe = TypeSnapshot(expr.tpe)
+            val exprTpe = TypeSnapshot.mapOver(expr.tpe)
             "Eta-expansion on expression " + anyString(expr) + 
               (if (exprTpe != null) "\n of type " + anyString(exprTpe) else "")
           }
@@ -496,7 +491,7 @@ trait TyperStringOps {
           def basicInfo = if (e.sym == NoSymbol) "No symbol found corresponding to\n the member qualifier"
                           else "Found symbol corresponding to the member \nof the qualifier"
           def fullInfo  = {
-            val sym1 = SymbolSnapshot(e.sym)
+            val sym1 = SymbolSnapshot.mapOver(e.sym)
             "Result of finding symbol corresponding to the member '" + snapshotAnyString(e.member) + "' of qualifier: \n" +
               snapshotAnyString(e.qual) + "\n" +
               (if (e.sym == NoSymbol) "Symbol not found "
@@ -697,7 +692,7 @@ trait TyperStringOps {
         new Descriptor() {
           def basicInfo = "Filtered-out alternatives"
           def fullInfo  = {
-            val funSym1 = SymbolSnapshot(e.funSym)
+            val funSym1 = SymbolSnapshot.mapOver(e.funSym)
             "Initial filter out for symbol alernatives for tree " + snapshotAnyString(e.tree) +
             " results in symbol " + anyString(funSym1) + " of type " + snapshotAnyString(funSym1.tpe)
           }

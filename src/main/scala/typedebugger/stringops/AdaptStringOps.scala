@@ -12,7 +12,6 @@ trait AdaptStringOps {
     self: Descriptors =>
     private val DEFAULT = new DefaultDescriptor("adapt")
       
-      
     def explainAdaptEvent(ev: Event with AdaptEvent)(implicit time: Clock = ev.time): Descriptor = ev match {
       case e:AdaptStart =>
         new Descriptor {
@@ -94,7 +93,7 @@ trait AdaptStringOps {
         }
          
       case e:InferImplicitForParamAdapt =>
-        val param1 = SymbolSnapshot(e.param)
+        val param1 = SymbolSnapshot.mapOver(e.param)
         new Descriptor {
           def basicInfo = "Infer implicit for parameter " + safeTypePrint(param1.tpe, "\nof type: ", "")
           def fullInfo  = "Infer implicit for parameter '" + anyString(param1) + "': " +
@@ -105,7 +104,7 @@ trait AdaptStringOps {
         new Descriptor {
           def basicInfo = "Implicit value not found"
           def fullInfo  = {
-            val param1 = SymbolSnapshot(e.param)
+            val param1 = SymbolSnapshot.mapOver(e.param)
             "Could not find implicit value for evidence parameter \n" + param1.name + 
             "\nof type " + snapshotAnyString(param1.tpe)
           }
@@ -115,7 +114,7 @@ trait AdaptStringOps {
         new Descriptor {
           def basicInfo = "Implicit value not found"
           def fullInfo  = {
-            val param1 = SymbolSnapshot(e.param)
+            val param1 = SymbolSnapshot.mapOver(e.param)
             "Could not find implicit value for evidence parameter \n" + param1.name + 
             "\nof type " + snapshotAnyString(param1.tpe)
           }

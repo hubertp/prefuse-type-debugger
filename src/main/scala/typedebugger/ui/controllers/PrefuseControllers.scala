@@ -80,12 +80,12 @@ trait PrefuseControllers {
     override def getColor(item: VisualItem): Int = {
       val event = retrieveEvent(item)
       event match {
-        case _ if ( m_vis.isInGroup(item, display.clickedNodes)) =>
-          ColorLib.rgb(198, 229, 250) // Make it always visible
         case Some(ev: HardErrorEvent) =>
           ColorLib.rgba(255, 0, 0, 150)
         case Some(ev: ContextTypeError) if ev.errType == ErrorLevel.Hard =>
           ColorLib.rgba(255, 0, 0, 150)
+        case _ if ( m_vis.isInGroup(item, display.clickedNodes)) =>
+          ColorLib.rgb(198, 229, 250) // Make it always visible
         case Some(ev: TyperOmittedStatement) =>
           ColorLib.rgba(204, 204, 204, 50)
         case Some(ev: SoftErrorEvent) =>

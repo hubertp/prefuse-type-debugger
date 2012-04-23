@@ -63,95 +63,108 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
     }
   }
   
-  object TypeSnapshot {
-    def apply[T <: Type](tp: T)(implicit time: Clock): T = handleType(tp).asInstanceOf[T]
+  abstract class SnapshotMap[T] {
+    private[Snapshots] def apply[S <: T](arg: S)(implicit openTypes: List[Type], time: Clock): S
     
-    private def handleType(tp: Type)(implicit time: Clock): Type = tp match {
-      case TypeRef(pre, sym, args) =>
-        val pre1 = this(pre)
-        val sym1 = SymbolSnapshot(sym)
-        val args1 = args.mapConserve(this(_))
-        if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args)) tp
-        else TypeRef(pre1, sym1, args1)
-      case ThisType(sym) =>
-        val sym1 = SymbolSnapshot(sym)
-        if (sym1 eq sym) tp
-        else ThisType(sym1)
-      case SingleType(pre, sym) =>
-        val pre1 = this(pre)
-        val sym1 = SymbolSnapshot(sym)
-        if ((pre1 eq pre) && (sym1 eq sym)) tp
-        else SingleType(pre1, sym1)
-      case MethodType(params, restpe) =>
-        val params1 = params.mapConserve(SymbolSnapshot(_))
-        //println("Method Type: " + restpe.getClass + " params: " + params.map(_.getClass))
-        val restpe1 = this(restpe)
-        //println("METHOD TYPE SNAPSHOT: " + (params1 eq params) + " && " + (restpe1 eq restpe))
-        if ((params1 eq params) && (restpe1 eq restpe)) tp
-        else MethodType(params1, restpe1)
-      case PolyType(tparams, restpe) =>
-        val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
-        val restpe1 = this(restpe)
-        if ((tparams1 eq tparams) && (restpe1 eq restpe)) tp
-        else PolyType(tparams1, restpe1)
-      case NullaryMethodType(result) =>
-        val result1 = this(result)
-        if (result1 == result) tp
-        else NullaryMethodType(result1)
-/*      case ConstantType(const) => // todo
-        val constTpe = this(const.tpe)
-        if (constTpe eq const.tpe) tp
-        else ... */
-      case SuperType(thistp, supertp) =>
-        val thistp1 = this(thistp)
-        val supertp1 = this(supertp)
-        if ((thistp1 eq thistp) && (supertp1 eq supertp)) tp
-        else SuperType(thistp1, supertp1)
-      case TypeBounds(lo, hi) =>
-        val lo1 = this(lo)
-        val hi1 = this(hi)
-        if ((lo1 eq lo) && (hi1 eq hi)) tp
-        else TypeBounds(lo1, hi1)
-      case BoundedWildcardType(bounds) =>
-        val bounds1 = this(bounds)
-        if (bounds1 eq bounds) tp
-        else BoundedWildcardType(bounds1.asInstanceOf[TypeBounds])
-      case RefinedType(parents, decls) =>
-        val parents1 = parents.mapConserve(this(_))
-        // todo: handle decls
-        if (parents1 eq parents) tp
-        else RefinedType(parents1, decls)
-      case ExistentialType(tparams, result) =>
-        val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
-        val result1 = this(result)
-        if ((tparams1 eq tparams) && (result1 eq result)) tp
-        else ExistentialType(tparams1, result1)
-      case AnnotatedType(annots, atp, selfsym) =>
-        // todo: support annotations
-        val atp1 = this(atp)
-        val selfsym1 = SymbolSnapshot(selfsym)
-        if ((atp1 eq atp) && (selfsym1 eq selfsym)) tp
-        else AnnotatedType(annots, atp1, selfsym1)
-      case OverloadedType(pre, alts) =>
-        val pre1 = this(pre)
-        val alts1 = alts.mapConserve(SymbolSnapshot(_))
-        if ((pre1 eq pre) && (alts1 eq alts)) tp
-        else OverloadedType(pre1, alts1)
-      case NotNullType(result) =>
-        val result1 = this(result)
-        if (result1 eq result) tp
-        else NotNullType(result1)
-      case tv@TypeVar(_, _) =>
-        // primary source of differences
-        val tv1 = typeVarAt(tv, time)
-        //println("type var: " + (tv1 eq tv) + " for " + tv1 + " vs " + tv)
-        if (tv1 eq tv) tp
-        else tv1 
-      // handle antipolytype
-      //        annotatedtype
-      //        debruijnindex
-      case _ => tp
-    }
+    def mapOver[S <: T](tp: S)(implicit time: Clock): S = apply(tp)(Nil, time)
+    def mapOverArgs[S <: T](args: List[S])(implicit openTypes: List[Type], time: Clock): List[S] =
+      args.map(apply(_))
+  }
+  
+  object TypeSnapshot {
+    def mapOver[T <: Type](tp: T)(implicit time: Clock): T = this(tp)(Nil, time)
+    private[Snapshots] def apply[T <: Type](tp: T)(implicit openTypes: List[Type], time: Clock): T = handleType(tp, openTypes).asInstanceOf[T]
+    
+    private def handleType(tp: Type, openTypes: List[Type])(implicit time: Clock): Type = if (openTypes.contains(tp)) tp
+      else {
+        implicit val openTypes1 = tp :: openTypes
+        tp match {
+          case TypeRef(pre, sym, args) =>
+            val pre1 = this(pre)
+            val sym1 = SymbolSnapshot(sym)
+            val args1 = args.mapConserve(this(_))
+            if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args)) tp
+            else TypeRef(pre1, sym1, args1)
+          case ThisType(sym) =>
+            val sym1 = SymbolSnapshot(sym)
+            if (sym1 eq sym) tp
+            else ThisType(sym1)
+          case SingleType(pre, sym) =>
+            val pre1 = this(pre)
+            val sym1 = SymbolSnapshot(sym)
+            if ((pre1 eq pre) && (sym1 eq sym)) tp
+            else SingleType(pre1, sym1)
+          case MethodType(params, restpe) =>
+            val params1 = params.mapConserve(SymbolSnapshot(_))
+            //println("Method Type: " + restpe.getClass + " params: " + params.map(_.getClass))
+            val restpe1 = this(restpe)
+            //println("METHOD TYPE SNAPSHOT: " + (params1 eq params) + " && " + (restpe1 eq restpe))
+            if ((params1 eq params) && (restpe1 eq restpe)) tp
+            else MethodType(params1, restpe1)
+          case PolyType(tparams, restpe) =>
+            val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
+            val restpe1 = this(restpe)
+            if ((tparams1 eq tparams) && (restpe1 eq restpe)) tp
+            else PolyType(tparams1, restpe1)
+          case NullaryMethodType(result) =>
+            val result1 = this(result)
+            if (result1 == result) tp
+            else NullaryMethodType(result1)
+    /*      case ConstantType(const) => // todo
+            val constTpe = this(const.tpe)
+            if (constTpe eq const.tpe) tp
+            else ... */
+          case SuperType(thistp, supertp) =>
+            val thistp1 = this(thistp)
+            val supertp1 = this(supertp)
+            if ((thistp1 eq thistp) && (supertp1 eq supertp)) tp
+            else SuperType(thistp1, supertp1)
+          case TypeBounds(lo, hi) =>
+            val lo1 = this(lo)
+            val hi1 = this(hi)
+            if ((lo1 eq lo) && (hi1 eq hi)) tp
+            else TypeBounds(lo1, hi1)
+          case BoundedWildcardType(bounds) =>
+            val bounds1 = this(bounds)
+            if (bounds1 eq bounds) tp
+            else BoundedWildcardType(bounds1.asInstanceOf[TypeBounds])
+          case RefinedType(parents, decls) =>
+            val parents1 = parents.mapConserve(this(_))
+            // todo: handle decls
+            if (parents1 eq parents) tp
+            else RefinedType(parents1, decls)
+          case ExistentialType(tparams, result) =>
+            val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
+            val result1 = this(result)
+            if ((tparams1 eq tparams) && (result1 eq result)) tp
+            else ExistentialType(tparams1, result1)
+          case AnnotatedType(annots, atp, selfsym) =>
+            // todo: support annotations
+            val atp1 = this(atp)
+            val selfsym1 = SymbolSnapshot(selfsym)
+            if ((atp1 eq atp) && (selfsym1 eq selfsym)) tp
+            else AnnotatedType(annots, atp1, selfsym1)
+          case OverloadedType(pre, alts) =>
+            val pre1 = this(pre)
+            val alts1 = alts.mapConserve(SymbolSnapshot(_))
+            if ((pre1 eq pre) && (alts1 eq alts)) tp
+            else OverloadedType(pre1, alts1)
+          case NotNullType(result) =>
+            val result1 = this(result)
+            if (result1 eq result) tp
+            else NotNullType(result1)
+          case tv@TypeVar(_, _) =>
+            // primary source of differences
+            val tv1 = typeVarAt(tv, time)
+            //println("type var: " + (tv1 eq tv) + " for " + tv1 + " vs " + tv)
+            if (tv1 eq tv) tp
+            else tv1 
+          // handle antipolytype
+          //        annotatedtype
+          //        debruijnindex
+          case _ => tp
+        }
+      }
     
     private def typeVarAt(tv: TypeVar, time: Clock): TypeVar = {
       def condTypeVarConstraint(constr0: TypeConstraint): TypeVar = {
@@ -216,7 +229,9 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
   }
 
   object SymbolSnapshot {
-    def apply[T <: Symbol](sym: T)(implicit time: Clock): T = {
+    def mapOver[T <: Symbol](sym: T)(implicit time: Clock): T = apply(sym)(Nil, time)
+    
+    private[Snapshots] def apply[T <: Symbol](sym: T)(implicit openTypes: List[Type], time: Clock): T = {
       if (sym == null)
         println("warn: symbol is null")
       val info1 = infoAt(sym)
@@ -224,7 +239,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       else sym.cloneSymbol.setInfoNoLog(info1).asInstanceOf[T]
     }
     
-    private def infoAt(sym: Symbol)(implicit at: Clock): Type = {
+    private def infoAt(sym: Symbol)(implicit openTypes: List[Type], at: Clock): Type = {
       var snapshot0 = sym.snapshot
       while (snapshot0 != null && at < snapshot0.clock)
         snapshot0 = snapshot0.prev
@@ -233,7 +248,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
       else {
         if (!snapshot0.info.isComplete) {
           // if not complete, this can create bootstrapping issues 
-          // where we for example we create Unit symbols that differ with info
+          // where we for example create Unit symbols that differ with info
           snapshot0 = sym.snapshot
           if (!snapshot0.info.isComplete) sym.info
           else {
@@ -242,7 +257,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             // todo: convert with TypeSnapshot?
             snapshot0.info
           }
-        } else 
+        } else
           TypeSnapshot(snapshot0.info)
       }
     }
