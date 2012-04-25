@@ -26,6 +26,13 @@ unmanagedJars in Compile <++= (scalaHome, baseDirectory) map { (sHome, base) =>
   allJars.classpath
 }
 
+unmanagedJars in Test <++= (scalaHome, baseDirectory) map { (sHome, base) =>
+  val scalaCompiler = (sHome.get / "lib" / "scala-compiler.jar")
+  val unmanagedDirs = base +++ (base / "lib")
+  val allJars = (unmanagedDirs ** ".jars") +++ scalaCompiler
+  allJars.classpath
+}
+
 scalacOptions in Compile += "-unchecked"
 
 scalaVersion := "2.10.0-SNAPSHOT"

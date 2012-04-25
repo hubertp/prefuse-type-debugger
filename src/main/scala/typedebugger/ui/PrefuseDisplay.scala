@@ -646,6 +646,103 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     override def getGraph(): Graph = {
       m_vis.getGroup(visibleGroup).asInstanceOf[Graph]
     }
+    
+    override def firstWalk(n: NodeItem, num: Int, depth: Int) {
+      val np = getParams(n)
+      np.number = num
+      updateDepths(depth, n)
+        
+      val expanded = n.isExpanded()
+      if ( Proxy.getChildCount(n) == 0 || !expanded ) {// is leaf
+        val l = Proxy.getPreviousSibling(n)
+        if ( l == null )
+          np.prelim = 0;
+        else
+          np.prelim = getParams(l).prelim + spacing(l,n,true);
+      } else if ( expanded ) {
+        val leftMost = Proxy.getFirstChild(n)
+        val rightMost = Proxy.getLastChild(n)
+        var defaultAncestor = leftMost
+        var c = leftMost
+        var i = 0
+        while (c != null) {
+          firstWalk(c, i, depth+1)
+          defaultAncestor = apportion(c, defaultAncestor)
+          i += 1
+          c = Proxy.getNextSibling(c)
+        }
+            
+        executeShifts(n)
+            
+        val midpoint = 0.5 *
+           (getParams(leftMost).prelim + getParams(rightMost).prelim)
+            
+        val left = Proxy.getPreviousSibling(n)
+        if ( left != null ) {
+          np.prelim = getParams(left).prelim + spacing(left, n, true)
+          np.mod = np.prelim - midpoint
+        } else {
+          np.prelim = midpoint
+        }
+      }
+
+      //super.firstWalk(ProxyNodeItem(n), num, depth)
+    }
+
+    //override def getParams(n: NodeItem) = super.getParams(realNodeItem(n))
+    //override def updateDepths(depth: Int, n: NodeItem): Unit =  super.updateDepths(depth, realNodeItem(n))
+    //override def executeShifts(n: NodeItem): Unit = super.executeShifts(realNodeItem(n))
+    
+    object Proxy {
+      
+      private def isValid(node: NodeItem): Boolean = {
+        node.isVisible && (!adv.isAdvancedOption(node) || adv.isOptionEnabled(node))
+      }
+      
+      def getChildCount(underlying: NodeItem): Int = {
+        val res = underlying.children_[NodeItem].toList.filter(isValid).size
+        val oldRes = underlying.getChildCount()
+        if (res != oldRes)
+          println("getChildCount: " + res + " " + oldRes)
+        res
+      }
+      
+      def getFirstChild(underlying: NodeItem): NodeItem = {
+        val first = underlying.getFirstChild().asInstanceOf[NodeItem]
+        if (first != null) {
+          if (!isValid(first))
+            Proxy.getNextSibling(first)
+          else first
+        } else null
+        //underlying.getFirstChild()
+      }
+      
+      def getLastChild(underlying: NodeItem): NodeItem = {
+        val last = underlying.getLastChild().asInstanceOf[NodeItem]
+        if (last != null) {
+          if (!isValid(last))
+            Proxy.getPreviousSibling(last)
+          else last
+        } else null
+        //underlying.getLastChild()
+      }
+      
+      def getPreviousSibling(underlying: NodeItem): NodeItem = {
+        var previous = underlying.getPreviousSibling().asInstanceOf[NodeItem]
+        while (previous != null && !isValid(previous))
+          previous.getPreviousSibling()
+        previous
+        //underlying.getPreviousSibling()
+      }
+      
+      def getNextSibling(underlying: NodeItem): NodeItem = {
+        var next = underlying.getNextSibling().asInstanceOf[NodeItem]
+        while (next != null && !isValid(next))
+          next.getPreviousSibling()
+        next
+        //underlying.getNextSibling()
+      }
+    }
   }
   
   
