@@ -64,16 +64,16 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
   }
   
   abstract class SnapshotMap[T] {
-    private[Snapshots] def apply[S <: T](arg: S)(implicit openTypes: List[Type], time: Clock): S
+    protected[Snapshots] def apply[S <: T](arg: S)(implicit openTypes: List[Type], time: Clock): S
     
     def mapOver[S <: T](tp: S)(implicit time: Clock): S = apply(tp)(Nil, time)
-    def mapOverArgs[S <: T](args: List[S])(implicit openTypes: List[Type], time: Clock): List[S] =
-      args.map(apply(_))
+    def mapOverArgs[S <: T](args: List[S])(implicit openTypes: List[Type], time: Clock): List[S] = {  
+      args.map(apply(_).asInstanceOf[S]) // make it mapConserve
+    }
   }
   
-  object TypeSnapshot {
-    def mapOver[T <: Type](tp: T)(implicit time: Clock): T = this(tp)(Nil, time)
-    private[Snapshots] def apply[T <: Type](tp: T)(implicit openTypes: List[Type], time: Clock): T = handleType(tp, openTypes).asInstanceOf[T]
+  object TypeSnapshot extends SnapshotMap[Type]{
+    protected[Snapshots] def apply[T <: Type](tp: T)(implicit openTypes: List[Type], time: Clock): T = handleType(tp, openTypes).asInstanceOf[T]
     
     private def handleType(tp: Type, openTypes: List[Type])(implicit time: Clock): Type = if (openTypes.contains(tp)) tp
       else {
@@ -82,7 +82,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
           case TypeRef(pre, sym, args) =>
             val pre1 = this(pre)
             val sym1 = SymbolSnapshot(sym)
-            val args1 = args.mapConserve(this(_))
+            val args1 = mapOverArgs(args)
             if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args)) tp
             else TypeRef(pre1, sym1, args1)
           case ThisType(sym) =>
@@ -95,14 +95,14 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             if ((pre1 eq pre) && (sym1 eq sym)) tp
             else SingleType(pre1, sym1)
           case MethodType(params, restpe) =>
-            val params1 = params.mapConserve(SymbolSnapshot(_))
+            val params1 = SymbolSnapshot.mapOverArgs(params) // shouldn't be allowed?
             //println("Method Type: " + restpe.getClass + " params: " + params.map(_.getClass))
             val restpe1 = this(restpe)
             //println("METHOD TYPE SNAPSHOT: " + (params1 eq params) + " && " + (restpe1 eq restpe))
             if ((params1 eq params) && (restpe1 eq restpe)) tp
             else MethodType(params1, restpe1)
           case PolyType(tparams, restpe) =>
-            val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
+            val tparams1 = SymbolSnapshot.mapOverArgs(tparams)
             val restpe1 = this(restpe)
             if ((tparams1 eq tparams) && (restpe1 eq restpe)) tp
             else PolyType(tparams1, restpe1)
@@ -129,12 +129,12 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             if (bounds1 eq bounds) tp
             else BoundedWildcardType(bounds1.asInstanceOf[TypeBounds])
           case RefinedType(parents, decls) =>
-            val parents1 = parents.mapConserve(this(_))
+            val parents1 = mapOverArgs(parents)
             // todo: handle decls
             if (parents1 eq parents) tp
             else RefinedType(parents1, decls)
           case ExistentialType(tparams, result) =>
-            val tparams1 = tparams.mapConserve(SymbolSnapshot(_))
+            val tparams1 = SymbolSnapshot.mapOverArgs(tparams)
             val result1 = this(result)
             if ((tparams1 eq tparams) && (result1 eq result)) tp
             else ExistentialType(tparams1, result1)
@@ -146,7 +146,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             else AnnotatedType(annots, atp1, selfsym1)
           case OverloadedType(pre, alts) =>
             val pre1 = this(pre)
-            val alts1 = alts.mapConserve(SymbolSnapshot(_))
+            val alts1 = SymbolSnapshot.mapOverArgs(alts)
             if ((pre1 eq pre) && (alts1 eq alts)) tp
             else OverloadedType(pre1, alts1)
           case NotNullType(result) =>
@@ -228,10 +228,8 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
     }
   }
 
-  object SymbolSnapshot {
-    def mapOver[T <: Symbol](sym: T)(implicit time: Clock): T = apply(sym)(Nil, time)
-    
-    private[Snapshots] def apply[T <: Symbol](sym: T)(implicit openTypes: List[Type], time: Clock): T = {
+  object SymbolSnapshot extends SnapshotMap[Symbol] {
+    protected[Snapshots] def apply[T <: Symbol](sym: T)(implicit openTypes: List[Type], time: Clock): T = {
       if (sym == null)
         println("warn: symbol is null")
       val info1 = infoAt(sym)
