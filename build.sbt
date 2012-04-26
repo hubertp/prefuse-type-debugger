@@ -4,6 +4,8 @@ organization := "EPFL"
 
 version := "0.0.4"
 
+resolvers += "snapshots" at 
+"https://oss.sonatype.org/content/repositories/snapshots/" 
 
 // pick local version of scala compiler & library
 
