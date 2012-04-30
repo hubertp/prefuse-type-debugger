@@ -117,7 +117,7 @@ trait PrefuseTooltips {
       // Should dynamically adjust
       val textArea =  new JTextArea(10, 80)
       textArea.setText(contents)
-      textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
+      textArea.setFont(new Font("monospaced", Font.PLAIN, 15))
       textArea.setEditable(false)
       textArea.setLineWrap(true)
       contentsPanel.setBackground(new Color(255, 250, 205));

@@ -123,7 +123,7 @@ abstract class TypeBrowser extends AnyRef
     m_vis.putAction("textColor", textColor)
         
     val edgeColorAction = new ColorAction(treeEdges,
-                VisualItem.STROKECOLOR, ColorLib.rgb(194, 194, 194))
+                VisualItem.STROKECOLOR, ColorLib.rgb(124, 124, 124))
 //    val edgeColor: ItemAction = new EdgeColorAction(treeEdges)
     edgeColorAction.add(new MainGoalPathEdgePredicate(openGoalNodes),
       new ColorAction(treeEdges, VisualItem.STROKECOLOR, ColorLib.rgb(0,0,0)))
@@ -148,7 +148,7 @@ abstract class TypeBrowser extends AnyRef
 
     // create the tree layout action
     val treeLayout = new CustomNodeLinkTreeLayout(tree, Visualization.FOCUS_ITEMS,
-      m_orientation, 50, 0, 8)
+      m_orientation, 45, 5, 30)
     treeLayout.setLayoutAnchor(new Point2D.Double(25,300))
     m_vis.putAction("treeLayout", treeLayout)
         
@@ -171,7 +171,7 @@ abstract class TypeBrowser extends AnyRef
     filter.add(new ShowAllGoalsAndEdges(Visualization.FOCUS_ITEMS,
                                         clickedNode))
 
-    filter.add(new FontAction(treeNodes, FontLib.getFont("Tahoma", 16)))
+    filter.add(new FontAction(treeNodes, FontLib.getFont("Verdana", Font.PLAIN, 25)))
     filter.add(treeLayout)
     //filter.add(subLayout)
     filter.add(textColor)
@@ -283,7 +283,7 @@ abstract class TypeBrowser extends AnyRef
     
     class CustomNodeLinkTreeLayout(wholeTree: String, visGroup: String,
       orientation: Int, dspace: Double, bspace: Double, tspace: Double)
-      extends NodeLinkTreeLayout(wholeTree) {
+      extends NodeLinkTreeLayout(wholeTree, orientation, dspace, bspace, tspace) {
       
       object GoalNode extends AbstractPredicate {
         override def getBoolean(t: Tuple): Boolean = {
@@ -877,6 +877,7 @@ abstract class TypeBrowser extends AnyRef
       topPane.add(topSplitPane)
       tabFolder.addTab("Tree", null,
         new JScrollPane(treeGeneralViewer))
+      treeGeneralViewer.setFont(new Font("Verdana", Font.PLAIN, 15))
       tabFolder.addTab("Transformed tree", null,
         new JScrollPane(treeTransformedViewer))
 
@@ -982,8 +983,11 @@ abstract class TypeBrowser extends AnyRef
          treeViewerHighlighter.getHighlights.foreach(treeViewerHighlighter.removeHighlight(_))
        }
        
-       object TreeMainHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.red)
-       object TreeReferenceHighlighter extends DefaultHighlighter.DefaultHighlightPainter(Color.green)
+       // for paper version we need lighter colors
+       val mainSelectionColor = new Color(147, 122, 219)
+       val refColor = new Color(152, 251, 152)
+       object TreeMainHighlighter extends DefaultHighlighter.DefaultHighlightPainter(mainSelectionColor)
+       object TreeReferenceHighlighter extends DefaultHighlighter.DefaultHighlightPainter(refColor)
     }
 
     private def loadFile(fName: String) {
