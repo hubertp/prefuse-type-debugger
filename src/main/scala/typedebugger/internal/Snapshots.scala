@@ -84,7 +84,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             val sym1 = SymbolSnapshot(sym)
             val args1 = mapOverArgs(args)
             if ((pre1 eq pre) && (sym1 eq sym) && (args1 eq args)) tp
-            else TypeRef(pre1, sym1, args1)
+            else typeRef(pre1, sym1, args1)
           case ThisType(sym) =>
             val sym1 = SymbolSnapshot(sym)
             if (sym1 eq sym) tp
@@ -93,7 +93,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             val pre1 = this(pre)
             val sym1 = SymbolSnapshot(sym)
             if ((pre1 eq pre) && (sym1 eq sym)) tp
-            else SingleType(pre1, sym1)
+            else singleType(pre1, sym1)
           case MethodType(params, restpe) =>
             val params1 = SymbolSnapshot.mapOverArgs(params) // shouldn't be allowed?
             //println("Method Type: " + restpe.getClass + " params: " + params.map(_.getClass))
@@ -103,7 +103,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             else MethodType(params1, restpe1)
           case PolyType(tparams, restpe) =>
             val tparams1 = SymbolSnapshot.mapOverArgs(tparams)
-            val restpe1 = this(restpe)
+            val restpe1 = this(if (tparams1 eq tparams) restpe else restpe.substSym(tparams, tparams1))
             if ((tparams1 eq tparams) && (restpe1 eq restpe)) tp
             else PolyType(tparams1, restpe1)
           case NullaryMethodType(result) =>
@@ -132,7 +132,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
             val parents1 = mapOverArgs(parents)
             // todo: handle decls
             if (parents1 eq parents) tp
-            else RefinedType(parents1, decls)
+            else refinedType(parents1, tp.typeSymbol.owner,  decls, tp.typeSymbol.pos)
           case ExistentialType(tparams, result) =>
             val tparams1 = SymbolSnapshot.mapOverArgs(tparams)
             val result1 = this(result)
