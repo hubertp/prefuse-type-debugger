@@ -234,7 +234,27 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
         println("warn: symbol is null")
       val info1 = infoAt(sym)
       if (info1 eq sym.info) sym
-      else sym.cloneSymbol.setInfoNoLog(info1).asInstanceOf[T]
+      else cloneSymbol(sym, info1)
+    }
+    
+    private def cloneSymbol[T <: Symbol](sym: T, info: Type)(implicit openTypes: List[Type], time: Clock): T = {
+      sym match {
+        // don't clone module/moduleclass-symbols, this leads to bugs in bootstraping
+        case _: ModuleSymbol =>
+          sym
+        case _: ModuleClassSymbol =>
+          sym
+/*        case msym: ModuleClassSymbol=>
+          if (msym == definitions.RootClass || msym == definitions.ScalaPackageClass)
+            sym
+          else {
+            println("clone module class symbol: " + sym + " ")
+            val sm1 = this(msym.sourceModule)
+            sm1.moduleClass.setInfoNoLog(info).asInstanceOf[T]
+          }*/
+        case _ =>
+          sym.cloneSymbol.setInfoNoLog(info).asInstanceOf[T]
+      }
     }
     
     private def infoAt(sym: Symbol)(implicit openTypes: List[Type], at: Clock): Type = {
