@@ -10,7 +10,7 @@ trait StructureBuilders {
   // Wrapper around the compiler that logs all the events
   // and creates the necessary structure (independent of UI)
   class InstrumentedRun(nodesLabel: String, filt: global.EV.Filter) extends CompilerRunWithEventInfo {
-    import global.{EV, Position, NoPosition}
+    import global.{EV, Position, NoPosition, treeAt}
     import EV._
     
     private[this] var _root: BaseTreeNode[EventNode] = _
@@ -85,10 +85,21 @@ trait StructureBuilders {
           previousLevel = baseLevel
           hook.resetIndentation(baseLevel)
           
-        case _: DoneBlock  =>
+        case done: DoneBlock  =>
           assert(currentNodes.nonEmpty,
                   "stack of current nodes cannot be empty on end of the block for " + ev + " " + ev.getClass)
           val top = currentNodes.pop()
+          // update event for TyperTyped to point to the correct resulting tree
+          done match {
+            case TyperTypedDone(resTree1, _) =>
+              top.ev match {
+                case dest: TyperTyped =>
+                  dest.resTree = (resTree1, done.time)
+                case _ =>
+              }
+            case _ =>
+          }
+          
           top.children += createNode(ev, top)
         
         case _             =>

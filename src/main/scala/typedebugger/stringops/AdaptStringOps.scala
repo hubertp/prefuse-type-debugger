@@ -21,8 +21,9 @@ trait AdaptStringOps {
             val tree1 = treeAt(e.tree)
             ("Adapt the type of the expression (if necessary) to the expected type.\n" + 
              "Found: %tpe" +
-             "Expected: %tpe").dFormat(Some("Adapt expression"),
-              snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt))
+             "Expected: %tpe" +
+             "\n\nResulting type of the tree: %tpe").dFormat(Some("Adapt expression"),
+              snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt), anyString(e.tree.tpe))
           }
         }
         
@@ -41,7 +42,7 @@ trait AdaptStringOps {
       case e:OverloadedTpeAdapt =>
         DEFAULT
         
-      case e:PolyTpeEmptyAdapt =>
+      case e:NullaryMethodTypeAdapt =>
         new Descriptor {
           def basicInfo = "Adapt nullary method type"
           def fullInfo  = ""
@@ -64,8 +65,8 @@ trait AdaptStringOps {
             "Result type: %tpe" + 
             "For type tree: %tree" + 
             "Undetermined context type-parameters: %sym").dFormat(Some("Adapt an expression with polymorphic type"),
-                snapshotAnyString(e.tparams), snapshotAnyString(e.tpe),
-                snapshotAnyString(e.typeTree), snapshotAnyString(e.undetTParams))
+                e.tparams.map(snapshotAnyString).mkString(","), snapshotAnyString(e.tpe),
+                snapshotAnyString(e.typeTree), e.undetTParams.map(snapshotAnyString).mkString(","))
         }
 
       case e:ImplicitMethodTpeAdapt =>

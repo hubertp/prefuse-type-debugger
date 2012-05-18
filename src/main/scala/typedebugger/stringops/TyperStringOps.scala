@@ -29,15 +29,16 @@ trait TyperStringOps {
             val tpe0 = TypeSnapshot.mapOver(tree0.tpe)
             val sym0 = if (tree0.symbol != null) SymbolSnapshot.mapOver(tree0.symbol) else null
             val tpe = if (tpe0 != null) tpe0 else if (sym0 != null) TypeSnapshot.mapOver(sym0.tpe) else null
-            val tpeRes = if (e.tree.tpe != null) e.tree.tpe else (if (e.tree.symbol != null) e.tree.symbol.tpe else null)
+//            val tpeRes = if (e.tree.tpe != null) e.tree.tpe else (if (e.tree.symbol != null) e.tree.symbol.tpe else null)
             debug(if (tree0 != null) "Tree class " + tree0.getClass + " with sym " + sym0 else "", "event")
+            val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2) // this will probably require further refinement
             (e.expl + "\n\n" +
              "Typechecking tree: %tree" +
              "Expected type: %tpe" +
              "\n" +
              "Type of tree at the entry point: %tpe" +
              "Result type of the tree: %tpe").dFormat(Some("Typecheck tree"),
-             anyString(tree0), snapshotAnyString(e.pt), anyString(tpe), anyString(tpeRes))
+             anyString(tree0), snapshotAnyString(e.pt), anyString(tpe), anyString(resTpe))
           }
         }
 
@@ -49,6 +50,17 @@ trait TyperStringOps {
             "Expected type: %tpe".dFormat(Some("Type Tree"), snapshotAnyString(e.tree), snapshotAnyString(e.pt))
             //"Type tree " + snapshotAnyString(e.tree) +
             //"\nwith expected type: " + snapshotAnyString(e.pt)
+          }
+        }
+        
+      case e: TyperTypedDone =>
+        new Descriptor() {
+          def basicInfo = "Typechecked tree"
+          def fullInfo  = {
+            val t = treeAt(e.tree)
+            val resT = e.tree.tpe
+            ("Typeecheck tree %tree" +
+            "Tree has type %tpe").dFormat(Some("Typechecked Tree"), anyString(t), anyString(resT))
           }
         }
        
@@ -322,12 +334,12 @@ trait TyperStringOps {
           def basicInfo = "Try typechecking application \n of function to arguments"
           def fullInfo  = {
                           val t = treeAt(e.tree)
-                          "Typecheck application of function to the arguments.\n" +
+                          ("Typecheck application of function to the arguments.\n" +
                           "If that fails adapt function to the arguments.\n" +
                           "Function: %tree" +
                           "of type: %tpe" + 
                           "arguments: %tree" +  
-                          "Expected type %tpe".dFormat(Some("Typechecking application"), anyString(t), snapshotAnyString(t.tpe), e.args.mkString("(", ",", ")"), snapshotAnyString(e.pt))
+                          "Expected type %tpe").dFormat(Some("Typechecking application"), anyString(t), snapshotAnyString(t.tpe), e.args.mkString("(", ",", ")"), snapshotAnyString(e.pt))
           }
         }
 
@@ -463,18 +475,21 @@ trait TyperStringOps {
           def basicInfo = "Type member selection \n given correct qualifier"
           def fullInfo  = {
             val qual1 = treeAt(e.qual)
-            "Type selection of \n" +
-            snapshotAnyString(e.qual) + ".'" + e.name + "'\n" +
-            "with qualifier of type \n" + snapshotAnyString(qual1.tpe) + "\n" +
-            "and expected type " + snapshotAnyString(e.pt)
+            ("Type selection of %tree.%sym with qualifier of type %tpe\n" +
+             "and expected type %tpe").dFormat(Some("Type Selection given Qualifier"),
+             anyString(qual1), e.name.toString, snapshotAnyString(qual1.tpe), snapshotAnyString(e.pt))
           }
         }
         
       case e:SelectTreeTyper =>
         new Descriptor() {
           def basicInfo = "Type member selection"
-          def fullInfo  = "Type qualifier \n" + snapshotAnyString(e.tree.asInstanceOf[Select].qualifier) +
-                          "\ncalling member '" + e.tree.asInstanceOf[Select].name + "'"
+          def fullInfo  = {
+            val t = treeAt(e.tree.asInstanceOf[Select])
+            
+            "Type member selection involving qualifier %tree and member %sym".dFormat(
+            snapshotAnyString(t.qualifier), t.name.toString)
+          }
         }
   
       case e:SelectConstrTyper =>
