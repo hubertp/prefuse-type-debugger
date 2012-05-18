@@ -166,8 +166,8 @@ trait PrefuseTooltips {
       def addNewLine(s: String): String = {
         if (!s.endsWith(newLine)) s + newLine else s
       }
-      
-      var text = (formatter.text zip formatter.args).foldLeft("") { (x, y) =>
+      val text0 = if (formatter.text.isEmpty) formatter.args.map(_ => " ") else formatter.text
+      var text = (text0 zip formatter.args).foldLeft("") { (x, y) =>
         val upto = x + maybeAddNewLine(y._1, y._2) // only text
         val withArg = upto + y._2 // tree/tpe/symbol
         positions += ((upto.length, withArg.length))
@@ -175,8 +175,9 @@ trait PrefuseTooltips {
       }
       val textArea =  new JTextArea(height, width)
       textArea.setMargin(new Insets(2, 2, 2, 2));
-      if (formatter.text.length != formatter.args.length) // add missing bit after zip
-        text = text + addNewLine(formatter.text.last)
+      if (text0.length != formatter.args.length) // add missing bit after zip
+        text = text + addNewLine(text0.last)
+
       if (text != "") {
         textArea.setText(text)
         positions.foreach(poss => textArea.getHighlighter.addHighlight(poss._1, poss._2, color))

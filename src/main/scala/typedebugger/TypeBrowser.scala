@@ -114,7 +114,14 @@ abstract class TypeBrowser extends AnyRef
     swingController.initAllDisplays(prefuseTrees, goals)
     
     val lock = new Lock()
-    swingController.createFrame(lock)
+    swingController.createFrame(lock, settings.detached.value)
+    if (settings.detached.value)
+      new Thread("Start and close type debugger") {
+        override def run() {
+          Thread.sleep(100)
+          swingController.jframe.fireCloseEvent() 
+        }
+      }.run()
     lock.acquire
   }
 }

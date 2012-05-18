@@ -307,6 +307,7 @@ trait SwingControllers {
 	    
 	    override def keyPressed(k: KeyEvent): Unit = {
 	      val keyCode = k.getKeyCode 
+	      debugUI("Key Action for " + k)
 	      if (!(keyFilter contains k.getKeyCode))
 	        return
 

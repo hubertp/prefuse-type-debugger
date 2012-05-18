@@ -13,8 +13,12 @@ import scala.collection.mutable
 
 abstract class SwingFrame(frameName: String, filtState: Boolean,
     srcs: List[io.AbstractFile]) {
+  
+  class ClosableFrame(name: String) extends JFrame(name) {
+    def fireCloseEvent() = processWindowEvent(new WindowEvent(jframe, WindowEvent.WINDOW_CLOSING))
+  }
 
-  val jframe = new JFrame(frameName)
+  val jframe = new ClosableFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
 
   val ASTViewer = new JTextArea(30, 90)
@@ -27,7 +31,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   def advController: AdvancedOptionsController
   def switchSources(display: PrefuseDisplay): Unit
 
-  def createFrame(lock: Lock): Unit = {
+  def createFrame(lock: Lock, detached: Boolean): Unit = {
     lock.acquire // keep the lock until the user closes the window
     jframe.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE)
     jframe.addWindowListener(new WindowAdapter() {
