@@ -647,18 +647,20 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
       m_vis.getGroup(visibleGroup).asInstanceOf[Graph]
     }
     
+    // Methods below are a direct copy of the original behaviour with the exception
+    // that we take into account visible/advanced nodes when calculating
+    // the proper layout
+    // @see prefuse.action.layout.graph.NodeLinkTreeLayout for details
+    
     override def firstWalk(n: NodeItem, num: Int, depth: Int) {
       val np = getParams(n)
       np.number = num
       updateDepths(depth, n)
         
       val expanded = n.isExpanded()
-      if ( Proxy.getChildCount(n) == 0 || !expanded ) {// is leaf
+      if ( Proxy.getChildCount(n) == 0 || !expanded ) {
         val l = Proxy.getPreviousSibling(n)
-        if ( l == null )
-          np.prelim = 0;
-        else
-          np.prelim = getParams(l).prelim + spacing(l,n,true);
+        np.prelim = if ( l == null ) 0 else (getParams(l).prelim + spacing(l,n,true))
       } else if ( expanded ) {
         val leftMost = Proxy.getFirstChild(n)
         val rightMost = Proxy.getLastChild(n)
@@ -685,62 +687,147 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
           np.prelim = midpoint
         }
       }
+    }
+    
+    override def apportion(v: NodeItem, a: NodeItem): NodeItem = {        
+      val w = Proxy.getPreviousSibling(v)
+      if ( w != null ) {
+        var vip, vim, vop, vom: NodeItem = null
+        var sip, sim, sop, som: Double = 0
 
-      //super.firstWalk(ProxyNodeItem(n), num, depth)
+        vip = v; vop = v
+
+        vim = w
+        vom = Proxy.getFirstChild(vip.getParent().asInstanceOf[NodeItem])
+
+        sip = getParams(vip).mod
+        sop = getParams(vop).mod
+        sim = getParams(vim).mod
+        som = getParams(vom).mod
+        
+        var nr = nextRight(vim) // TODO: need to use our version
+        var nl = nextLeft(vip)  // same here
+        while ( nr != null && nl != null ) {
+          vim = nr
+          vip = nl
+          vom = nextLeft(vom)
+          vop = nextRight(vop)
+          getParams(vop).ancestor = v
+          val shift: Double = (getParams(vim).prelim + sim) - 
+              (getParams(vip).prelim + sip) + spacing(vim,vip,false)
+          if ( shift > 0 ) {
+              moveSubtree(ancestor(vim,v,a), v, shift)
+              sip += shift
+              sop += shift
+          }
+          sim += getParams(vim).mod
+          sip += getParams(vip).mod
+          som += getParams(vom).mod
+          sop += getParams(vop).mod
+          
+          nr = nextRight(vim)
+          nl = nextLeft(vip)
+        }
+        if ( nr != null && nextRight(vop) == null ) {
+          val vopp = getParams(vop)
+          vopp.thread = nr
+          vopp.mod += sim - sop
+        }
+        if ( nl != null && nextLeft(vom) == null ) {
+          val vomp = getParams(vom)
+          vomp.thread = nl
+          vomp.mod += sip - som
+          v
+        } else a
+      } else a
+    }
+    
+    override def nextLeft(n: NodeItem): NodeItem = {
+      var c: NodeItem = null
+      if ( n.isExpanded() && Proxy.isValid(n) ) c = Proxy.getFirstChild(n)
+      if (c != null) c else getParams(n).thread
+    }
+    
+    override def nextRight(n: NodeItem): NodeItem = {
+      var c: NodeItem = null
+      if ( n.isExpanded() && Proxy.isValid(n) ) c = Proxy.getLastChild(n)
+      if (c != null) c else getParams(n).thread
+    }
+    
+    override def executeShifts(n: NodeItem) {
+      var shift, change: Double = 0
+      var c = Proxy.getLastChild(n)
+      while (c != null) {
+        val cp = getParams(c)
+        cp.prelim += shift
+        cp.mod += shift
+        change += cp.change
+        shift += cp.shift + change
+        c = Proxy.getPreviousSibling(c)
+      }
     }
 
-    //override def getParams(n: NodeItem) = super.getParams(realNodeItem(n))
-    //override def updateDepths(depth: Int, n: NodeItem): Unit =  super.updateDepths(depth, realNodeItem(n))
-    //override def executeShifts(n: NodeItem): Unit = super.executeShifts(realNodeItem(n))
+    override def ancestor(vim: NodeItem, v: NodeItem, a: NodeItem): NodeItem = {
+      val p:NodeItem = v.getParent().asInstanceOf[NodeItem]
+      val vimp = getParams(vim)
+      if (vimp.ancestor.getParent() == p) vimp.ancestor else a
+    }
     
-    object Proxy {
+    override def secondWalk(n: NodeItem, p: NodeItem, m: Double, depth0: Int) {
+      val np = getParams(n)
+      var depth = depth0
+      setBreadth(n, p, np.prelim + m)
+      setDepth(n, p, m_depths(depth))
       
-      private def isValid(node: NodeItem): Boolean = {
+      if ( n.isExpanded() && Proxy.isValid(n) ) {
+        depth += 1
+        var c = Proxy.getFirstChild(n)
+        while (c != null) {
+          secondWalk(c, n, m + np.mod, depth)
+          c = Proxy.getNextSibling(c)
+        }
+      }
+      np.clear()
+    }
+    
+    //end of custom layout, specialized NodeLinkTreeLayout for our needs
+    
+    // Provide main custom operation for navigating between nodes, 
+    // that takes into account visibility requirements of the type debugger
+    object Proxy {
+      def isValid(node: NodeItem): Boolean = {
         node.isVisible && (!adv.isAdvancedOption(node) || adv.isOptionEnabled(node))
       }
       
-      def getChildCount(underlying: NodeItem): Int = {
-        val res = underlying.children_[NodeItem].toList.filter(isValid).size
-        val oldRes = underlying.getChildCount()
-        if (res != oldRes)
-          println("getChildCount: " + res + " " + oldRes)
-        res
-      }
+      def getChildCount(underlying: NodeItem): Int =
+        underlying.children_[NodeItem].toList.filter(isValid).size
       
       def getFirstChild(underlying: NodeItem): NodeItem = {
         val first = underlying.getFirstChild().asInstanceOf[NodeItem]
         if (first != null) {
-          if (!isValid(first))
-            Proxy.getNextSibling(first)
-          else first
+          if (!isValid(first)) Proxy.getNextSibling(first) else first
         } else null
-        //underlying.getFirstChild()
       }
       
       def getLastChild(underlying: NodeItem): NodeItem = {
         val last = underlying.getLastChild().asInstanceOf[NodeItem]
         if (last != null) {
-          if (!isValid(last))
-            Proxy.getPreviousSibling(last)
-          else last
+          if (!isValid(last)) Proxy.getPreviousSibling(last) else last
         } else null
-        //underlying.getLastChild()
       }
       
       def getPreviousSibling(underlying: NodeItem): NodeItem = {
         var previous = underlying.getPreviousSibling().asInstanceOf[NodeItem]
         while (previous != null && !isValid(previous))
-          previous.getPreviousSibling()
+          previous = previous.getPreviousSibling().asInstanceOf[NodeItem]
         previous
-        //underlying.getPreviousSibling()
       }
       
       def getNextSibling(underlying: NodeItem): NodeItem = {
         var next = underlying.getNextSibling().asInstanceOf[NodeItem]
         while (next != null && !isValid(next))
-          next.getPreviousSibling()
+          next = next.getNextSibling().asInstanceOf[NodeItem]
         next
-        //underlying.getNextSibling()
       }
     }
   }
