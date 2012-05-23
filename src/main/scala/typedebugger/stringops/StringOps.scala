@@ -190,9 +190,11 @@ trait StringOps extends AnyRef
          stat match {
            case DefDef(_, nme.CONSTRUCTOR, _, _, _, _) =>
              "Typecheck " + parent + " constructor"
-           case stat =>
+           case stat: MemberDef =>
              val mem = if (stat.symbol != NoSymbol && stat.symbol != null ) { ": '" + stat.symbol + "'" } else ""
              "Typecheck " + parent + " member" + mem
+           case _ =>
+             "Typecheck expression in " + parent
          }
         //"Typecheck member in template"
 
@@ -487,7 +489,7 @@ trait StringOps extends AnyRef
             case ErrorLevel.Hard => "Ambiguous type error"
             case ErrorLevel.Soft => "Recoverable ambiguous type error"
           }
-          def fullInfo  = ""
+          def fullInfo  = "Ambiguous type error:\n" + err.errMsg
         }
       
       case ContextTypeErrorEvent(err, level) =>
@@ -496,7 +498,7 @@ trait StringOps extends AnyRef
             case ErrorLevel.Hard => "Type error"
             case ErrorLevel.Soft => err.errMsg + "\n" + "Recoverable type error"
           }
-          def fullInfo  = "Error:\n" + err.errMsg
+          def fullInfo  = "Type error:\n" + err.errMsg
         }
       
       case _ =>

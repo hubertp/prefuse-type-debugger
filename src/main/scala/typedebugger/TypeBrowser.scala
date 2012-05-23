@@ -93,8 +93,7 @@ abstract class TypeBrowser extends AnyRef
       case _: AdaptEvent                  => true
       case _: TypingBlockEvent            => true
 //        case _: NewContext                  => true
-      case _: ErrorEvent                  => true
-      case _: ContextTypeError            => true
+      case _: ErrorEventInfo              => true
       case _: LubEvent                    => true
       case _: TypesEvent                  => true
       case _: RecoveryEvent               => true // indentation needs to be separated from filtering logic

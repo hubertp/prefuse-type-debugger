@@ -6,6 +6,7 @@ trait ImplicitsStringOps {
     
   import global._
   import EV._
+  import util.StringFormatter._
     
   trait ImplicitsEventsOps {
     self: Descriptors =>
@@ -27,14 +28,15 @@ trait ImplicitsStringOps {
     
       case e: InferImplicit =>
         new Descriptor {
-          def basicInfo = (if (e.byName) "By-name implicits" else "Implicits") + " search"
+          def kind = if (e.byName) "By-name implicits" else "Implicits"
+          def basicInfo = kind + " search"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
-            "Implicits search for tree " + anyString(tree1) +
-            "\nwith type " + snapshotAnyString(tree1.tpe) +
-            "\nWith expected type " + snapshotAnyString(e.pt) +
-            (if (!e.undetParams.isEmpty) "\n and undetermined type parameters " + e.undetParams.map(snapshotAnyString).mkString("[", ",", "]")
-            else "")
+            ("Implicits search for expression tree %tree" +
+             "of type %tpe and expected type %tpe\n" +
+             "Undetermined type parameters: %tpe").dFormat(Some(kind + " search"),
+             anyString(tree1), snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt),
+             if (e.undetParams.isEmpty) "None" else e.undetParams.map(snapshotAnyString).mkString("[", ",", "]"))
           }
         }
        

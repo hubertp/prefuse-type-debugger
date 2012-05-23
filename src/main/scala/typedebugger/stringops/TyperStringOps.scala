@@ -31,7 +31,9 @@ trait TyperStringOps {
             val tpe = if (tpe0 != null) tpe0 else if (sym0 != null) TypeSnapshot.mapOver(sym0.tpe) else null
 //            val tpeRes = if (e.tree.tpe != null) e.tree.tpe else (if (e.tree.symbol != null) e.tree.symbol.tpe else null)
             debug(if (tree0 != null) "Tree class " + tree0.getClass + " with sym " + sym0 else "", "event")
-            val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2) // this will probably require further refinement
+            //val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2) // this will probably require further refinement
+            val resTree = treeAt(e.resTree._1)(e.resTree._2)
+            val resTpe  = TypeSnapshot.mapOver(resTree.tpe)(e.resTree._2)
             (e.expl + "\n\n" +
              "Typechecking tree: %tree" +
              "Expected type: %tpe" +
@@ -346,7 +348,7 @@ trait TyperStringOps {
       case e:SuccessTryTypedApplyTyper =>
         new Descriptor() {
           def basicInfo = "Typed application"
-          def fullInfo  = "Successfully typed application %tree as %tpe".dFormat(Some("Typed application"), snapshotAnyString(e.tree), snapshotAnyString(e.tpe))
+          def fullInfo  = "Successfully typed application %tree with %tpe".dFormat(Some("Typed application"), snapshotAnyString(e.tree), snapshotAnyString(e.tpe))
         }
         
       case e:SecondTryTypedApplyStartTyper =>
@@ -507,10 +509,12 @@ trait TyperStringOps {
                           else "Found symbol corresponding to the member \nof the qualifier"
           def fullInfo  = {
             val sym1 = SymbolSnapshot.mapOver(e.sym)
-            "Result of finding symbol corresponding to the member '" + snapshotAnyString(e.member) + "' of qualifier: \n" +
-              snapshotAnyString(e.qual) + "\n" +
-              (if (e.sym == NoSymbol) "Symbol not found "
-              else (" Found symbol " + anyString(sym1) + "\n with type " + snapshotAnyString(sym1.tpe)))
+            val tpeStr = if (e.sym  == NoSymbol)
+              "" else snapshotAnyString(sym1.tpe)
+            ("Symbol corresponding to the member %sym of the qualifier %tree" +
+             (if (e.sym == NoSymbol) "was NOT found tpe"
+              else (" was found with type %tpe"))).dFormat(Some("Search for the member symbol"),
+             snapshotAnyString(e.member), snapshotAnyString(e.qual), tpeStr)
           }
         }
        
@@ -604,11 +608,12 @@ trait TyperStringOps {
         
       case e:AdaptToArgumentsTyper =>
         new Descriptor() {
-          def basicInfo = "Adapt function to arguments"
-          def fullInfo  = "Adapt qualifier " + snapshotAnyString(e.tree) + "\n" +
-                          "so that it contains a function " + e.name + "\n" +
-                          "that applies to arguments " + e.args.map(snapshotAnyString).mkString("(", ",", ")") + "\n" +
-                          "with the expected type " + snapshotAnyString(e.pt)
+          def basicInfo = "Adapt qualifier to arguments"
+          def fullInfo  = ("Adapt qualifier %tree" +
+                          "so that it contains a function %sym" +
+                          "that applies to arguments %tree" +
+                          "with the expected type %tpe").dFormat(Some("Adapt qualifier to arguments"),
+                          snapshotAnyString(e.tree), e.name.toString, e.args.map(snapshotAnyString).mkString("(", ",", ")"), snapshotAnyString(e.pt))
         }
 
       case e:FinishedAdaptToArgumentsTyper =>
@@ -622,7 +627,7 @@ trait TyperStringOps {
       case e:FallbackAdaptToArgumentsTyper =>
         new Descriptor() {
           def basicInfo = "Fallback: adapt qualifier\n without any expected type"
-          def fullInfo  = "Adapt qualifier to the member but without any expected return type"
+          def fullInfo  = "Adapt qualifier to the member but without any expected type".dFormat(Some("Adapt without expected type"))
         }
          
       case e:AdaptToMemberTyper =>
@@ -646,10 +651,9 @@ trait TyperStringOps {
       case e:FailedAdaptToMemberTyper =>
         new Descriptor() {
           def basicInfo = "View inference for adaptation \n FAILED"
-          def fullInfo  = "Failed inference of a view that adapts the tree \n" +
-                          snapshotAnyString(e.tree) + "\n" +
-                          "of type " + snapshotAnyString(e.tpe) + "\n" +
-                          "to type " + snapshotAnyString(e.searchTpe)
+          def fullInfo  = ("Failed inference of a view that adapts the tree %tree" +
+                          "of type %tpe to type %tpe").dFormat(Some("Failed inference of a view"),
+                          snapshotAnyString(e.tree), snapshotAnyString(e.tpe), snapshotAnyString(e.searchTpe))
         }
       
       case e:IsNotAdaptableTyper =>
@@ -662,9 +666,10 @@ trait TyperStringOps {
       case e:InferViewAdaptToMemberTyper =>
         new Descriptor() {
           def basicInfo = "Infer view that adapts \n qualifier to member"
-          def fullInfo  = "Infer view which adapts tree.\n" +
-                          "Current type:  " + snapshotAnyString(e.value1) + "\n" +
-                          "Expected type: " + snapshotAnyString(e.value2)
+          def fullInfo  = ("Infer view which adapts the tree.\n" +
+                          "Current type:  %tpe\n" + 
+                          "Expected type: %tpe").dFormat(Some("Infer view"),
+                          snapshotAnyString(e.value1), snapshotAnyString(e.value2))
         }
          
       case e:DoTypedApplyTyper =>
@@ -753,7 +758,10 @@ trait TyperStringOps {
         }
 
       case e:TryTupleApplyDoTypedApply =>
-        DEFAULT
+        new Descriptor() {
+          def basicInfo = "Try arguments tuple packing"
+          def fullInfo  = ""
+        }
         
       case e:PackArgsDoTypedApply =>
         DEFAULT
@@ -762,7 +770,10 @@ trait TyperStringOps {
         DEFAULT
         
       case e:TryNamesDefaultsDoTypedApply =>
-        DEFAULT
+        new Descriptor() {
+          def basicInfo = "Try application of named and default arguments"
+          def fullInfo  = ""
+        }
         
       case e:CorrectArgumentsDoTypedApply =>
         new Descriptor() {

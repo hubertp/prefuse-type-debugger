@@ -19,16 +19,29 @@ trait AdaptStringOps {
                           else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
+            //val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2)
+            val resTree = treeAt(e.resTree._1)(e.resTree._2)
+            val resTpe = TypeSnapshot.mapOver(resTree.tpe)(e.resTree._2)
+            
             ("Adapt the type of the expression (if necessary) to the expected type.\n" + 
              "Found: %tpe" +
              "Expected: %tpe" +
              "\n\nResulting type of the tree: %tpe").dFormat(Some("Adapt expression"),
-              snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt), anyString(e.tree.tpe))
+              snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt), anyString(resTpe))
           }
         }
         
       case e:AdaptDone =>
         DEFAULT
+        
+      case e:MainAdaptDone =>
+        new Descriptor {
+          def basicInfo = "Debug: Main adapt done"
+          def fullInfo = {
+            val tree1 = treeAt(e.resTree)
+            ("Resulting tree %tree is of type %tpe").dFormat(anyString(tree1), snapshotAnyString(tree1.tpe))
+          }
+        }
 
       case e:AdaptAnnotationsAdapt =>
         DEFAULT
@@ -45,7 +58,11 @@ trait AdaptStringOps {
       case e:NullaryMethodTypeAdapt =>
         new Descriptor {
           def basicInfo = "Adapt nullary method type"
-          def fullInfo  = ""
+          def fullInfo  = ("Adapt nullary method type with underlying type " +
+          		            "type %tpe and undetermined context parameters %sym").dFormat(
+          		                Some("Nullary method type adaptation"),
+          		                snapshotAnyString(e.tpe),
+          		                e.undetTParams.map(snapshotAnyString).mkString("[", ",", "]"))
         }
         
       case e:ByNameParamClassAdapt =>
@@ -60,13 +77,16 @@ trait AdaptStringOps {
       case e:PolyTpeAdapt =>
         new Descriptor {
           def basicInfo = "Adapt an expression with polymorphic type"
-          def fullInfo  =
-            ("Type-parameters: %tpe" + 
+          def fullInfo  = {
+            val tree1 = treeAt(e.tree)
+            ("Adapt polymorphic type %tpe\n" +
+            "Type-parameters: %tpe" + 
             "Result type: %tpe" + 
             "For type tree: %tree" + 
             "Undetermined context type-parameters: %sym").dFormat(Some("Adapt an expression with polymorphic type"),
-                e.tparams.map(snapshotAnyString).mkString(","), snapshotAnyString(e.tpe),
+                snapshotAnyString(tree1.tpe), e.tparams.map(snapshotAnyString).mkString(","), snapshotAnyString(e.restpe),
                 snapshotAnyString(e.typeTree), e.undetTParams.map(snapshotAnyString).mkString(","))
+          }
         }
 
       case e:ImplicitMethodTpeAdapt =>
@@ -74,9 +94,10 @@ trait AdaptStringOps {
           def basicInfo = "Adapt expression with method type\n and implicit parameter(s)"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
-            "Adapt expression \n" + anyString(tree1) + "\n" +
-            "having method type and implicit parameters " + snapshotAnyString(tree1.tpe) + "\n" +
-            "Needs to find implicit argument in the context and apply it"
+            ("Adapt expression %tree" +
+            "having method type and implicit parameters %tpe. " +
+            "Needs to find implicit argument in the context and apply it").dFormat(Some("Adapt method type with implicit parameters"),
+            anyString(tree1),  snapshotAnyString(tree1.tpe))
           }
         }
          
@@ -96,9 +117,9 @@ trait AdaptStringOps {
       case e:InferImplicitForParamAdapt =>
         val param1 = SymbolSnapshot.mapOver(e.param)
         new Descriptor {
-          def basicInfo = "Infer implicit for parameter " + safeTypePrint(param1.tpe, "\nof type: ", "")
-          def fullInfo  = "Infer implicit for parameter '" + anyString(param1) + "': " +
-                            snapshotAnyString(param1.tpe)
+          def basicInfo = "Infer implicit argument for parameter \n " + anyString(param1)// + safeTypePrint(param1.tpe, "\nof type: ", "")
+          def fullInfo  = "Infer implicit argument for parameter %sym of type %tpe".dFormat(Some("Infer implicit argument"),
+                           anyString(param1), snapshotAnyString(param1.tpe))
         }
          
       case e:InferDivergentImplicitValueNotFound =>
@@ -215,9 +236,12 @@ trait AdaptStringOps {
 
       case e:SuccessSubTypeAdapt =>
         new Descriptor {
-          def basicInfo = "Subtype constraint satisfied"
-          def fullInfo  = "Constraint satisfied \n" + snapshotAnyString(e.value1) +
-            " <:< " + snapshotAnyString(e.value2) + "\n in tree " + snapshotAnyString(e.tree)
+          def basicInfo = "Subtyping constraint satisfied"
+          def fullInfo  = "Constraint satisfied %tpe <:< %tpe\n in tree %tree".dFormat(
+                          Some("Subtyping constraint satisfied"),
+                          snapshotAnyString(e.value1),
+                          snapshotAnyString(e.value2),
+                          snapshotAnyString(e.tree))
         }
          
       case e:ConstantFoldSubTypeAdapt =>
