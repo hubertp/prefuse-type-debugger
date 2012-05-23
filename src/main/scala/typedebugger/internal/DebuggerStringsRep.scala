@@ -8,16 +8,27 @@ trait DebuggerStringsRep {
     self: EventModel =>
     
     abstract override protected def anyStringInternal(x: Any): String = x match {
-      case x: Tree => self.treeString(x)
+      case x: Tree => debuggerTreeString(x)
       case t: Type => debuggerTypeString(t) 
       case _       => self.anyStringInternal(x)
+    }
+    
+    // todo: provide better printer for trees
+    def debuggerTreeString(tree: Tree): String = tree match {
+      case TypeApply(fun, args) =>  self.treeString(tree)
+      case _ => self.treeString(tree)
     }
     
     def debuggerTypeString(tpe: Type, withKinds: Boolean = false): String = tpe match {
       case WildcardType           => "?"
       case ErrorType              => "Error"
-      case tp@MethodType(_, _)    => tp.safeToString // express as A => B ?
-      case tp:TypeRef             => tp.safeToString 
+      // explain non-value types
+      case tp@MethodType(_, _)    => tp.safeToString
+      case tp@PolyType(tparams, _) => tp.safeToString
+      case tp@SingleType(_, _)    => tp.safeToString
+      case tp:TypeRef             => tp.safeToString
+      case tp@OverloadedType(pre, alts) => "Overloaded Type\n" + (alts map pre.memberType).mkString("", " <and> \n ", "")
+      case tp@RefinedType(_, _)   => tp.safeToString
       case ConstantType(v)        => debuggerTypeString(v.tpe)
       case NoType                 => "NoType"
       case _                      => typeString(tpe)

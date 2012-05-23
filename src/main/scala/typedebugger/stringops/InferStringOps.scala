@@ -25,7 +25,12 @@ trait InferStringOps {
         case e:InferInstanceDone =>
           new Descriptor {
             def basicInfo = "Inferred concrete instance"
-            def fullInfo  = snapshotAnyString(e.tree)
+            def fullInfo  = {
+              val tree1 = treeAt(e.tree)
+              ("Inferred as %tpe.\n" +
+              "Still undetermined type parameters: %tpe").dFormat(Some("Inferred concrete instance"),
+              snapshotAnyString(tree1.tpe), e.stillUndet.map(snapshotAnyString(_)).mkString("[", ",", "]"))
+            }
           }
            
         case e:MethodInfer =>
@@ -130,11 +135,13 @@ trait InferStringOps {
             def basicInfo = "Infer expression instance"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
-              "Infer expression instance for tree \n" +
-                snapshotAnyString(snapshotTree) + "\n" +
-//           " of type '" + snapshotAnyString(snapshotTree.tpe) + "' \n" +
-                "with undetermined typeparams '" + e.tparams.map(snapshotAnyString).mkString(",") + "' \n" +
-                "and expected type " + snapshotAnyString(e.pt)
+              ("Infer expression instance for tree %tree" +
+               "and current type %tpe\n" +
+               "with undetermined typeparams %tpe and expected type %tpe").dFormat(Some("Infer expression instance"),
+               snapshotAnyString(snapshotTree),
+               snapshotAnyString(snapshotTree.tpe),
+               e.tparams.map(snapshotAnyString).mkString("[", ",", "]"),
+               snapshotAnyString(e.pt))
             }
           }
     
@@ -273,9 +280,9 @@ trait InferStringOps {
           new Descriptor {
             def basicInfo = "Verify alternative"
             def fullInfo  = 
-                "Check if method alternative %sym of type %tpe" +
+                ("Check if method alternative %sym of type %tpe" +
                 "is applicable for types of the arguments: %tpe\n" +
-                "and conforms to the expected type %tpe".dFormat(Some("Verify alternative"),
+                "and conforms to the expected type %tpe").dFormat(Some("Verify alternative"),
                     snapshotAnyString(e.alternative), combinedSnapshotAnyString(e.alternative)(_.tpe),
                     e.argsTypes.map(snapshotAnyString).mkString, snapshotAnyString(e.pt))
           }

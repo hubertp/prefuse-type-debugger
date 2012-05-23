@@ -52,6 +52,8 @@ trait PrefusePostProcessors {
          false
        case _: AdaptDone =>
          false
+       case _: MainAdaptDone =>
+         false
        case _: InferDone =>
          false
        case _: TypesDone =>

@@ -487,7 +487,7 @@ trait StringOps extends AnyRef
             case ErrorLevel.Hard => "Ambiguous type error"
             case ErrorLevel.Soft => "Recoverable ambiguous type error"
           }
-          def fullInfo  = ""
+          def fullInfo  = "Ambiguous type error:\n" + err.errMsg
         }
       
       case ContextTypeErrorEvent(err, level) =>
@@ -496,7 +496,7 @@ trait StringOps extends AnyRef
             case ErrorLevel.Hard => "Type error"
             case ErrorLevel.Soft => err.errMsg + "\n" + "Recoverable type error"
           }
-          def fullInfo  = "Error:\n" + err.errMsg
+          def fullInfo  = "Type error:\n" + err.errMsg
         }
       
       case _ =>

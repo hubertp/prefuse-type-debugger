@@ -651,7 +651,6 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     // that we take into account visible/advanced nodes when calculating
     // the proper layout
     // @see prefuse.action.layout.graph.NodeLinkTreeLayout for details
-    
     override def firstWalk(n: NodeItem, num: Int, depth: Int) {
       val np = getParams(n)
       np.number = num

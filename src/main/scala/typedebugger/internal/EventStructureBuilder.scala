@@ -97,6 +97,12 @@ trait StructureBuilders {
                   dest.resTree = (resTree1, done.time)
                 case _ =>
               }
+            case MainAdaptDone(_, resTree1) =>
+              top.ev match {
+                case dest: AdaptStart =>
+                  dest.resTree = (resTree1, done.time)
+                case _ =>
+              }
             case _ =>
           }
           
