@@ -23,15 +23,26 @@ trait StructureBuilders {
     // Hook that enables us to collect all the events
     private var hook: Hook.IndentationHook = _
     
+    
+    private def testErrorPos(ev: Event): Boolean = {
+      def extractPos(ev0: Event): Position = ev0 match {
+        case e0: HardErrorEvent   => e0.errPos
+        case e0: ContextTypeError => e0.errPos
+        case _                    => NoPosition
+      }
+      val evPos = extractPos(ev).focus
+      evPos == NoPosition || _errorNodes.forall (node => extractPos(node.ev).focus != evPos)
+    }
+    
     private def createNode(ev: Event, parentENode: BaseTreeNode[EventNode])
                            (implicit statPos: Position): BaseTreeNode[EventNode] = {
       val evNode = new EventNode(ev, new ListBuffer(), if (parentENode == null) None else Some(parentENode))
       // We want them in the order of appearance
       val addToGoals = ev match {
-        case _: HardErrorEvent =>
-          true
+        case e: HardErrorEvent =>
+          testErrorPos(ev)
         case e: ContextTypeError if (e.errType == ErrorLevel.Hard) =>
-          true
+          testErrorPos(ev)
         case e: TyperTyped if statPos != NoPosition && e.tree.pos.sameRange(statPos) =>
           true
           //e.expl match {

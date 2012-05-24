@@ -190,9 +190,11 @@ trait StringOps extends AnyRef
          stat match {
            case DefDef(_, nme.CONSTRUCTOR, _, _, _, _) =>
              "Typecheck " + parent + " constructor"
-           case stat =>
+           case stat: MemberDef =>
              val mem = if (stat.symbol != NoSymbol && stat.symbol != null ) { ": '" + stat.symbol + "'" } else ""
              "Typecheck " + parent + " member" + mem
+           case _ =>
+             "Typecheck expression in " + parent
          }
         //"Typecheck member in template"
 
