@@ -3,7 +3,9 @@ package ui
 
 object Groups extends Enumeration {
   type Group = Value
-  implicit val Implicits, Synthetics, NoGroup = Value
+  implicit val Implicits = Value
+  implicit val Synthetics = Value
+  implicit val NoGroup = Value("General")
 }
 
 import Groups.Group
@@ -19,11 +21,12 @@ object Filtering extends Enumeration with ImplicitFiltering with SyntheticFilter
   val Subtyping      = Value("subtyping")
   val SubCheck       = Value("subtype checks")
   val AltComp        = Value("compare alternatives")
-  val QuickAltFilter = Value("quick alternatives filtering")
+//  val QuickAltFilter = Value("quick alternatives filtering")
   val TypesComp      = Value("types compatibility")
   val ProtoTpeArgs   = Value("inferred prototype arguments")
   val ValidateParent = Value("validate parent class (scala.ScalaObject or java.lang.Object)")
   val ConvConstr     = Value("convert constructor body")
+  val IsWithinBounds = Value("is type within bounds")
 }
 
 trait ImplicitFiltering {

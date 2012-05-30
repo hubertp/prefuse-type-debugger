@@ -244,16 +244,10 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
           sym
         case _: ModuleClassSymbol =>
           sym
-/*        case msym: ModuleClassSymbol=>
-          if (msym == definitions.RootClass || msym == definitions.ScalaPackageClass)
-            sym
-          else {
-            println("clone module class symbol: " + sym + " ")
-            val sm1 = this(msym.sourceModule)
-            sm1.moduleClass.setInfoNoLog(info).asInstanceOf[T]
-          }*/
-        case _ =>
-          sym.cloneSymbol.setInfoNoLog(info).asInstanceOf[T]
+        case sym0 =>
+          // TODO: can we handle it better?
+          if (definitions.isPhantomClass(sym0)) sym
+          else sym.cloneSymbol.setInfoNoLog(info).asInstanceOf[T]
       }
     }
     

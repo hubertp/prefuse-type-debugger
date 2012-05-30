@@ -35,37 +35,46 @@ trait EventFiltering {
         if (!cache.contains(e)) {
           cache(e) = e match {
               case e: TyperTyped => handleTyperTyped(e)
-              case _             => handleRest(e)
+              case _             => handleOtherEvents(e)
             }
         }
         cache(e)
       }
     }
     
-    private def handleRest(e: Event): Option[Filtering.Value] = e match {
+    private def handleOtherEvents(e: Event): Option[Filtering.Value] = e match {
       case e: ProtoTypeArgsDoTypedApply =>
         Some(Filtering.ProtoTpeArgs)
 
-      case e: CheckTypesCompatibility =>
+      case e: CheckTypesCompatibility   =>
         Some(Filtering.TypesComp)
 
-      case e: SubTypeCheck =>
+      case e: SubTypeCheck              =>
         Some(Filtering.SubCheck)
 
-      case e: Subtyping =>
+      case e: Subtyping                 =>
         Some(Filtering.Subtyping)
 
-      case e: OverloadedSymDoTypedApply =>
-        Some(Filtering.QuickAltFilter)
+//      case e: OverloadedSymDoTypedApply =>
+//        Some(Filtering.QuickAltFilter)
 
       case e: ImprovesAlternativesCheck =>
         Some(Filtering.AltComp)
 
-      case e: ImplicitsEligibility =>
+      case e: ImplicitsEligibility      =>
         Some(Filtering.ImplElig)
 
-      case e: VerifyImplicit =>
+      case e: VerifyImplicit            =>
         Some(Filtering.VerifyImpl)
+        
+      case e: ConvertConstrBody         =>
+        Some(Filtering.ConvConstr)
+        
+      case e: ValidateParentClass       =>
+        Some(Filtering.ValidateParent)
+
+      case e: IsWithinBounds            =>
+        Some(Filtering.IsWithinBounds)
 
       case _ =>
         None

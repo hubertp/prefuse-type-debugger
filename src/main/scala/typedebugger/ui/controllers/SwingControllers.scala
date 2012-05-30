@@ -8,13 +8,11 @@ import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
 import prefuse.controls.{ControlAdapter, FocusControl, PanControl, WheelZoomControl,
                          ZoomControl, ZoomToFitControl}
 import prefuse.data.expression.{AbstractPredicate, Predicate, OrPredicate}
-
 import java.awt.Color
 import java.awt.event._
 import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 import javax.swing.text.Highlighter
 import javax.swing.event.{CaretListener, CaretEvent}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.tools.nsc.io
@@ -79,6 +77,7 @@ trait SwingControllers {
         loadSourceFile(srcs.head)
         currentDisplay.reRenderView()
       }
+      tabDisplayFiles.grabFocus()
     }
     
     def processKeyEvent(k: KeyEvent) { keyHandler.keyPressed(k) }
@@ -134,7 +133,7 @@ trait SwingControllers {
       
       override def itemClicked(item: VisualItem, e: MouseEvent) = 
         if (containsDataNode(item) && e.isAltDown())
-            fullEventInfo(asDataNode(item).ev)
+            fullEventInfo(asDataNode(item))
 
       override def itemEntered(item: VisualItem, e: MouseEvent) {
         if (containsDataNode(item)) {
@@ -178,7 +177,8 @@ trait SwingControllers {
               e.references.foreach((ref:Symbol) => if (ref != null) highlight(ref.pos, TreeReferenceHighlighter))
             case e: TreeReferencesEvent =>
               e.references.foreach((ref:STree) => highlight(ref.pos, TreeReferenceHighlighter))
-            case _ =>
+            case e =>
+              referencesFallback(node).foreach((pos: Position) => if (pos != NoPosition) highlight(pos, TreeReferenceHighlighter))
           }
         }
       }
@@ -197,8 +197,37 @@ trait SwingControllers {
           if (force || h != activeSelection) codeHighlighter.removeHighlight(h)
         )
       }
+      
+      // We do not want to include in every event positions for trees
+      // as these would have to be passed around in a lot of places.
+      // So we try to look above in the hierarchy.
+      private def referencesFallback(underlyingNode: UINode[PrefuseEventNode]): List[Position] = {
+        underlyingNode.ev match {
+          case e: IsArgCompatibleWithFormalMethInfer =>
+            val parentNode = underlyingNode.parent.get
+            parentNode.ev match {
+              case parentE: InferMethodInstance      =>
+                val which = parentNode.children.indexOf(underlyingNode)
+                val treeArg = parentE.args(which)
+                val formalPos  = parentE.fun.tpe match {
+                  case MethodType(params, _)         =>
+                    params(which).pos
+                  case _                             =>
+                    NoPosition
+                }
+                List(treeArg.pos, formalPos)
+              case _                                 =>
+                Nil
+            }
+          case e: AddBoundTypeVar                    =>
+            // try to look even more up in the hierarchy
+            referencesFallback(underlyingNode.parent.get)
+          case _                                     =>
+            Nil
+        }
+      }
      
-      object TreeMainHighlighter extends DefaultHighlightPainter(Color.red)
+      object TreeMainHighlighter extends DefaultHighlightPainter(new Color(255, 69, 0))//Color.red)
       object TreeReferenceHighlighter extends DefaultHighlightPainter(Color.green)
       object TargetDebuggingHighlighter extends DefaultHighlightPainter(new Color(204, 204, 204, 80))
     }
@@ -306,8 +335,7 @@ trait SwingControllers {
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
 	    override def keyPressed(k: KeyEvent): Unit = {
-	      val keyCode = k.getKeyCode 
-	      debugUI("Key Action for " + k)
+	      val keyCode = k.getKeyCode
 	      if (!(keyFilter contains k.getKeyCode))
 	        return
 
@@ -367,6 +395,7 @@ trait SwingControllers {
     	              case Some(target) => navigate(target, display.getVisualization)
     	              case None         =>
     	            }
+    	        case _                =>
     	      }
         }
 	    }
@@ -597,31 +626,34 @@ trait SwingControllers {
 	  }
 	  
 	  // only debugging information
-    private def fullEventInfo(ev: Event) {
-	    if (settings.debugTD.value == "ui" && ev != null) {
-	      println("----------------")
-	      println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
-	      ev match {
-	        case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
-	        case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
-	        case _ =>
-	      }
-	      ev match {
-	        case e0: SymbolReferencesEvent => println("References symbol: " + e0.references.map(_.pos))
-	        case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
-	        case _ =>
-	      }
-	      
-	      if (ev.isInstanceOf[DoneBlock])
-	        println("DONE BLOCK: " + ev.asInstanceOf[DoneBlock].originEvent)
-	      if (ev.isInstanceOf[TyperTyped]) {
-	        val nTyperTyped = ev.asInstanceOf[TyperTyped]
-	        val expl = nTyperTyped.expl
-	        println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
-	          expl.getClass)
-	      }  
-	      println("----------------")
-	    }
+    private def fullEventInfo(prefuseNode: UINode[PrefuseEventNode]) {
+      val ev = prefuseNode.ev
+      if (settings.debugTD.value == "ui" && ev != null) {
+      println("----------------")
+      println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
+      ev match {
+        case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
+        case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
+        case _ =>
+      }
+      ev match {
+        case e0: SymbolReferencesEvent => println("References symbol: " + e0.references.map(_.pos))
+        case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
+        case _ =>
+      }
+      println("Children: ")
+      println(prefuseNode.children.map(_.ev.toString).mkString("[", "|", "]"))
+      
+      if (ev.isInstanceOf[DoneBlock])
+        println("DONE BLOCK: " + ev.asInstanceOf[DoneBlock].originEvent)
+      if (ev.isInstanceOf[TyperTyped]) {
+        val nTyperTyped = ev.asInstanceOf[TyperTyped]
+        val expl = nTyperTyped.expl
+        println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
+          expl.getClass)
+      }  
+      println("----------------")
+    }
 	  }
   }
   

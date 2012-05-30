@@ -16,17 +16,17 @@ trait AdaptStringOps {
       case e:AdaptStart =>
         new Descriptor {
           def basicInfo = if (e.pt == WildcardType) "Adapt expression \nwith no expected type" 
-                          else "Adapt to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false)
+                          else "Can we adapt expression to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false) + "?"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
             //val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2)
             val resTree = treeAt(e.resTree._1)(e.resTree._2)
             val resTpe = TypeSnapshot.mapOver(resTree.tpe)(e.resTree._2)
             
-            ("Adapt the type of the expression (if necessary) to the expected type.\n" + 
+            ("Can we adapt the type of the expression (if necessary) to the expected type.\n" + 
              "Found: %tpe" +
              "Expected: %tpe" +
-             "\n\nResulting type of the tree: %tpe").dFormat(Some("Adapt expression"),
+             "\n\nType of the tree after adaptation: %tpe").dFormat(Some("Adapt expression"),
               snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt), anyString(resTpe))
           }
         }
@@ -48,7 +48,7 @@ trait AdaptStringOps {
         
       case e:ConstantTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt constant value"
+          def basicInfo = "Can we adapt constant value?"
           def fullInfo  = ""
         }
         
@@ -57,7 +57,7 @@ trait AdaptStringOps {
         
       case e:NullaryMethodTypeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt nullary method type"
+          def basicInfo = "Can we adapt nullary method type"
           def fullInfo  = ("Adapt nullary method type with underlying type " +
           		            "type %tpe and undetermined context parameters %sym").dFormat(
           		                Some("Nullary method type adaptation"),
@@ -76,7 +76,7 @@ trait AdaptStringOps {
        
       case e:PolyTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt an expression with polymorphic type"
+          def basicInfo = "Can we adapt an expression with a polymorphic type?"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
             ("Adapt polymorphic type %tpe\n" +
@@ -91,22 +91,25 @@ trait AdaptStringOps {
 
       case e:ImplicitMethodTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt expression with method type\n and implicit parameter(s)"
+          def basicInfo = "Expression tree has a MethodType with implicit parameter(s).\n" +
+          		            "Can we find and apply implicit arguments?"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
             ("Adapt expression %tree" +
-            "having method type and implicit parameters %tpe. " +
-            "Needs to find implicit argument in the context and apply it").dFormat(Some("Adapt method type with implicit parameters"),
+            "having MethodType and implicit parameters %tpe. " +
+            "We need to find implicit argument(s) in the context and apply it").dFormat(Some("Adapt method type with implicit parameters"),
             anyString(tree1),  snapshotAnyString(tree1.tpe))
           }
         }
          
+      // todo: not used?
       case e:UndetParamsMethodTpeAdapt =>
         new Descriptor {
           def basicInfo = "Infer expression instance\n for implicit method type"
           def fullInfo  = ""
         }
         
+      // todo: not used?
       case e:SuccessSilentMethodTpeAdapt =>
         new Descriptor {
           def basicInfo = "Successfully typed application\n of (inferred) implicit arguments"
@@ -117,37 +120,38 @@ trait AdaptStringOps {
       case e:InferImplicitForParamAdapt =>
         val param1 = SymbolSnapshot.mapOver(e.param)
         new Descriptor {
-          def basicInfo = "Infer implicit argument for parameter \n " + anyString(param1)// + safeTypePrint(param1.tpe, "\nof type: ", "")
+          def basicInfo = "Is there an implicit argument for\n the '" + anyString(param1) + "' parameter"// + safeTypePrint(param1.tpe, "\nof type: ", "")
           def fullInfo  = "Infer implicit argument for parameter %sym of type %tpe".dFormat(Some("Infer implicit argument"),
                            anyString(param1), snapshotAnyString(param1.tpe))
         }
          
       case e:InferDivergentImplicitValueNotFound =>
         new Descriptor {
-          def basicInfo = "Implicit value not found"
+          def basicInfo = "Implicit search failed due to diverging implicits"
           def fullInfo  = {
             val param1 = SymbolSnapshot.mapOver(e.param)
-            "Could not find implicit value for evidence parameter \n" + param1.name + 
-            "\nof type " + snapshotAnyString(param1.tpe)
+            "Could not find implicit value for evidence parameter %sym of type %tpe".dFormat(Some("Failed implicit search"),
+              param1.name.toString, snapshotAnyString(param1.tpe))
           }
         }
          
       case e:InferImplicitValueNotFound =>
         new Descriptor {
-          def basicInfo = "Implicit value not found"
+          def basicInfo = "No implicit was found"
           def fullInfo  = {
             val param1 = SymbolSnapshot.mapOver(e.param)
-            "Could not find implicit value for evidence parameter \n" + param1.name + 
-            "\nof type " + snapshotAnyString(param1.tpe)
+            "Could not find implicit value for evidence parameter %sym of type %tpe".dFormat(Some("No implicit was found"),
+              param1.name.toString, snapshotAnyString(param1.tpe))
           }
         }
          
       case e:InferredImplicitAdapt =>
         new Descriptor {
-          def basicInfo = "Finished applying inferred \n implicit argument (if any)"
+          def basicInfo = "Implicit argument has been applied in the application"
           def fullInfo  = ""
         }
-        
+       
+      // todo: not used?
       case e:EtaMethodTpeAdapt =>
         new Descriptor {
           def basicInfo = "Eta expansion"
@@ -157,22 +161,22 @@ trait AdaptStringOps {
          
       case e:TreeAfterEtaExpansionMethodTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Eta-expanded tree"
-          def fullInfo  = snapshotAnyString(e.tree) + "\nhas been eta-expanded to\n " +
-                          snapshotAnyString(e.tree1)
+          def basicInfo = "Original tree has been transformed into\n its eta-expanded form"
+          def fullInfo  = "%tree has been eta-expanded to %tree".dFormat(Some("Result of eta-expansion"),
+              snapshotAnyString(e.tree), snapshotAnyString(e.tree1))
         }
 
       case e:InstantiateTParamsForEtaExpansionAdapt =>
         new Descriptor {
-          def basicInfo = "Instantiate type-parameters \n in eta expansion"
+          def basicInfo = "Can we instantiate type parameters \n in eta expansion"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
-            anyString(tree1) + " with type " + snapshotAnyString(tree1.tpe) +
-            "\nTree's symbol " + snapshotAnyString(e.meth) + " with type parameters '" +
-            e.tparams.map(snapshotAnyString) + "' to instantiate"
+            "Can we instantiate type parameters %tpe in %tree of type %tpe?".dFormat(Some("Instantiate eta-expanded tree"),
+            e.tparams.map(snapshotAnyString).mkString(","), anyString(tree1), snapshotAnyString(tree1.tpe)) 
           }
         }
 
+      // todo: not used?
       case e:InferExprFailed =>
         new Descriptor {
           def basicInfo = "Failed to infer expression instance"
@@ -180,15 +184,17 @@ trait AdaptStringOps {
             snapshotAnyString(e.pt) + "\nFailed with type error " + e.e
         }
          
+      // todo: improve
       case e:ApplyNullaryMethodAdapt =>
         new Descriptor {
-          def basicInfo = "Apply nullary method"
+          def basicInfo = "Can we adapt nullary MethodType\n by performing 'apply' adaptation?"
           def fullInfo  = snapshotAnyString(e.tree) + ": " + snapshotAnyString(e.methTpe)
         }
-         
+      
+      // todo: not used?
       case e:TypeTreeAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt type tree"
+          def basicInfo = "Can we adapt type tree?"
           def fullInfo  = ""
         }
 
@@ -206,38 +212,33 @@ trait AdaptStringOps {
         
       case e:ApplyAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt expression to contain \n apply() member"
+          def basicInfo = "Expression is involved in application\n and needs to be adapted to contain an 'apply' member"
           def fullInfo  = ""
         }
         
       case e:AdaptToNameQualAdapt =>
         DEFAULT
         
+      // todo:
       case e:InferInstanceAdapt =>
         new Descriptor {
           def basicInfo = e.e match {
            case DefaultExplanation =>
              "Adapt by inferring concrete instance"
            case _ =>
-             "Infer concrete instance" //and \n " + explainNamer(e.e)
+             "Can we infer a concrete instance\n by resolving undetermined type parameters?" //and \n " + explainNamer(e.e)
           }
           def fullInfo  = {
-            "Instantiate undetermined paratemers " + e.tparams.map(snapshotAnyString).mkString("[", ",", "]") + "\n" +
-            (e.e match {
-              case DefaultExplanation =>
-                " and adapt by inferring concrete instance"
-              case _ =>
-                e.e // TODO
-             }) + "\n" +
-            "in expression \n" + snapshotAnyString(e.tree) + "\n" + 
-           "with expected type: " + snapshotAnyString(e.pt)
+            "Can we instantiate undetermined paratemers %tpe that exist in expression %tree in the context of expected type %tpe".dFormat(
+              Some("Infer concrete instance"), e.tparams.map(snapshotAnyString).mkString("[", ",", "]"), snapshotAnyString(e.tree),
+              snapshotAnyString(e.pt))
           }
         }
 
       case e:SuccessSubTypeAdapt =>
         new Descriptor {
           def basicInfo = "Subtyping constraint satisfied"
-          def fullInfo  = "Constraint satisfied %tpe <:< %tpe\n in tree %tree".dFormat(
+          def fullInfo  = "Constraint satisfied %tpe <:< %tpe\n for tree %tree".dFormat(
                           Some("Subtyping constraint satisfied"),
                           snapshotAnyString(e.value1),
                           snapshotAnyString(e.value2),
@@ -252,47 +253,51 @@ trait AdaptStringOps {
         
       case e:NotASubtypeAdapt => 
         new Descriptor {
-          def basicInfo = "Adapt expression's type to satisfy\n" +
-            safeTypePrint(e.tpe, truncate=false) + " <: " + safeTypePrint(e.pt, truncate=false)
-          def fullInfo  = "FAILED subtype constraint:\n " +
-            snapshotAnyString(e.tpe) + " <: " + snapshotAnyString(e.pt)
+          def basicInfo = "Can we adapt the type of the expression\n to satisfy subtyping constraint\n"+
+            safeTypePrint(e.tpe, truncate=false) + " <: " + safeTypePrint(e.pt, truncate=false) + "?"
+          def fullInfo  = "FAILED subtype constraint: %tpe <:< %tpe".dFormat(Some("Failed subtyping contstraint"),
+            snapshotAnyString(e.tpe), snapshotAnyString(e.pt))
         }
 
       case e:AdaptToUnitAdapt =>
         new Descriptor {
-          def basicInfo = "Adapt to Unit"
-          def fullInfo  = "Adapt to Unit type \n " + snapshotAnyString(e.tpe)
+          def basicInfo = "Can we adapt to Unit?"
+          def fullInfo  = "Can we adapt type %tpe to Unit?".dFormat(Some("Unit adaptation"), snapshotAnyString(e.tpe))
         }
         
       case e:WeakConformanceAdapt =>
         new Descriptor {
-          def basicInfo = "Weak conformance adapt\n (numeric values)"
+          def basicInfo = "Can we adapt numeric value\n that only weakly conforms to the type?"
           def fullInfo  = ""
         }
         
       case e:AnnotationCheckerAdapt =>
         DEFAULT
         
+      // todo:
       case e:InstantiateAdapt =>
         new Descriptor {
-          def basicInfo = "Instantiate undetermined parameters"
+          def basicInfo = "Can we instantiate undetermined type parameters?"
           def fullInfo  = ""
         }
         
       case e:FindViewAdapt =>
         new Descriptor {
-          def basicInfo = "Search for view that satisfies\n subtype constraint"
-          def fullInfo  = "Find view that adapts initial expression's type to the type\n" +
-            "that conforms to the expected type"
+          def basicInfo = "Search for a view that satisfies\n subtype constraint"
+          def fullInfo  =
+            ("Find view that adapts expression %tree so that its type conforms " +
+            "to the expected type").dFormat(Some("Search view for subtype constraint"), snapshotAnyString(e.tree))
         }
         
       case e:ApplyViewAdapt =>
         new Descriptor {
-          def basicInfo = "Apply (found) applicable view"
-          def fullInfo  = "Found view \n " + snapshotAnyString(e.coercion) + "\n" +
-            "which is applicable for the original argument"
+          def basicInfo = "Can we typecheck the application of the found view?"
+          def fullInfo  = ("Can we verify that the the view %tree can be really" +
+          		"applied to the original argument?").dFormat(Some("Verify application of the view"),
+          		 snapshotAnyString(e.coercion))
         }
          
+      // todo:
       case e:NoViewFound =>
         new Descriptor {
           def basicInfo = "No applicable view was found"

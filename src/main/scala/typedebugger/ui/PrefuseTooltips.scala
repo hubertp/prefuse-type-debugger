@@ -103,7 +103,7 @@ trait PrefuseTooltips {
     def init(): Boolean =  {
       val textArea = swingFormattedText(contents, findAreaMaxHeight(), findAreaMaxWidth())
       (textArea != null) && {
-        textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
+        textArea.setFont(new Font("monospaced", Font.PLAIN, 14))
         textArea.setEditable(false)
         textArea.setLineWrap(true)
   

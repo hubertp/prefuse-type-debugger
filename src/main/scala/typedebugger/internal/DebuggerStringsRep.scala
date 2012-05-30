@@ -27,10 +27,11 @@ trait DebuggerStringsRep {
       case tp@PolyType(tparams, _) => tp.safeToString
       case tp@SingleType(_, _)    => tp.safeToString
       case tp:TypeRef             => tp.safeToString
-      case tp@OverloadedType(pre, alts) => "Overloaded Type\n" + (alts map pre.memberType).mkString("", " <and> \n ", "")
+      case tp@OverloadedType(pre, alts) => "Overloaded Type\n" + (alts map pre.memberType).mkString("", "\n<and>\n ", "")
       case tp@RefinedType(_, _)   => tp.safeToString
       case ConstantType(v)        => debuggerTypeString(v.tpe)
       case NoType                 => "NoType"
+      case tp@TypeVar(_, _)       => "?" + tp.originName//tp.safeToString
       case _                      => typeString(tpe)
     }
   }

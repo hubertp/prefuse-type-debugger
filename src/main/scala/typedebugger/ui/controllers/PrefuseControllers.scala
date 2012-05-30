@@ -12,6 +12,7 @@ import prefuse.action.{ ItemAction, ActionList, RepaintAction, Action}
 import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
 import prefuse.util.{ColorLib}
 import scala.collection.JavaConversions._
+import java.awt.Color
 
 import scala.collection.mutable
 import scala.tools.nsc.io
@@ -75,7 +76,105 @@ trait PrefuseControllers {
     private def retrieveEvent(item: VisualItem): Option[Event] =
       if (containsDataNode(item)) Some(asDataNode(item).ev)
       else None
-
+    private def retrieveNode(item: VisualItem): UINode[PrefuseEventNode] = asDataNode(item)
+      
+    def customColoring(node: UINode[PrefuseEventNode]): Option[Int] = {
+      def defaultYesNoColors(res: Boolean) = if (res) ColorLib.color(Color.green) else ColorLib.rgb(255, 69, 0)//ColorLib.brighter(ColorLib.color(Color.red))
+      node.ev match {
+        case _: InfoEligibleTest           =>
+          // get the last node to decide the color
+          node.children.last.ev match {
+            case res: InfoEligibleTestDone =>
+              Some(defaultYesNoColors(res.eligible))
+            case _                         => // something went wrong
+              None
+          }
+        case _: InferImplicitForParamAdapt =>
+          Some(defaultYesNoColors(!node.children.exists( _.ev match {
+            case _: InferDivergentImplicitValueNotFound => true
+            case _: InferImplicitValueNotFound          => true
+            case _                                      => false 
+          }))) 
+        case _: InferImplicit              =>
+          node.children.last.ev match {
+            case e: ImplicitDone           =>
+              Some(defaultYesNoColors(e.coercionFound))
+            case _                         => 
+              None
+          }
+        case _: InferMethodAlternative     =>
+          node.children.last.ev match {
+            case e: PossiblyValidAlternative =>
+              Some(defaultYesNoColors(e.result))
+            case _                         =>
+              None
+          }
+        case _: CheckApplicabilityAlternativeDoTypedApply =>
+          node.children.last.ev match {
+            case res: IsApplicableAlternativeDoTypedApply =>
+              Some(defaultYesNoColors(res.applicable))
+            case _                         =>
+              None
+          }
+        case _: SubTypeCheck               =>
+          node.children.last.ev match {
+            case e: SubTypeCheckRes        =>
+              Some(defaultYesNoColors(e.res))
+            case _                         =>
+              None
+          }
+        case _: DoTypedApplyTyper          =>
+          node.children.last.ev match {
+            case e: DoTypedApplyDone       =>
+              val hasErrors = e.tree match {  // copy & paste -> move to event
+                case Apply(fun, args) =>
+                  fun.isErroneous || args.exists(_.isErroneous) || e.tree.isErroneous
+                case _                =>
+                  false
+              }
+              Some(defaultYesNoColors(!hasErrors))
+            case _                         =>
+              None
+          }
+        case _: AdaptToArgumentsTyper      =>
+          node.children.last.ev match {
+            case e: FinishedAdaptToArgumentsTyper =>
+              Some(defaultYesNoColors(!(e.value1 eq e.value2)))
+            case _                         =>
+              None
+          }
+        case _ =>
+          None
+      }
+    }
+    
+    def defaultColor(item: VisualItem, event: Event): Int = { 
+      if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
+        ColorLib.rgb(255,190,190)
+      else if ( m_vis.isInGroup(item, display.stickyNodes) )
+        ColorLib.rgb(204, 255, 51)
+      else if ( m_vis.isInGroup(item, Visualization.FOCUS_ITEMS) )
+        ColorLib.rgb(198,229,229)
+      else if ( m_vis.isInGroup(item, display.visibleGroup) )
+        ColorLib.rgb(198,229,229)
+      // provide different colors for phases and types of events
+      else if ( item.getDOI() > -1 )
+        ColorLib.rgb(164,193,193)
+      else
+        event match {
+          case ev: AdaptEvent =>
+             ColorLib.rgba(150, 200, 100, 100)
+           case ev: InferEvent =>
+             ColorLib.rgba(201, 150, 100, 100)
+           case _ =>
+             if (phasesMap.contains(event.phase)) {
+               val c = phasesMap(event.phase)
+               ColorLib.rgb(c._1, c._2, c._3)
+             } else
+               DEFAULT_COLOR
+        }
+    }
+        
     // TODO: Refactor that
     override def getColor(item: VisualItem): Int = {
       val event = retrieveEvent(item)
@@ -96,34 +195,12 @@ trait PrefuseControllers {
           ColorLib.rgba(238, 102, 34, 100)
         case Some(ev: TypesEvent) =>
           ColorLib.rgba(238, 102, 34, 100) // TODO change to a different one
-        case _ =>
-          // search currently not supported
-          if ( m_vis.isInGroup(item, Visualization.SEARCH_ITEMS) )
-            ColorLib.rgb(255,190,190)
-          else if ( m_vis.isInGroup(item, display.stickyNodes) )
-            ColorLib.rgb(204, 255, 51)
-          else if ( m_vis.isInGroup(item, Visualization.FOCUS_ITEMS) )
-            ColorLib.rgb(198,229,229)
-          else if ( m_vis.isInGroup(item, display.visibleGroup) )
-            ColorLib.rgb(198,229,229)
-            // provide different colors for phases and types of events
-          else if ( item.getDOI() > -1 )
-            ColorLib.rgb(164,193,193)
-          else
-            event match {
-              case Some(ev: AdaptEvent) =>
-                ColorLib.rgba(150, 200, 100, 100)
-              case Some(ev: InferEvent) =>
-                ColorLib.rgba(201, 150, 100, 100)
-              case Some(ev) =>
-                if (phasesMap.contains(ev.phase)) {
-                  val c = phasesMap(ev.phase)
-                  ColorLib.rgb(c._1, c._2, c._3)
-                } else
-                  DEFAULT_COLOR                   
-              case None =>
-                DEFAULT_COLOR
-            }
+        case Some(other) =>
+          val custom = customColoring(asDataNode(item))
+          if (custom.isDefined) custom.get
+          else defaultColor(item, other)
+        case None =>
+          DEFAULT_COLOR
       }
     }
       

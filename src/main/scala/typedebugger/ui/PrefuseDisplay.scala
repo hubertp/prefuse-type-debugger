@@ -61,6 +61,7 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
   
   private var edgeRenderer: EdgeRenderer = _
   private var nodeRenderer: LabelRenderer = _
+  private var leafNodeRenderer: LabelRenderer = _
   protected var orientation: Int = _
   private var treeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(orientation, 50, 0, 8)
   
@@ -127,9 +128,25 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     nodeRenderer.setVerticalPadding(10)
     nodeRenderer.setHorizontalPadding(20)
     nodeRenderer.setRoundedCorner(8,8)
+    
+    // nodes for leafs
+    leafNodeRenderer = new CustomLabelRenderer(label)
+    leafNodeRenderer.setRenderType(AbstractShapeRenderer.RENDER_TYPE_FILL)
+    leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
+    leafNodeRenderer.setVerticalAlignment(Constants.CENTER)
+    leafNodeRenderer.setVerticalPadding(10)
+    leafNodeRenderer.setHorizontalPadding(20)
+    leafNodeRenderer.setRoundedCorner(40,40)
+    
+    
     edgeRenderer = new EdgeRenderer(Constants.EDGE_TYPE_LINE)
         
-    val rf = new DefaultRendererFactory(nodeRenderer)
+    val rf = new DefaultRendererFactory()//nodeRenderer)
+    rf.add(new IsLeafNode(), leafNodeRenderer)
+    rf.add(new AbstractPredicate{override def getBoolean(t: Tuple) = t match {
+      case _: NodeItem => true
+      case _           => false
+    }}, nodeRenderer)
     rf.add(new InGroupPredicate(treeEdges), edgeRenderer)
     m_vis.setRendererFactory(rf)
     
@@ -277,24 +294,28 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     orientation0 match {
       case Constants.ORIENT_LEFT_RIGHT =>
         nodeRenderer.setHorizontalAlignment(Constants.LEFT)
+        leafNodeRenderer.setHorizontalAlignment(Constants.LEFT)
         edgeRenderer.setHorizontalAlignment1(Constants.RIGHT)
         edgeRenderer.setHorizontalAlignment2(Constants.LEFT)
         edgeRenderer.setVerticalAlignment1(Constants.CENTER)
         edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_RIGHT_LEFT =>
         nodeRenderer.setHorizontalAlignment(Constants.RIGHT)
+        leafNodeRenderer.setHorizontalAlignment(Constants.RIGHT)
         edgeRenderer.setHorizontalAlignment1(Constants.LEFT)
         edgeRenderer.setHorizontalAlignment2(Constants.RIGHT)
         edgeRenderer.setVerticalAlignment1(Constants.CENTER)
         edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_TOP_BOTTOM =>
         nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+        leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
         edgeRenderer.setVerticalAlignment1(Constants.BOTTOM)
         edgeRenderer.setVerticalAlignment2(Constants.TOP)
       case Constants.ORIENT_BOTTOM_TOP =>
         nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+        leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
         edgeRenderer.setVerticalAlignment1(Constants.TOP)
@@ -900,6 +921,15 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
           ts2.containsTuple(item.getSourceTuple)
         }
       case _ =>
+        false
+    }
+  }
+  
+  class IsLeafNode() extends AbstractPredicate {
+    override def getBoolean(t: Tuple): Boolean = t match {
+      case item: NodeItem =>
+        item.getChildCount == 0
+      case _              =>
         false
     }
   }

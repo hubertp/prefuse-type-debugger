@@ -13,7 +13,7 @@ trait TypesStringOps {
     private val DEFAULT = new DefaultDescriptor("types")
     
     def explainTypesEvent(ev: Event with TypesEvent)(implicit time: Clock = ev.time) = ev match {
-      case e: SubTypeCheck =>
+      case e: SubTypeCheck    =>
         new Descriptor {
           def basicInfo = "Subtyping check" + truncateStringRep(safeTypePrint(e.lhs, truncate=false),safeTypePrint(e.rhs, truncate=false), " <: ", "\n")
           def fullInfo  = "Subtype check between %tpe and %tpe".dFormat(Some("Subtype check"),
@@ -34,16 +34,23 @@ trait TypesStringOps {
               if (e.variance > 0) "covariant"
               else if (e.variance < 0) "contravariant"
               else "invariant"
-            "Compare type arguments\n in the " + varianceInfo + " position"
+            "Compare types in " + varianceInfo + " position"
           } 
           def fullInfo  = "" 
+        }
+        
+      case e: IsWithinBounds  =>
+        new Descriptor {
+          def basicInfo = "Is type within type constraint bounds?"
+          def fullInfo  = "Is type %tpe within type constraint bounds".dFormat(Some("Bounds checking"),
+            snapshotAnyString(e.tp))
         }
 
       case e: CompareTypes =>
         new Descriptor {
           def basicInfo = explainSubtyping(e.compType, e.which)
-          def fullInfo  = "Subtyping check for:\n " + snapshotAnyString(TypeSnapshot.mapOver(e.tp1)) +
-                          " <:< " + snapshotAnyString(TypeSnapshot.mapOver(e.tp2))
+          def fullInfo  = "Subtyping constraint test for %tpe <:< %tpe".dFormat(Some("Subtyping constraint check"),
+              snapshotAnyString(TypeSnapshot.mapOver(e.tp1)), snapshotAnyString(TypeSnapshot.mapOver(e.tp2)))
         }
       
       case e: CompareDone =>
@@ -55,13 +62,14 @@ trait TypesStringOps {
       case e: FailedSubtyping =>
         new Descriptor {
           def basicInfo = "Types are not subtypes"
-          def fullInfo  = snapshotAnyString(e.tp1) + " <:/< " + snapshotAnyString(e.tp2)
+          def fullInfo  = "Failed subtyping constraint for %tpe <:/< %tpe".dFormat(Some("Failed subtyping constraint"),
+              snapshotAnyString(e.tp1), snapshotAnyString(e.tp2))
         }
         
       case e: InstantiateTypeParams =>
         new Descriptor {
           def basicInfo = "Instantiate type parameters"
-          def fullInfo  = "Instantiating: " + e.formals.zip(e.actuals).map(subst => snapshotAnyString(subst._1) + " ==> " + snapshotAnyString(subst._2)).mkString("\n")
+          def fullInfo  = "Instantiating: %tpe".dFormat(e.formals.zip(e.actuals).map(subst => snapshotAnyString(subst._1) + " ==> " + snapshotAnyString(subst._2)).mkString("\n"))
         }
 
       case _ => DEFAULT

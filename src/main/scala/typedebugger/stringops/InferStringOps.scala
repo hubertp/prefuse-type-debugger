@@ -27,9 +27,9 @@ trait InferStringOps {
             def basicInfo = "Inferred concrete instance"
             def fullInfo  = {
               val tree1 = treeAt(e.tree)
-              ("Inferred as %tpe.\n" +
+              ("Inferred %tree as %tpe.\n" +
               "Still undetermined type parameters: %tpe").dFormat(Some("Inferred concrete instance"),
-              snapshotAnyString(tree1.tpe), e.stillUndet.map(snapshotAnyString(_)).mkString("[", ",", "]"))
+              anyString(tree1), snapshotAnyString(tree1.tpe), e.stillUndet.map(snapshotAnyString(_)).mkString("[", ",", "]"))
             }
           }
            
@@ -41,40 +41,43 @@ trait InferStringOps {
           
         case e:CompatibleTypes =>
           new Descriptor {
-            def basicInfo = "Compatible types,\ntry to solve any type variables"
+            def basicInfo = "Current expression type and the expected type are compatible.\n Try to solve any type constraints."
             def fullInfo  =
-              "Compatible types \n" +
-              "Found:    " + snapshotAnyString(e.found) + "\n" +
-              "Required: " + snapshotAnyString(e.pt) + "\n" +
-              "with type parameters " + e.tparams.map(snapshotAnyString).mkString(",")
+              ("Compatible types.\n" +
+              "Found:    %tpe\n" +
+              "Required: %tpe\n" +
+              "with type parameters %tpe").dFormat(Some("Solve any type constraints for compatible types"), 
+              snapshotAnyString(e.found), snapshotAnyString(e.pt), e.tparams.map(snapshotAnyString).mkString(","))
           }
            
         case e: InstantiateTypeVars =>
           new Descriptor {
-            def basicInfo = "Instantiate type variables"
-            def fullInfo  = "Instantiate type variables: " +
-                            e.tvars.map(tvar => {val tvar0 = TypeSnapshot.mapOver(tvar); anyString(tvar0) + " => " +
-                                                 snapshotAnyString(tvar0.constr.inst)}).mkString("[", ",", "]")
+            def basicInfo = "Instantiate type variables to their constraints"
+            def fullInfo  = {
+              "Instantiate type variables: %tpe".dFormat(Some("Type variables instantiation"),
+                e.tvars.map(tvar => {val tvar0 = TypeSnapshot.mapOver(tvar); anyString(tvar0) + " => " +
+                                     snapshotAnyString(tvar0.constr.inst)}).mkString("[", ",", "]"))
+            }
           }
            
         case e: InstantiateTypeVar =>
           val tvar1 = TypeSnapshot.mapOver(e.tvar)
           new Descriptor {
             def basicInfo = "Instantiate type variable " + anyString(tvar1)
-            def fullInfo  = "Instantiate type variable: " + anyString(tvar1) +
-                            " with constraint " + snapshotAnyString(tvar1.constr)
+            def fullInfo  = "Instantiate type variable %tpe with constraint %tpe".dFormat(Some("Type variable instantiation"),
+                anyString(tvar1), snapshotAnyString(tvar1.constr))
           }
            
         case e: SolveSingleTVar =>
           new Descriptor {
-            def basicInfo = "Solve type variable"
-            def fullInfo  = "Solve: " + snapshotAnyString(e.tvar) + "\n" +
-                            (if (!e.variance) "contravariant position" else "")
+            def basicInfo = "Solving type variable " + snapshotAnyString(e.tvar)
+            def fullInfo  = "Solving type variable %tpe %sym".dFormat(snapshotAnyString(e.tvar),
+                            (if (!e.variance) "\nType variable is in contravariant position" else ""))
           }
            
         case e: SetInstantiateTypeConstraint =>
           new Descriptor {
-            def basicInfo = "Set instantiation for type constraint\n=> " + tvarSetInstExpl(e.reason)
+            def basicInfo = "Instantiate type constraint as " + snapshotAnyString(e.tp) + " for type variable " + snapshotAnyString(e.tvar) //+ "\n=> " + tvarSetInstExpl(e.reason)
             def fullInfo  = "Instantiated type constraint for type variable %tpe".
               dFormat(Some("Instantiate type constraint"), snapshotAnyString(e.tvar))
           }
@@ -82,39 +85,41 @@ trait InferStringOps {
         case e: WildcardLenientTArg =>
           new Descriptor {
             def basicInfo = if (e.noInstance)
-                "No instance of a typevariable " + snapshotAnyString(e.tvar)
+                "Cannot infer an instance for type variable " + snapshotAnyString(e.tvar)
               else 
-                "No type var constraint instance for " + snapshotAnyString(e.tvar)
+                "No constraints exist for type variable " + snapshotAnyString(e.tvar)
             def fullInfo  = ""
           }
             
         case e: IncompatibleResultAndPrototype =>
           new Descriptor {
-            def basicInfo = "Incompatible function result- and proto-type"
-            def fullInfo  = "Incompatible types:\n" + snapshotAnyString(e.restpe) +
-                            " vs.\n" + snapshotAnyString(e.pt)
+            def basicInfo = "Incompatible function result and the expected type"
+            def fullInfo  = "Incompatible types:\n%tpe vs. %tpe".dFormat(Some("Incompatible types"),
+                snapshotAnyString(e.restpe), snapshotAnyString(e.pt))
           }
           
         case e: InstantiateGlbOrLub =>
-          val instType = if (e.up) "greater lower bound (glb)" else "lower upper bound (lub)"
+          val instType = if (e.up) "greatest lower bound (glb)" else "least upper bound (lub)"
           def pos = if (e.up) "non-contravariant position" else "contravariant position"
-          def tvar1 = TypeSnapshot.mapOver(e.tvar)
           new Descriptor {
-            def basicInfo = "Calculate " + instType + "\nbecause type parameter is in\n" + pos
+            def tvar1 = TypeSnapshot.mapOver(e.tvar)
+            lazy val bounds = if (e.up) tvar1.constr.hiBounds else tvar1.constr.loBounds
+            def basicInfo = {
+              val constraintsStr = if (bounds.isEmpty) "empty set of constraints" else ("the set of " + bounds.length + " constraints")
+              "Type variable is in " + pos + ".\n What is the " + instType + "\n of " + constraintsStr + " of " + anyString(tvar1) + "?"
+            }
             def fullInfo  = {
-              
-              lazy val bounds = if (e.up) tvar1.constr.hiBounds else tvar1.constr.loBounds
               def boundsString(bs: List[Type]) = 
-               if (bs.isEmpty) "empty bounds" else bs.map(snapshotAnyString).mkString("[", ",", "]")
-              "Calculate " + instType + " for " + boundsString(bounds)
+               if (bs.isEmpty) "empty list of constraints" else bs.map(snapshotAnyString).mkString("[", ",", "]")
+              ("Calculate " + instType + " for %tpe").dFormat(Some("Calculate " + instType), boundsString(bounds))
             }
           }
            
         case e: InstantiateGlbOrLubDone =>
           new Descriptor {
             def basicInfo = {
-              val instType = if (e.up) "glb" else "lub"
-              "Calculated " + instType + " as \n" + safeTypePrint(e.tp, truncate=false)
+              val instType = if (e.up) "Glb" else "Lub"
+              instType + " has been calculated as as \n" + safeTypePrint(e.tp, truncate=false)
             }
             def fullInfo  = ""
           }
@@ -123,16 +128,18 @@ trait InferStringOps {
           new Descriptor {
             val boundType = if (e.upperBound) "upper" else "lower"
             def basicInfo = {
-              "Register " + boundType + " bound\nof type " + snapshotAnyString(e.bound)
+              "Register " + boundType + " bound constraint " + snapshotAnyString(e.bound) + "\n for type variable " + snapshotAnyString(e.tvar)
             }
-            def fullInfo  = "Register " + boundType + " bound of type %tpe" +
-            		"\nfor type variable %tpe".dFormat(Some("Register bound"),
-            		snapshotAnyString(e), snapshotAnyString(e.tvar))
+            def fullInfo  = {
+              ("Register " + boundType + " bound of type %tpe" +
+            		" for type variable %tpe").dFormat(Some("Register bound"),
+            		snapshotAnyString(e.bound), snapshotAnyString(e.tvar))
+            }
           }
 
         case e:InferExprInstance =>
           new Descriptor {
-            def basicInfo = "Infer expression instance"
+            def basicInfo = "Can we infer expression instance?"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
               ("Infer expression instance for tree %tree" +
@@ -147,59 +154,73 @@ trait InferStringOps {
     
         case e:InferMethodInstance =>
           new Descriptor {
-            def basicInfo = "Infer method instance \n using inferred argument types"
+            def basicInfo = "Can we infer correct type parameters for method instance\n using previously typed arguments?"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
-              "Infer method instance for expression \n " +
-                anyString(snapshotTree) + "\n" +
-                "of type " + snapshotAnyString(snapshotTree.tpe) + "\n" +
-                "Given arguments with types are " + e.args.map(a => {val a0 = treeAt(a); snapshotAnyString(a0.tpe)}).mkString(",") + "\n" +
-                "and the expected type " + snapshotAnyString(e.pt) + "\n" +
-                "Try to find substitution for type-parameter(s) " + e.undetparams.map(snapshotAnyString).mkString(",") + "\n" +
-                "so that the result type of the application is compatible with the expected type" + snapshotAnyString(e.pt)
+              ("Infer method instance for expression %tree" +
+                "of type %tpe\n" +
+                "Given arguments with types that are %tpe and the expected type %tpe\n" +
+                "Try to find substitution for type-parameter(s) %tpe " + 
+                "so that the result type of the application is compatible with the expected type").dFormat(Some("Infer type parameters"),
+                anyString(snapshotTree), snapshotAnyString(snapshotTree.tpe),
+                e.args.map(a => {val a0 = treeAt(a); snapshotAnyString(a0.tpe)}).mkString(","), snapshotAnyString(e.pt),
+                e.undetparams.map(snapshotAnyString).mkString(","))
             }
           }
 
         case e:InferredMethodInstance =>
           new Descriptor {
             def basicInfo = "Inferrred method instance"
-            def fullInfo  = "Inferred method instance \n" + 
-              snapshotAnyString(e.tree) + "\n" +
-              "in application of arguments: \n" +
-              e.args.map(arg => {val arg0 = treeAt(arg); anyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")")
+            def fullInfo  = {
+              val t = treeAt(e.tree)
+              ("Inferred method instance %tree as %tpe in application of arguments %tpe").dFormat(Some("Inferred method instance"),
+               anyString(t), snapshotAnyString(t.tpe),
+               e.args.map(arg => {val arg0 = treeAt(arg); anyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")"))
+            }
           }
 
-        case e:NoInstanceForMethodTypeParameters =>
+        case e:NoInstanceForMethodTypeParameters   =>
           new Descriptor {
             def basicInfo = "Cannot infer method instance \n as there is no instance \n for type parameter(s)"
-            def fullInfo  = "No instance exists for type parameters for \n" +
-           snapshotAnyString(e.tree) + "\n" +
-           "exist so that it can be applied to \n" +
-           e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")") + "\n" +
-           "because " + e.exMsg
+            def fullInfo  = ("No instance for type parameters for %tree" +
+           "exist so that it can be applied to %tpe\n" +
+           "because " + e.exMsg).dFormat(Some("No instance of method type parameters"),
+           snapshotAnyString(e.tree), e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")"))
           }
-           
+          
+        case e: IsArgCompatibleWithFormalMethInfer =>
+          new Descriptor {
+            def basicInfo = "Is argument compatible with\n its formal parameter?"
+            def fullInfo  = {
+              "Is the type of the argument %tpe weakly conformant to its formal parameter %tpe?".dFormat(
+                Some("Compatibility check"), snapshotAnyString(e.lhs), snapshotAnyString(e.rhs))
+            }
+          }
+        // todo: 
         case e:MethTypeArgsSolve =>
           new Descriptor {
             def basicInfo = "MethTypeArgsDebug"
             def fullInfo  = "Meth type args is: " + e.tparams.map(snapshotAnyString).mkString(",")
           }
            
-        case e:SolvedTypes =>
+        // todo:
+        case e:SolvedTypes       =>
           new Descriptor {
             def basicInfo = "Solved Types"
             def fullInfo  = "Solved types: " + e.solvedtypes.map(snapshotAnyString).mkString(",")
           }
            
-        case e:InferMethodInstanceTypeError =>
+        // todo:
+        case e:InferMethodInstanceTypeError       =>
           new Descriptor {
-            def basicInfo = "Cannot infer method instance \n as encountered type error"
+            def basicInfo = "Cannot infer method instance because \n a type error was encountered"
             def fullInfo  = "Type error \n" + e.exMsg + "\n" +
            "when inferring methods instance for \n" + snapshotAnyString(e.tree) + "\n" +
            " and arguments: \n" +
            e.args.map(arg => {val arg0 = treeAt(arg); snapshotAnyString(arg0) + ":" + snapshotAnyString(arg0.tpe)}).mkString("(", ",", ")")
           }
 
+        // todo:
         case e:FailedTypeCompatibilityInInferExprTypeArgs =>
           new Descriptor {
             def basicInfo = "Incompatible types failure"
@@ -207,6 +228,7 @@ trait InferStringOps {
               "Expected " + snapshotAnyString(e.pt)
           }
 
+        // todo:
         case e:SubstituteTParamsInfer =>
           new Descriptor {
             def basicInfo = "Substitute type parameters"
@@ -214,6 +236,7 @@ trait InferStringOps {
              (if (e.adjust) " with " else " without ") + "type arguments adjustment"
           }
              
+        // todo: 
         case e:PolyTypeInstantiationError =>
           new Descriptor {
             def basicInfo = "Cannot instantiate polymorhpic type \n to the expected type"
@@ -226,25 +249,37 @@ trait InferStringOps {
            
         case e:TreeTypeSubstitution =>
           new Descriptor {
-            def basicInfo = "Type substitution map \n for inferred instance"
+            def basicInfo = "Define a type substitution map\n for the inferred instance"
             def fullInfo  = {
               val tpSubst = (e.undet zip e.targs).map(subst => snapshotAnyString(subst._1) + " => " + snapshotAnyString(subst._2)).mkString("\n")
-              "Perform substitution to infer concrete instance:\n" + tpSubst + "\n" +
-              "in " + snapshotAnyString(e.tree)
+              ("Perform substitution to infer concrete instance: %tpe\n" +
+              "in %tree").dFormat(Some("Type substitution"), tpSubst, snapshotAnyString(e.tree))
             }
+          }
+          
+        case e: SimpleTreeTypeSubstitution =>
+          new Descriptor {
+            def basicInfo = "Substitute newly inferred type parameters\nin the expression tree"
+            def fullInfo  = {
+              "Substitute %tpe for %tpe".dFormat(Some("Type parameters substitution"),
+              e.tparams.map(snapshotAnyString).mkString(","),
+              e.targs.map(snapshotAnyString).mkString(","))
+            }
+              
           }
            
         case e:IsApplicableInfer =>
           new Descriptor {
             def basicInfo = "Is function applicable to\n arguments and expected type"
-            def fullInfo  = "Is function applicable to argument types and expected type " + snapshotAnyString(e.pt)
+            def fullInfo  = "Is function applicable to argument types and expected type %tpe".dFormat(Some("Is function applicable"), 
+                snapshotAnyString(e.pt))
           }
            
         case e:IsApplicableFallbackInfer =>
           new Descriptor {
             def basicInfo = "Fallback: Is function applicable to\n arguments and no expected type"
-            def fullInfo  = "Is applicable check failed with expected type " + snapshotAnyString(e.pt) +
-              " so try with no expected type"
+            def fullInfo  = "Function applicability check failed with expected type %tpe so try with no expected type".dFormat(
+                Some("Applicability fallback"), snapshotAnyString(e.pt))
           }
            
         case e:AdjustedTypeArgs =>
@@ -252,33 +287,37 @@ trait InferStringOps {
           
         case e:InferMethodAlternative =>
           new Descriptor {
-            def basicInfo = "Infer method \n with alternatives\n [" + (if (e.implicits) "with implicits" else "without implicits")+ "]"
-            def fullInfo  = "In " + snapshotAnyString(e.tree) + " with overloaded type\n " +
-              combinedSnapshotAnyString(e.tree)(_.tpe) + "\n" +
-              "we infer the correct, single method from alternatives suitable for " + e.argsTpes.map(snapshotAnyString) +
-              " with undetermined type parameters " + e.tparams +
-              "\nand expected final type " + snapshotAnyString(e.pt)
+            def basicInfo = "Can we infer the specific method\n" + (if (e.implicits) "when implicits are enabled" else "without involving implicits") + "?"
+            def fullInfo  = ("Can we infer a specific method for %tree of type %tpe?" +
+                             "Available alternatives have types: %tpe\n" +
+                             "The context has undetermined type parameters %tpe\n" +
+                             "and an expected type %tpe").dFormat(Some("Infer correct method alternative"),
+                              snapshotAnyString(e.tree), combinedSnapshotAnyString(e.tree)(_.tpe),
+                              e.argsTpes.map(snapshotAnyString).mkString(","), e.tparams.map(snapshotAnyString).mkString(","),
+                              snapshotAnyString(e.pt))
           }
            
         case e:NoBestAlternativeTryWithWildcard =>
           new Descriptor {
             def basicInfo = "No single best implict was found.\n Try searching without expected type"
-            def fullInfo  = "Couldn't find best alternative for " + snapshotAnyString(e.tree) + ".\n" + 
-             (if (!e.competing.isEmpty) "Conflict in " + e.competing else "") +
-              ", will attempt to infer best alternative without pt.\n" +
-             (if (!e.applicable.isEmpty) "Some applicable implicits are: " + e.applicable else "")
+            def fullInfo  = ("Couldn't find best alternative for %tree %sym," +
+            		"will attempt to infer best alternative without expected type.%sym").dFormat(
+            		snapshotAnyString(e.tree),
+                (if (!e.competing.isEmpty) "Conflict in " + e.competing else ""), 
+                (if (!e.applicable.isEmpty) "\nSome applicable implicits are: " + e.applicable else ""))
           }
              
+        // todo:
         case e:AmbiguousAlternatives =>
           new Descriptor {
             def basicInfo = "Ambiguous alternatives for method"
-            def fullInfo  = snapshotAnyString(e.tree) + "\n has ambigous alternatives. All applicable alternatives are:\n" +
+            def fullInfo  = snapshotAnyString(e.tree) + "%tree has ambigous alternatives. All applicable alternatives are:\n" +
               e.applicable + " of which the conflicting ones are\n" + e.competing
           }
            
         case e:VerifyMethodAlternative =>
           new Descriptor {
-            def basicInfo = "Verify alternative"
+            def basicInfo = "Is method alternative type correct\nfor the given context?"
             def fullInfo  = 
                 ("Check if method alternative %sym of type %tpe" +
                 "is applicable for types of the arguments: %tpe\n" +
@@ -288,11 +327,11 @@ trait InferStringOps {
           }
            
         case e:PossiblyValidAlternative =>
-          val result = if (e.result) "Valid" else "Invalid"
+          val result = if (e.result) "valid" else "invalid"
           new Descriptor {
-            def basicInfo = result + " alternative"
-            def fullInfo  = "Alternative " + snapshotAnyString(e.alternative) + " with type " +
-              combinedSnapshotAnyString(e.alternative)(_.tpe) + " is " + result
+            def basicInfo = "Alternative is " + result
+            def fullInfo  = ("Alternative %sym of type %tpe is " + result).dFormat(Some("Applicability of the alternative"),
+              snapshotAnyString(e.alternative), combinedSnapshotAnyString(e.alternative)(_.tpe))
           }
          
         case e:MethodTypeApplicableDebug =>
@@ -312,15 +351,17 @@ trait InferStringOps {
             def basicInfo = "Infer expression \n with alternatives \n[" + (if (e.implicits) "with implicits" else "without implicits")+ "]"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
-              "In " + anyString(snapshotTree) + " with overloaded type " + snapshotAnyString(snapshotTree.tpe) +
-              " we infer the alternative for type " + snapshotAnyString(e.pt)
+              ("Expression %tree has multiple alternatives and overloaded type %tpe." +
+              "Try to infer correct alternative that matches expected type %tpe").dFormat(
+                anyString(snapshotTree), snapshotAnyString(snapshotTree.tpe), snapshotAnyString(e.pt))
             }
           }
            
         case e:ImprovesAlternativesCheck =>
           new Descriptor {
             def basicInfo = "Compare conflicting alternatives"
-            def fullInfo  = "Compare conflicting alternatives, both applicable for %tree".dFormat(Some("Compare alternatives"), snapshotAnyString(e.tree))
+            def fullInfo  = "Compare conflicting alternatives, both applicable for %tree".dFormat(
+                Some("Compare alternatives"), snapshotAnyString(e.tree))
           }
            
         case e:AlternativesCheck =>
@@ -338,14 +379,14 @@ trait InferStringOps {
     def explainLubGlbEvent(ev: Event with LubEvent)(implicit time: Clock = ev.time): Descriptor = ev match { 
       case e: CalcLub =>
         new Descriptor {
-          def basicInfo = "Calculate lub " + lubKindExpl1(e.kind)
-          def fullInfo  = "Calculating lub for types: " + e.tps.map(snapshotAnyString(_)).mkString("[", ",", "]")
+          def basicInfo = "Calculate least upper bound " + lubKindExpl1(e.kind)
+          def fullInfo  = "Calculating least upper bound for types: %tpe".dFormat(Some("Calculating LUB"), e.tps.map(snapshotAnyString(_)).mkString(","))
         }
 
       case e: CalcLubElimSubTypes =>
         new Descriptor {
-          def basicInfo = "Calculate lub after eliminating subtypes " + lubKindExpl2(e.kind)
-          def fullInfo  = "Calculating lub for types: " + e.tps.map(snapshotAnyString(_)).mkString("[", ",", "]")
+          def basicInfo = "What is the least upper bound of type constraints\n (after performing subtype elimination on the original list)?" + lubKindExpl2(e.kind)
+          def fullInfo  = "Calculating least upper bound for types: %tpe".dFormat(Some("Calculating LUB"), e.tps.map(snapshotAnyString(_)).mkString(","))
         }
 
       case _ =>
@@ -356,10 +397,10 @@ trait InferStringOps {
     def lubKindExpl1(v: LubKindEntry.Value): String = {
       import LubKindEntry._
       v match {
-        case Empty =>
-          "\nsolution: Maximize lub for empty bound"
+        case Empty      =>
+          "\nSolution: Maximize lub for empty list of constraints"
         case SingleElem =>
-          "\nsolution: Lub for a single type bound"
+          "\nSolution: lub of a single type constraint"
         case NonTrivial =>
           ""
       }      
@@ -369,20 +410,20 @@ trait InferStringOps {
     def lubKindExpl2(v: LubKindElimSubtypes.Value): String = {
       import LubKindElimSubtypes._
       v match {
-        case Empty =>
-          "\nsolution: Maximize lub for empty bound"
-        case SingleElem =>
-          "\nsolution: Lub for a single type bound"
-        case PolyTpe =>
+        case Empty            =>
+          "\nsolution: Maximize lub for empty list of constraints"
+        case SingleElem       =>
+          "\nsolution: lub of a single type constraint"
+        case PolyTpe          =>
           "for Polymorphic type"
-        case MethodTpe =>
+        case MethodTpe        =>
           "for Method type"
         case NullaryMethodTpe =>
           "for Nullary method type"
         case TpeBounds =>
           "for Type bounds"
         case NonTrivial =>
-          "\n solution: Refined type for lub"
+          "\nsolution: Refined type for lub"
       }      
     }
     

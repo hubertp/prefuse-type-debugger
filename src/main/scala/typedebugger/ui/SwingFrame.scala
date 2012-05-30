@@ -1,7 +1,7 @@
 package scala.typedebugger
 package ui
 
-import java.awt.{ BorderLayout, Dimension }
+import java.awt.{ BorderLayout, Dimension, Font}
 import java.awt.event.{WindowAdapter, WindowEvent, ItemListener,
                        ItemEvent, KeyListener, KeyEvent, KeyAdapter}
 import javax.swing.{Action => swingAction, _}
@@ -69,6 +69,7 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
     val tabFolder = new JTabbedPane()
     tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
     sCodeViewer.setEditable(false)
+    sCodeViewer.setFont(new Font("Verdana", Font.PLAIN, 17))
     tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
     
     val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))

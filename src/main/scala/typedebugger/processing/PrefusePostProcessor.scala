@@ -34,9 +34,8 @@ trait PrefusePostProcessors {
         nodeTable.addColumn(label, (new PrefuseEventNode(null, null, null)).getClass)
     }
     
-    // Do not show all nodes in the UI, not necessary
-    // Have to be done or ensure that there is no other node attached to them
-    // because they cannot be parents
+    // Do not show all nodes in the UI. When dealing with parent nodes, it has to be ensured
+    // that closing events are also filtered out.
     lazy val visibleNodes: PartialFunction[Event, Boolean] = {
        case _: TyperTypeSet => 
          false
@@ -68,6 +67,8 @@ trait PrefusePostProcessors {
          false
        case _: NamerApplyPhase =>
          false
+       case _: InferredImplicitAdapt =>
+         false
        case init: SymInitializeTyper if init.sym.isInitialized =>
          false
          
@@ -96,27 +97,29 @@ trait PrefusePostProcessors {
         }
       }
       
-      //val filter = child.children.nonEmpty && child.children.last.ev.isInstanceOf[DoneBlock] && filterOutStructure(parent)
       def validEvent(ev: Event) = (!invisible.isDefinedAt(ev) || invisible(ev))
-      def tree(file: io.AbstractFile): Tree = trees(file)
+      
+      def setSingleNode(parent: UINode[PrefuseEventNode], node: BaseTreeNode[EventNode],
+                        t: Tree): UINode[PrefuseEventNode] = {
+        val (realParent, pfuseNode) =
+          if (parent == null) (None, t.addRoot())
+          else (Some(parent), t.addChild(parent.pfuseNode)) 
+        val node1 = new PrefuseEventNode(node.ev, realParent, pfuseNode)
+        node1.pfuseNode.set(label, node1)
+        node1.children ++= mapNodeChildren(node1, node.children.toList, t).flatten
+        if (errorNodes0.contains(node)) {
+          errorNodes += node1
+        }
+        node1
+      }
       
       def processChildren(parent: UINode[PrefuseEventNode], child: BaseTreeNode[EventNode]): Option[UINode[PrefuseEventNode]] = child.ev.file match {
         case Some(absFile) =>
+          def tree = trees(absFile)
           if (parent == null) {
-            // get respective unit and tree from child
-            val root = new PrefuseEventNode(child.ev, None, tree(absFile).addRoot())
-            root.pfuseNode.set(label, root)
-            root.children ++= child.children.map(processChildren(root, _)).flatten
-            Some(root)
-          } else if (validEvent(child.ev))  {
-            val child1 = new PrefuseEventNode(child.ev, Some(parent), tree(absFile).addChild(parent.pfuseNode))
-            child1.pfuseNode.set(label, child1)
-            // mapping of error/goal nodes
-            if (errorNodes0.contains(child)) {
-              errorNodes += child1
-            }
-            child1.children ++= mapNodeChildren(child1, child.children.toList, tree(absFile)).flatten
-            Some(child1)
+            Some(setSingleNode(parent, child, tree))
+          } else if (validEvent(child.ev) && !hideEvent(child))  {
+            simplifyIfPossible(setSingleNode(parent, child, tree), tree)
           } else if (child.children.length > 0) {
             // Get single child that is visible
             def bfs[T](node: BaseTreeNode[T]): List[BaseTreeNode[T]] =
@@ -124,18 +127,12 @@ trait PrefusePostProcessors {
   
             bfs(child) match {
               case single::Nil =>
-                val child1 = new PrefuseEventNode(single.ev, Some(parent), tree(absFile).addChild(parent.pfuseNode))
-                child1.pfuseNode.set(label, child1)
-                child1.children ++= single.children.map(processChildren(child1, _)).flatten
-                // mapping of error nodes
-                if (errorNodes0.contains(single)) {
-                  errorNodes += child1
-                }
-                Some(child1)
+                simplifyIfPossible(setSingleNode(parent, single, tree), tree)
                 
               case err@_::_ =>
-                println("Filtering node that contains more than one valid child event")
-                println("Note: This may cause some unexpected behaviour")
+                debug("Filtering node that contains more than one valid child event")
+                debug("Note: This may cause some unexpected behaviour")
+                debug("FILTERING: " + child.ev.getClass)
                 val skipped = err.map(processChildren(parent, _)).flatten
                 parent.children ++= skipped
                 None
@@ -145,10 +142,18 @@ trait PrefusePostProcessors {
                 
             }
           } else None
+          
         case None =>
             None
       }
       
+      def simplifyIfPossible(top: UINode[PrefuseEventNode], tree: Tree): Option[UINode[PrefuseEventNode]] = {
+        if (filterOutStructure(top)) {
+          // prune unnecessary node
+          tree.removeChild(top.pfuseNode)
+          None
+        } else Some(top)
+      }
       def simplify(top: UINode[PrefuseEventNode]) {
         val toRemove = top.children.filter {
           child =>
@@ -191,27 +196,95 @@ trait PrefusePostProcessors {
         }
       }
       
+      // Given processed events we can do better analysis of the context
+      // and decide whether the subtree should be included at all
       def filterOutStructure(node: UINode[PrefuseEventNode]): Boolean = {
         node.ev match {
-          case _: AdaptStart =>
-            node.children.length == 2 &&
-            node.children(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
-            node.children(1).ev.isInstanceOf[AdaptDone] ||
-            node.children.length == 1 && node.children.head.ev.isInstanceOf[AdaptDone]
-          case _: PolyTpeAdapt =>
+          case adapt: AdaptStart if node.children.length == 2 =>
+            node.children(0).ev.isInstanceOf[SubTypeCheck] && {
+              node.children(1).ev match {
+                case subAdapt: SuccessSubTypeAdapt if subAdapt.value2 =:= WildcardType =>
+                  true
+                case subAdapt: SuccessSubTypeAdapt if adapt.tree.tpe =:= adapt.pt      =>
+                  true
+                case constAdapt: ConstantTpeAdapt if adapt.pt =:= WildcardType         =>
+                  true
+                case _ =>
+                  false
+              }
+            }
+          case adapt: AdaptStart if node.children.length == 1     =>
+            node.children.head.ev match {
+              case subAdapt: SuccessSubTypeAdapt if subAdapt.value2 =:= WildcardType  =>
+                true
+              case subAdapt: SuccessSubTypeAdapt if adapt.tree.tpe =:= adapt.pt       =>
+                true
+              case _                                                                  =>
+                false
+            }
+          case _: AdaptStart if node.children.isEmpty         =>
+            true
+          case _: PolyTpeAdapt                                =>
             node.children.length == 2 &&
             node.children(0).ev.isInstanceOf[SuccessSubTypeAdapt] &&
             node.children(1).ev.isInstanceOf[AdaptDone]
-          case _: TypeTreeAdapt =>
+          case _: TypeTreeAdapt                               =>
             node.children.length == 2 &&
             node.children(0).ev.isInstanceOf[ConvertToTypeTreeAdapt] &&
             node.children(1).ev.isInstanceOf[AdaptDone] ||
             node.children.length == 1 && node.children.head.ev.isInstanceOf[AdaptDone] ||
             node.children.length == 1 && node.children.head.ev.isInstanceOf[TypeTreeAdapt]
-          case _ =>
+          case sub: SubTypeCheck                              =>
+            sub.rhs eq WildcardType
+          case qFilter: OverloadedSymDoTypedApply             =>
+            !node.children.exists(ch => ch.ev match {
+              case _: FilteredDoTypedApply => true
+              case _                       => false
+            })
+          case _                                              =>
             false
         }
         // Also with adapt-typeTree
+      }
+      
+      
+      // Used for hiding simple, single events
+      def hideEvent(node: BaseTreeNode[EventNode]): Boolean = {
+        node.ev match {
+          case _: AdaptStart                                  =>
+            node.children.length == 2 && {node.children(0).ev match {
+              case _: ImplicitMethodTpeAdaptEvent => true
+              case _: PolyTpeAdapt                => true
+              case _: ApplyAdapt                  => true
+              case _                              => false
+            }}
+          case _: SuccessTryTypedApplyTyper                   =>
+            true
+          case _: InferredMethodInstance                      =>
+            true
+          case subst: SimpleTreeTypeSubstitution              =>
+            subst.tparams.isEmpty && subst.targs.isEmpty
+          case filtered: FilteredDoTypedApply                        =>
+            node.parent.get.ev match {
+              case qFilter: OverloadedSymDoTypedApply     =>
+                val alterNumAfter = {
+                  val tree1 = treeAt(filtered.tree)(filtered.time)
+                  TypeSnapshot.mapOver(SymbolSnapshot.mapOver(tree1.symbol)(filtered.time).tpe)(filtered.time) match {
+                    case OverloadedType(_, alts) => alts.length
+                    case _                       => 0
+                  }
+                }
+                val alterNumBefore = {
+                  TypeSnapshot.mapOver(SymbolSnapshot.mapOver(qFilter.sym)(qFilter.time).tpe)(qFilter.time) match {
+                    case OverloadedType(_, alts) => alts.length
+                    case _                       => 0 // cannot happen
+                  }
+                }
+                alterNumAfter == alterNumBefore
+            }
+          case _                                              =>
+            false
+        }
       }
       
       def splitAt(ev: Event, list: List[BaseTreeNode[EventNode]]): List[List[BaseTreeNode[EventNode]]] = {
