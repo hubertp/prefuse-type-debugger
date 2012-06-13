@@ -28,5 +28,5 @@ have the same matching tags, otherwise you are likely to get some bugs.
 
 or (the easiest for using)
 
-java -Xbootclasspath/a:resources/lib/scala-library.jar:resources/lib/scala-compiler.jar scala.tools.nsc.MainGenericRunner -classpath lib/prefuse-core-0.21.jar:resources/lib/type-debugger-snapshot.jar scala.typedebugger.TypeDebuggerUI resources/code/src/paper/Example01.scala
+java -Xbootclasspath/a:resources/lib/scala-library.jar:resources/lib/scala-compiler.jar scala.tools.nsc.MainGenericRunner -classpath resources/lib/prefuse-core-0.22-snapshot.jar:resources/lib/type-debugger-snapshot.jar scala.typedebugger.TypeDebuggerUI resources/code/src/paper/Example01.scala
 
