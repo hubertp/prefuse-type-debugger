@@ -712,8 +712,9 @@ trait TyperStringOps {
         new Descriptor() {
           def basicInfo = "Filtered-out alternatives"
           def fullInfo  = {
-            val funSym1 = SymbolSnapshot.mapOver(e.funSym)
-            "Initial filter out for symbol alernatives for tree " + snapshotAnyString(e.tree) +
+            val tree1 = treeAt(e.tree)
+            val funSym1 = SymbolSnapshot.mapOver(tree1.symbol)
+            "Initial filter out for symbol alernatives for tree " + anyString(tree1) +
             " results in symbol " + anyString(funSym1) + " of type " + snapshotAnyString(funSym1.tpe)
           }
         }
