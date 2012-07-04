@@ -367,6 +367,7 @@ trait SwingControllers {
     	              case Some(target) => navigate(target, display.getVisualization)
     	              case None         =>
     	            }
+    	        case _ =>
     	      }
         }
 	    }
