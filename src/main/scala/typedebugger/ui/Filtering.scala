@@ -26,7 +26,10 @@ object Filtering extends Enumeration with ImplicitFiltering with SyntheticFilter
   val ProtoTpeArgs   = Value("inferred prototype arguments")
   val ValidateParent = Value("validate parent class (scala.ScalaObject or java.lang.Object)")
   val ConvConstr     = Value("convert constructor body")
-  val IsWithinBounds = Value("is type within bounds")
+  
+  // hide under 'Types' section
+  val IsWithinBounds = Value("is instantiation of type variable constraint within bounds")
+  val GroupIsWithinBounds = Value("are instantiations of type variable constraints within bounds")
 }
 
 trait ImplicitFiltering {

@@ -5,7 +5,7 @@ import scala.collection.mutable
 import ui.Filtering
 
 trait EventFiltering {
-  self: internal.CompilerInfo =>
+  self: internal.CompilerInfo with SyntheticEvents =>
     
   import global.EV._
   import global.{ definitions, DefDef, nme }
@@ -75,6 +75,9 @@ trait EventFiltering {
 
       case e: IsWithinBounds            =>
         Some(Filtering.IsWithinBounds)
+        
+      case e: GroupCheckConstrInstantiationsBounds =>
+        Some(Filtering.GroupIsWithinBounds)
 
       case _ =>
         None

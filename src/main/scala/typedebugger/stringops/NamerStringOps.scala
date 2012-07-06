@@ -2,7 +2,7 @@ package scala.typedebugger
 package stringops
 
 trait NamerStringOps {
-  self: StringOps with internal.CompilerInfo =>
+  self: StringOps with internal.CompilerInfo with internal.PrefuseStructure =>
     
   import global._
   import EV._
@@ -12,7 +12,7 @@ trait NamerStringOps {
     self: Descriptors =>
     private val DEFAULT = new DefaultDescriptor("namer")
     
-    def explainNamerEvent(ev: Event with NamerEvent)(implicit time: Clock = ev.time) = ev match {
+    def explainNamerEvent(ev: Event with NamerEvent, uiNode: UINode[PrefuseEventNode])(implicit time: Clock = ev.time) = ev match {
       case e: NamerDone =>
         DEFAULT
         
@@ -25,9 +25,9 @@ trait NamerStringOps {
       case e: ClassSigNamer =>
         new Descriptor {
           def basicInfo = "Can we verify \n class' signature?"
-          def fullInfo  = ("Completing class %tree" +
-          		             "with type params: %tree").dFormat(Some("Signature of a class"),
-          		                 snapshotAnyString(e.templ), e.tparams.map(snapshotAnyString).mkString)
+          def fullInfo  = ("Completing class template %tree" +
+          		             "having type params: %tree").dFormat(Some("Signature of a class"),
+          		                 snapshotAnyString(e.templ), e.tparams.map(snapshotAnyString).mkString("[", ",", "]"))
         }
        
       case e: MethodSigNamer =>
@@ -61,11 +61,25 @@ trait NamerStringOps {
         }
        
       case e: ValDefSigNamer =>
+        @inline
+        def defaultKind = "value"
+
+        val valueKind = uiNode.parent match {
+          case Some(parent) =>
+            parent.ev match {
+              case MethodSigNamer(_, _, _, _) =>
+                "parameter"
+              case _                          =>
+                defaultKind
+            }
+          case _            =>
+            defaultKind
+        }
         new Descriptor {
-          def basicInfo = "Can we verify \nvalue's signature?"
+          def basicInfo = "Can we verify \n" + valueKind + "'s signature?"
           def fullInfo  = {
             val vdef1 = treeAt(e.vdef).asInstanceOf[ValDef]
-            ("Completing the type of a value %sym." +
+            ("Completing the type of a value %sym. " +
             (if (vdef1.tpt.isEmpty) "Compute type from the body of the value " + anyString(vdef1.rhs)
              else "Is type " + anyString(vdef1.tpt) + " correct?")).dFormat(Some("Signature of a value"), vdef1.name.toString)
           }

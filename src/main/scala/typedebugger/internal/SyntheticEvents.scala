@@ -25,4 +25,16 @@ trait SyntheticEvents {
   case class GroupEligibleImplicits(source: ImplicitInfoSource) extends SyntheticEvent {
     def tag = "synthetic-grouping-of-implicits"
   }
+  
+  case class GroupCheckBoundsOfTArgs() extends SyntheticEvent {
+    def tag = "synthetic-grouping-of-check-targ-bounds"
+  }
+  
+  case class GroupCheckConstrInstantiationsBounds() extends SyntheticEvent {
+    def tag = "synthetic-grouping-of-checking-of-constraint-instantiations"
+  }
+  
+  case class MethTypeArgsResTpeCompatibleWithPt() extends SyntheticEvent {
+    def tag = "is-method-result-tpe-compatible-with-pt"
+  }
 }

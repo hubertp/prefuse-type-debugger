@@ -16,7 +16,7 @@ trait AdaptStringOps {
       case e:AdaptStart =>
         new Descriptor {
           def basicInfo = if (e.pt == WildcardType) "Adapt expression \nwith no expected type" 
-                          else "Can we adapt expression to the expected type" + safeTypePrint(e.pt, ":\n", "", truncate=false) + "?"
+                          else "Can we adapt expression to the expected type" + safeTypePrint(e.pt, ":\n", "", slice=true) + "?"
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
             //val resTpe = TypeSnapshot.mapOver(e.resTree._1.tpe)(e.resTree._2)
@@ -24,7 +24,7 @@ trait AdaptStringOps {
             val resTpe = TypeSnapshot.mapOver(resTree.tpe)(e.resTree._2)
             
             ("Can we adapt the type of the expression (if necessary) to the expected type.\n" + 
-             "Found: %tpe" +
+             "Found: %tpe\n" +
              "Expected: %tpe" +
              "\n\nType of the tree after adaptation: %tpe").dFormat(Some("Adapt expression"),
               snapshotAnyString(tree1.tpe), snapshotAnyString(e.pt), anyString(resTpe))
@@ -75,14 +75,22 @@ trait AdaptStringOps {
         DEFAULT
        
       case e:PolyTpeAdapt =>
+        val tree1 = treeAt(e.tree)
+        val tpeDescr = TypeSnapshot.mapOver(tree1.tpe) match {
+          case PolyType(_, TypeRef(_, _, _))       =>
+            "type function type"
+          case PolyType(_, ClassInfoType(_, _, _)) =>
+            "type constructor type"
+          case _                                   =>
+            "polymorhpic type"
+        }
         new Descriptor {
-          def basicInfo = "Can we adapt an expression with a polymorphic type?"
+          def basicInfo = "Can we adapt an expression with a " + tpeDescr + "?"
           def fullInfo  = {
-            val tree1 = treeAt(e.tree)
-            ("Adapt polymorphic type %tpe\n" +
-            "Type-parameters: %tpe" + 
-            "Result type: %tpe" + 
-            "For type tree: %tree" + 
+            ("Adapt " + tpeDescr + " %tpe\n" +
+            "Having type parameters: %tpe\n" + 
+            "And the result type: %tpe\n" + 
+            "For type tree: %ntree" + 
             "Undetermined context type-parameters: %sym").dFormat(Some("Adapt an expression with polymorphic type"),
                 snapshotAnyString(tree1.tpe), e.tparams.map(snapshotAnyString).mkString(","), snapshotAnyString(e.restpe),
                 snapshotAnyString(e.typeTree), e.undetTParams.map(snapshotAnyString).mkString(","))
@@ -161,7 +169,7 @@ trait AdaptStringOps {
          
       case e:TreeAfterEtaExpansionMethodTpeAdapt =>
         new Descriptor {
-          def basicInfo = "Original tree has been transformed into\n its eta-expanded form"
+          def basicInfo = "Original expression tree has been transformed into\n its eta-expanded form"
           def fullInfo  = "%tree has been eta-expanded to %tree".dFormat(Some("Result of eta-expansion"),
               snapshotAnyString(e.tree), snapshotAnyString(e.tree1))
         }
@@ -254,7 +262,7 @@ trait AdaptStringOps {
       case e:NotASubtypeAdapt => 
         new Descriptor {
           def basicInfo = "Can we adapt the type of the expression\n to satisfy subtyping constraint\n"+
-            safeTypePrint(e.tpe, truncate=false) + " <: " + safeTypePrint(e.pt, truncate=false) + "?"
+            safeTypePrint(e.tpe, slice=true) + " <: " + safeTypePrint(e.pt, slice=true) + "?"
           def fullInfo  = "FAILED subtype constraint: %tpe <:< %tpe".dFormat(Some("Failed subtyping contstraint"),
             snapshotAnyString(e.tpe), snapshotAnyString(e.pt))
         }

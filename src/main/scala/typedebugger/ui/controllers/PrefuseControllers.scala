@@ -50,7 +50,7 @@ trait PrefuseControllers {
       verifiedGoals = pNodes
     }
     
-    def _goals: List[NodeItem] = {
+    def _goals(): List[NodeItem] = {
       if (verifiedGoals == null)
        initGoals(goals0)
       verifiedGoals
@@ -59,6 +59,13 @@ trait PrefuseControllers {
     def updateGoals(gs: List[UINode[PrefuseEventNode]]) {
       debug("[prefuse] update initial goals to: " + gs)
       initGoals(gs)
+      flushVisCache()
+    }
+    
+    def removeFromGoals(node: NodeItem) {
+      val pfuseNode = asDataNode(node)
+      val filteredOut = _goals filter (_ != node)
+      initGoals(filteredOut.map(asDataNode(_)))
       flushVisCache()
     }
 
@@ -143,6 +150,11 @@ trait PrefuseControllers {
             case _                         =>
               None
           }
+        case _: InstantiateTVarToBound     =>
+          Some(defaultYesNoColors(node.children.exists( _.ev match {
+            case _: WildcardLenientTArg => false
+            case _                      => true 
+          })))
         case _ =>
           None
       }

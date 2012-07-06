@@ -5,7 +5,7 @@ import scala.tools.nsc.symtab
 import scala.collection.mutable
 import scala.ref.WeakReference
 
-import util.StringFormatter
+import util. { StringFormatter, Formatting }
 
 trait StringOps extends AnyRef
                 with TyperStringOps
@@ -13,21 +13,14 @@ trait StringOps extends AnyRef
                 with InferStringOps
                 with ImplicitsStringOps
                 with NamerStringOps
-                with TypesStringOps {
-  self: internal.CompilerInfo with internal.SyntheticEvents =>
+                with TypesStringOps
+                with util.DebuggerUtils {
+  self: internal.CompilerInfo with internal.SyntheticEvents with internal.PrefuseStructure =>
     
   import global.{Tree => STree, _}
   import EV._
   
   //implicit val snapshotOpenTypes: List[Type] = Nil
-  
-  object Formatting {
-    //val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
-    //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
-    val fmtFull = "%ev"
-    val fmt = "%ln"
-    val maxTypeLength = 50 // arbitrary const, used for UI reasons
-  }
   
   object Explanations extends AnyRef
                       with TyperExplanations
@@ -72,17 +65,17 @@ trait StringOps extends AnyRef
       descr
     }
     
-    def apply(e: Event): Descriptor = cache.get(e.id) match {
+    def apply(e: Event, node: UINode[PrefuseEventNode]): Descriptor = cache.get(e.id) match {
       case Some(ref) =>
         ref.get match {
           case Some(v) => v
-          case None    => update(e, generate(e))
+          case None    => update(e, generate(e, node))
         }
       case None =>
-        update(e, generate(e))
+        update(e, generate(e, node))
     }
     
-    def generate(e: Event): Descriptor = e match {
+    def generate(e: Event, node: UINode[PrefuseEventNode]): Descriptor = e match {
       case eEV: ContextTypeError =>
         explainError(eEV)
       case ev: TyperEvent        =>
@@ -98,7 +91,7 @@ trait StringOps extends AnyRef
       case ev: ImplicitEvent     =>
         explainImplicitsEvent(ev)
       case ev: NamerEvent        =>
-        explainNamerEvent(ev)
+        explainNamerEvent(ev, node)
       case ev: LubEvent          =>
         explainLubGlbEvent(ev)
       case ev: TypesEvent        =>
@@ -116,7 +109,7 @@ trait StringOps extends AnyRef
   
   // TODO incorporate into our string converter when
   // we move snapshotAnyString directly to prefuse
-  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true)(implicit time: Clock): String =
+  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true, slice: Boolean = false)(implicit time: Clock): String =
     if (tp != null && tp != NoType) {
       val stringRep0 = snapshotAnyString(tp)
       // strip kind information
@@ -131,8 +124,12 @@ trait StringOps extends AnyRef
         case ExactType(tpe)       => tpe
         case _                    => stringRep0
       }
-      if (truncate && (stringRep.length > Formatting.maxTypeLength)) ""// || tp.isErroneous)) ""
-      else pre + stringRep + post
+      val msg =
+        if (truncate && (stringRep.length > Formatting.maxTypeLength))
+          if (slice) stringRep.slice(0, Formatting.maxTypeLength - 3) + "..." else ""// || tp.isErroneous)) ""
+        else
+          stringRep
+      if (msg != "") pre + msg + post else ""
     } else ""
       
   def truncateStringRep(v1: String, v2: String, join: String, pre: String) = {
@@ -170,6 +167,15 @@ trait StringOps extends AnyRef
   def visibleName(name: Name): Option[String] =
     if (name.toString.length < 15) Some(name.toString) 
     else None
+    
+  // todo: mixing with string interpolation would be the best 
+  def visibleNameInTemplate(name: Name, templ: String => String): String =
+    visibleName(name) match {
+      case Some(str) => templ(str)
+      case None      => templ("")
+    }
+  
+  def simpleName(name: Name): String = visibleNameInTemplate(name, (s: String) => s)
   
   
   // TODO refactor
@@ -275,7 +281,7 @@ trait StringOps extends AnyRef
         if (expl.pt == WildcardType)
           "Typecheck argument \nwithout expected type"
         else
-          "Typecheck argument \nwith lenient target type\n " + safeTypePrint(expl.pt)
+          "Typecheck argument \nwith lenient target type" + safeTypePrint(expl.pt, pre="\n")
 
       //Block
       case _: TypeStatementInBlock =>
@@ -417,9 +423,9 @@ trait StringOps extends AnyRef
       case _: TypeAbstractTpeBounds =>
         "Typecheck bounds for the abstract type definition"
 
-      case expl: TypeValDefBody =>
-        "Typecheck body of the value/variable" +
-        (if (!expl.expectedPt) " to infer its type" +safeTypePrint(expl.vdef.symbol.tpe, "\n(inferred type is ", ")") else "")
+      case TypeValDefBody(vdef, pt) =>
+        "Typecheck body of the " + (if (vdef.symbol.isValue) "value" else "variable") +
+        (if (!pt) " to infer its type" +safeTypePrint(vdef.symbol.tpe, "\n(inferred type is ", ")") else "")
 
       case _: TypeMethodDefBody =>
         "Typecheck body of the method"
@@ -472,7 +478,22 @@ trait StringOps extends AnyRef
           def basicInfo = "What are the eligible " + sourceRep(src) + "?"
           def fullInfo  = "" // explain more for each kind
         }
-      case _ =>
+      case GroupCheckBoundsOfTArgs()   =>
+        new Descriptor {
+          def basicInfo = "Do bounds of all inferred type arguments\nagree with formal type parameters?"
+          def fullInfo  = ""
+        }
+      case GroupCheckConstrInstantiationsBounds() =>
+        new Descriptor {
+          def basicInfo = "Do instantations of type variable constraints\nagree with their bounds?"
+          def fullInfo  = ""
+        }
+      case MethTypeArgsResTpeCompatibleWithPt() =>
+        new Descriptor {
+          def basicInfo = "Is the result type of the Method Type\ncompatible with the expected type?"
+          def fullInfo  = ""
+        }
+      case _                           =>
         new Descriptor {
           def basicInfo = ev formattedString Formatting.fmt
           def fullInfo  = ev formattedString Formatting.fmtFull

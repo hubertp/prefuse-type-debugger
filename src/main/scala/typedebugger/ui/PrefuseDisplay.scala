@@ -68,10 +68,6 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
   protected def debug(msg: => String): Unit
   def source = source0
   
-  // TODO: reduce visibility?
-  def treeRoot(): NodeItem = treeLayout.getLayoutRoot()
-  
-  
   protected val lst = new CachedLeastSpanningTree()
   def nodesAlwaysVisible: List[NodeItem] = {
     lst.get()
@@ -88,6 +84,7 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
   private def isAdvEnabled(t: Tuple): Boolean = adv.isAdvancedOption(t) && adv.isOptionEnabled(t)
   
   protected def _goals(): List[NodeItem]
+  protected def removeFromGoals(node: NodeItem): Unit
   
   private[this] var _lastItem: Option[NodeItem] = None
   def lastItem: Option[NodeItem] = _lastItem
@@ -265,9 +262,9 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     vis.run(PrefuseActions.advancedOptions)
   }
   
-  def reRenderView() {
+  def reRenderView(force: Boolean = false) {
     debug("re-render view for " + source + ", initial goals only: " + (!displayed && !showFullTree))
-    if (!displayed && !showFullTree) {
+    if (force || (!displayed && !showFullTree)) {
       vis.run(PrefuseActions.initialGoals)
       displayed = true
     }
@@ -643,24 +640,29 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
         
         val res = idx.keys.toList map(toVisualNode(_, m_vis, dataGroupName))
         assert(root != null)
-        (res, toVisualNode(root, m_vis, dataGroupName)) 
+
+        (res, toVisualNode(root, m_vis, dataGroupName))
     }
   }
   
   class CustomNodeLinkTreeLayout(orientation: Int, dspace: Double, bspace: Double, tspace: Double)
     extends NodeLinkTreeLayout(dataGroupName) {//, orientation, dspace, bspace, tspace) {
     
-    // Anchor the layout root at the first error
-    // or show the synthetic root
-    // whenever we expand the type tree we update the root
+    // For the initial layout we anchor the tree layout at our least spanning tree root.
+    // This needs to dynamically change as we expand our tree in include further nodes.
+    // Therefore we need to find last visible parent.
     override def getLayoutRoot() = {      
-      var item:Node = lst.getRoot()
+      var item:NodeItem = lst.getRoot()
       if (item == null) {
         super.getLayoutRoot()
       } else {
-        while (item.getParent() != null && toVisualNode(item.getParent, m_vis, dataGroupName).isVisible)
-          item = item.getParent()
-        toVisualNode(item, m_vis, dataGroupName)
+        val openGoals = m_vis.getFocusGroup(openGoalNodes)
+        var temp = item.getParent.asInstanceOf[NodeItem]
+        while (temp != null && (openGoals.containsTuple(temp.getSourceTuple))) {
+          item = temp
+          temp = temp.getParent.asInstanceOf[NodeItem]
+        }
+        item
       }
     }
     

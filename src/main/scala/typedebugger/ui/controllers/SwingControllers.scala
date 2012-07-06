@@ -189,8 +189,10 @@ trait SwingControllers {
 	    }
       
       private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter): AnyRef =
-        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
-        else null
+        if (pos.isRange) {
+          //sCodeViewer.setCaretPosition(pos.start) // jumps to the selected code, which can be annoying for large files
+          codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
+        } else null
   
       private[SwingControllers] def clearHighlight(force: Boolean = false) = {
         codeHighlighter.getHighlights foreach (h =>
@@ -203,26 +205,34 @@ trait SwingControllers {
       // So we try to look above in the hierarchy.
       private def referencesFallback(underlyingNode: UINode[PrefuseEventNode]): List[Position] = {
         underlyingNode.ev match {
-          case e: IsArgCompatibleWithFormalMethInfer =>
+          case e: IsArgCompatibleWithFormalMethInfer   =>
             val parentNode = underlyingNode.parent.get
             parentNode.ev match {
-              case parentE: InferMethodInstance      =>
-                val which = parentNode.children.indexOf(underlyingNode)
-                val treeArg = parentE.args(which)
-                val formalPos  = parentE.fun.tpe match {
-                  case MethodType(params, _)         =>
-                    params(which).pos
-                  case _                             =>
+              case parentEvent: InferMethodInstance  =>
+                val which = parentNode.children.indexOf(underlyingNode) - 1
+                val treeArg = parentEvent.args(which)
+                val formalPos  = parentEvent.fun.tpe match {
+                  case MethodType(params, _) =>
+                    params(which -1).pos
+                  case _                     =>
                     NoPosition
                 }
                 List(treeArg.pos, formalPos)
-              case _                                 =>
+              case _                             =>
                 Nil
             }
-          case e: AddBoundTypeVar                    =>
+          case e: AddBoundTypeVar                      =>
             // try to look even more up in the hierarchy
             referencesFallback(underlyingNode.parent.get)
-          case _                                     =>
+          case InstantiateTVarToBound(tvar)            =>
+            if (tvar.typeSymbol != NoSymbol) List(tvar.typeSymbol.pos) else Nil
+          case IsTArgWithinBounds(bounds, tparam, _)           =>
+            List(tparam.pos)
+          case InstantiateGlbOrLub(_, _, _)            =>
+            referencesFallback(underlyingNode.parent.get)
+          case MethodTpeWithUndetTpeParamsDoTypedApply(_, tparams, _) =>
+            tparams.map(_.pos)
+          case _                                       =>
             Nil
         }
       }
@@ -271,7 +281,15 @@ trait SwingControllers {
               vis.getFocusGroup(display.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
               cleanup(item.getSourceTuple.asInstanceOf[Node], vis, display)
             } else {
-              fGroup.addTuple(item)
+              // if the node is in the main goal (error) nodes, remove it
+              val goalsGroup = vis.getFocusGroup(display.openGoalNodes)
+              val realnode = asDataNode(item).pfuseNode
+              if (goalsGroup.containsTuple(realnode)) {
+                currentDisplay[PrefuseController].removeFromGoals(item)
+                currentDisplay.reRenderView(true)
+              } else {
+                fGroup.addTuple(item)
+              }
             }
             display.lastItem = item
           case _ =>   

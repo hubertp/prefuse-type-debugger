@@ -54,9 +54,17 @@ trait InferStringOps {
           new Descriptor {
             def basicInfo = "Instantiate type variables to their constraints"
             def fullInfo  = {
-              "Instantiate type variables: %tpe".dFormat(Some("Type variables instantiation"),
+              "Instantiate type variables:\n%tpe".dFormat(Some("Type variables instantiation"),
                 e.tvars.map(tvar => {val tvar0 = TypeSnapshot.mapOver(tvar); anyString(tvar0) + " => " +
-                                     snapshotAnyString(tvar0.constr.inst)}).mkString("[", ",", "]"))
+                                     snapshotAnyString(tvar0.constr.inst)}).mkString(",\n"))
+            }
+          }
+          
+        case e: InstantiateTVarToBound =>
+          new Descriptor {
+            def basicInfo = "Can we infer a precise proto-type\nfor type argument " + snapshotAnyString(e.tvar) + "?" 
+            def fullInfo  = {
+              "Infer proto-type argument with which a function argument will be typechecked"
             }
           }
            
@@ -71,15 +79,30 @@ trait InferStringOps {
         case e: SolveSingleTVar =>
           new Descriptor {
             def basicInfo = "Solving type variable " + snapshotAnyString(e.tvar)
-            def fullInfo  = "Solving type variable %tpe %sym".dFormat(snapshotAnyString(e.tvar),
-                            (if (!e.variance) "\nType variable is in contravariant position" else ""))
+            def fullInfo  = {
+              "Solving type variable %tpe %sym".dFormat(snapshotAnyString(e.tvar),
+              (if (!e.variance) "\nType variable is in contravariant position" else ""))
+            }
           }
            
         case e: SetInstantiateTypeConstraint =>
           new Descriptor {
-            def basicInfo = "Instantiate type constraint as " + snapshotAnyString(e.tp) + " for type variable " + snapshotAnyString(e.tvar) //+ "\n=> " + tvarSetInstExpl(e.reason)
-            def fullInfo  = "Instantiated type constraint for type variable %tpe".
-              dFormat(Some("Instantiate type constraint"), snapshotAnyString(e.tvar))
+            def basicInfo = "Instantiate type constraint" + safeTypePrint(e.tp, pre=" as ") + " for type variable " + snapshotAnyString(e.tvar) //+ "\n=> " + tvarSetInstExpl(e.reason)
+            def fullInfo  = {
+              ("Define type constraint instantiation for type" +
+            	 " variable %tpe as %tpe.\nReason: %sym").dFormat(Some("Instantiate type constraint"),
+            	 snapshotAnyString(e.tvar), snapshotAnyString(e.tp), tvarSetInstExpl(e.reason))
+            }
+          }
+          
+        case e: ModifyTypeConstraintForTVar =>
+          new Descriptor {
+            def basicInfo = "Update type constraint for type variable " + snapshotAnyString(e.tvar)
+            def fullInfo  = {
+                "Updating type constraint of %tpe to the with lower bounds %tpe and higher bounds %tpe".dFormat(Some("Type constraint update"),
+                snapshotAnyString(e.tvar), e.tconst.loBounds.map(b => snapshotAnyString(b)).mkString(","),
+                e.tconst.hiBounds.map(b => snapshotAnyString(b)).mkString(","))
+            }
           }
            
         case e: WildcardLenientTArg =>
@@ -87,7 +110,7 @@ trait InferStringOps {
             def basicInfo = if (e.noInstance)
                 "Cannot infer an instance for type variable " + snapshotAnyString(e.tvar)
               else 
-                "No constraints exist for type variable " + snapshotAnyString(e.tvar)
+                "Cannot infer any prototype as no constraints exist for type variable " + snapshotAnyString(e.tvar)
             def fullInfo  = ""
           }
             
@@ -119,7 +142,7 @@ trait InferStringOps {
           new Descriptor {
             def basicInfo = {
               val instType = if (e.up) "Glb" else "Lub"
-              instType + " has been calculated as as \n" + safeTypePrint(e.tp, truncate=false)
+              instType + " has been calculated as as \n" + safeTypePrint(e.tp, slice=true)
             }
             def fullInfo  = ""
           }
@@ -128,7 +151,7 @@ trait InferStringOps {
           new Descriptor {
             val boundType = if (e.upperBound) "upper" else "lower"
             def basicInfo = {
-              "Register " + boundType + " bound constraint " + snapshotAnyString(e.bound) + "\n for type variable " + snapshotAnyString(e.tvar)
+              "Register " + boundType + " bound constraint " + safeTypePrint(e.bound, slice=true, post="\n") + "for type variable " + snapshotAnyString(e.tvar)
             }
             def fullInfo  = {
               ("Register " + boundType + " bound of type %tpe" +
@@ -154,10 +177,10 @@ trait InferStringOps {
     
         case e:InferMethodInstance =>
           new Descriptor {
-            def basicInfo = "Can we infer correct type parameters for method instance\n using previously typed arguments?"
+            def basicInfo = "Can we infer precise type arguments for method instance\n using previously typed arguments?"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
-              ("Infer method instance for expression %tree" +
+              ("Infer method instance for expression %ntree" +
                 "of type %tpe\n" +
                 "Given arguments with types that are %tpe and the expected type %tpe\n" +
                 "Try to find substitution for type-parameter(s) %tpe " + 

@@ -25,15 +25,16 @@ object StringFormatter {
     def dFormat(title: Option[String], args: String*): StringFormatter = {
       // count special tags in text0
       // categorize all the arguments appropriately
-      val patt = List(TreeText, TypeText, SymText).map(_.tag).mkString("(", "|", ")").r
+      val patt = List(TreeText, TreeTextNLine, TypeText, SymText).map(_.tag).mkString("(", "|", ")").r
       val allTags = patt findAllIn text0 toList
       
       if (allTags.length == args.length) {
         val args1 = (allTags zip args) map {
-          case (TreeText.tag, arg)  => TreeText(arg)
-          case (TypeText.tag, arg)  => TypeText(arg)
-          case (SymText.tag, arg)   => SymText(arg)
-          case (tag, _)               => throw new Exception("Invalid formatting tag in event description: " + tag)
+          case (TreeText.tag, arg)      => TreeText(arg)
+          case (TreeTextNLine.tag, arg) => TreeTextNLine(arg)
+          case (TypeText.tag, arg)      => TypeText(arg)
+          case (SymText.tag, arg)       => SymText(arg)
+          case (tag, _)                 => throw new Exception("Invalid formatting tag in event description: " + tag)
         }
         StringFormatter(patt split text0 toList, title, args1)
       } else {
@@ -51,23 +52,22 @@ trait Tag {
   def tag: String
 }
 
-case class TreeText(text: String) extends CustomArg {
-  override def toString = text
-} 
+case class TreeText(text: String) extends CustomArg
 object TreeText extends Tag {
   val tag = "%tree"
 }
 
-case class TypeText(text: String) extends CustomArg {
-  override def toString = text
+case class TreeTextNLine(text: String) extends CustomArg
+object TreeTextNLine extends Tag {
+  val tag = "%ntree"
 }
+
+case class TypeText(text: String) extends CustomArg
 object TypeText extends Tag {
   val tag = "%tpe"
 }
 
-case class SymText(text: String) extends CustomArg {
-  override def toString = text
-}
+case class SymText(text: String) extends CustomArg
 object SymText extends Tag {
   val tag = "%sym"
 }

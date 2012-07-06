@@ -39,11 +39,33 @@ trait TypesStringOps {
           def fullInfo  = "" 
         }
         
+      // todo: should display bounds
       case e: IsWithinBounds  =>
         new Descriptor {
-          def basicInfo = "Is type within type constraint bounds?"
-          def fullInfo  = "Is type %tpe within type constraint bounds".dFormat(Some("Bounds checking"),
+          def basicInfo = "Is the inferred instantiation of the constraint\nwithin the constraints bounds?"
+          def fullInfo  = "Is constraint instantiation %tpe within its constraint bounds?".dFormat(Some("Bounds checking"),
             snapshotAnyString(e.tp))
+        }
+        
+      case e: IsTArgWithinBounds =>
+        new Descriptor {
+          def basicInfo = "Is the inferred type argument within bounds\nof the formal type parameter?"
+          def fullInfo  = "Does type argument %tpe correspond to bounds %tpe?".dFormat(
+              Some("Type argument vs. type parameter bounds checking"),
+              snapshotAnyString(e.targ),
+              snapshotAnyString(e.bounds))
+        }
+      
+      case TArgWithinBoundsDone(_, res) =>
+        new Descriptor {
+          def basicInfo = "Type argument is " + (if (res) "" else "not ") + "within formal type parameter bounds"
+          def fullInfo  = ""
+        }
+        
+      case RegisterBound(tvar, bound, _) =>
+        new Descriptor {
+          def basicInfo = "Registering bound"
+          def fullInfo  = "Register bound %tpe for %tpe".dFormat(snapshotAnyString(tvar), snapshotAnyString(bound))
         }
 
       case e: CompareTypes =>
