@@ -121,13 +121,6 @@ trait ImplicitsStringOps {
           def basicInfo = if (e.eligible) "Implicit eligible" else "Implicit not eligible"
           def fullInfo  = ""
         }
-         
-      case e: CheckTypesCompatibility =>
-        new Descriptor {
-          def basicInfo = (if (e.fast) "Are two types plausibly subtypes?" else "Are the two types subtypes?")
-          def fullInfo  = "Check compatibility of types %tpe and %tpe".dFormat(Some("Types compatibility test"),
-              snapshotAnyString(e.tp), snapshotAnyString(e.pt))
-        }
         
       case e: CheckedTypesCompatibility =>
         new Descriptor {

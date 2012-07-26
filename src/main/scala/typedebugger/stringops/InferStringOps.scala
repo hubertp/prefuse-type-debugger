@@ -1,6 +1,8 @@
 package scala.typedebugger
 package stringops
 
+import scala.tools.nsc.symtab.Flags
+
 trait InferStringOps {
   self: StringOps with internal.CompilerInfo =>
     
@@ -123,7 +125,7 @@ trait InferStringOps {
           
         case e: InstantiateGlbOrLub =>
           val instType = if (e.up) "greatest lower bound (glb)" else "least upper bound (lub)"
-          def pos = if (e.up) "non-contravariant position" else "contravariant position"
+          def pos = if (e.variance != Flags.CONTRAVARIANT) "non-contravariant position" else "contravariant position"
           new Descriptor {
             def tvar1 = TypeSnapshot.mapOver(e.tvar)
             lazy val bounds = if (e.up) tvar1.constr.hiBounds else tvar1.constr.loBounds
@@ -213,7 +215,7 @@ trait InferStringOps {
           
         case e: IsArgCompatibleWithFormalMethInfer =>
           new Descriptor {
-            def basicInfo = "Is argument compatible with\n its formal parameter?"
+            def basicInfo = "Is the type of the argument compatible with\n the type of formal parameter?"
             def fullInfo  = {
               "Is the type of the argument %tpe weakly conformant to its formal parameter %tpe?".dFormat(
                 Some("Compatibility check"), snapshotAnyString(e.lhs), snapshotAnyString(e.rhs))

@@ -46,8 +46,8 @@ trait EventFiltering {
       case e: ProtoTypeArgsDoTypedApply =>
         Some(Filtering.ProtoTpeArgs)
 
-      case e: CheckTypesCompatibility   =>
-        Some(Filtering.TypesComp)
+//      case e: CheckTypesCompatibility   =>
+//        Some(Filtering.TypesComp)
 
       case e: SubTypeCheck              =>
         Some(Filtering.SubCheck)

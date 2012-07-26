@@ -95,9 +95,9 @@ trait StringOps extends AnyRef
       case ev: LubEvent          =>
         explainLubGlbEvent(ev)
       case ev: TypesEvent        =>
-        explainTypesEvent(ev)
+        explainTypesEvent(ev, node)
       case ev: SyntheticEvent    =>
-        explainSyntheticEvent(ev)
+        explainSyntheticEvent(ev, node)
       case _                     =>
         explainGeneralEvent(e)
     }
@@ -130,7 +130,8 @@ trait StringOps extends AnyRef
         else
           stringRep
       if (msg != "") pre + msg + post else ""
-    } else ""
+    } else if (tp == NoType) "NoType"
+    else ""
       
   def truncateStringRep(v1: String, v2: String, join: String, pre: String) = {
     val totalLength = v1.length + v2.length + join.length
@@ -400,6 +401,15 @@ trait StringOps extends AnyRef
         "Typecheck use-case statement"
         //"Type statement in the use case"
       
+      case _: TypeCasePattern =>
+        "Typecheck case pattern"
+        
+      case _: TypeCaseGuard   =>
+        "Typecheck case guard"
+      
+      case _: TypeCaseBody    =>
+        "Typecheck case body"
+        
       case _ =>
         printDebug(ev)
         "Typecheck ?"
@@ -424,7 +434,7 @@ trait StringOps extends AnyRef
         "Typecheck bounds for the abstract type definition"
 
       case TypeValDefBody(vdef, pt) =>
-        "Typecheck body of the " + (if (vdef.symbol.isValue) "value" else "variable") +
+        "Typecheck body of the " + (if (vdef.symbol == null) "value/variable" else if (vdef.symbol.isValue) "value" else "variable") +
         (if (!pt) " to infer its type" +safeTypePrint(vdef.symbol.tpe, "\n(inferred type is ", ")") else "")
 
       case _: TypeMethodDefBody =>
@@ -472,7 +482,7 @@ trait StringOps extends AnyRef
   
   trait SyntheticStringOps {
     self: Descriptors =>
-    def explainSyntheticEvent(ev: SyntheticEvent) = ev match {
+    def explainSyntheticEvent(ev: SyntheticEvent, uiNode: UINode[PrefuseEventNode]) = ev match {
       case GroupEligibleImplicits(src) =>
         new Descriptor {
           def basicInfo = "What are the eligible " + sourceRep(src) + "?"
@@ -490,7 +500,17 @@ trait StringOps extends AnyRef
         }
       case MethTypeArgsResTpeCompatibleWithPt() =>
         new Descriptor {
-          def basicInfo = "Is the result type of the Method Type\ncompatible with the expected type?"
+          def basicInfo = "Is the result type of the Method Type\ncompatible with the expected type\n(may contain undefined type arguments)?"
+          def fullInfo  = ""
+        }
+      case ExprTypeTpeCompatibleWithPt() =>
+        new Descriptor {
+          def basicInfo = "Is the current type of the expression\ncompatible with the expected type\n(may contain undefined type arguments)?"
+          def fullInfo  = ""
+        }
+      case TryToSolveTVars() =>
+        new Descriptor {
+          def basicInfo = "Given the types compatibility tests,\ncan we try to resolve any type variables?"
           def fullInfo  = ""
         }
       case _                           =>

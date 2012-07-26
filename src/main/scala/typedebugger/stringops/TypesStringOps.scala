@@ -2,7 +2,7 @@ package scala.typedebugger
 package stringops
 
 trait TypesStringOps {
-  self: StringOps with internal.CompilerInfo =>
+  self: StringOps with internal.CompilerInfo with internal.PrefuseStructure =>
     
   import global._
   import EV._
@@ -12,12 +12,33 @@ trait TypesStringOps {
     self: Descriptors =>
     private val DEFAULT = new DefaultDescriptor("types")
     
-    def explainTypesEvent(ev: Event with TypesEvent)(implicit time: Clock = ev.time) = ev match {
+    def explainTypesEvent(ev: Event with TypesEvent, uiNode: UINode[PrefuseEventNode])(implicit time: Clock = ev.time) = ev match {
       case e: SubTypeCheck    =>
         new Descriptor {
-          def basicInfo = "Subtyping check" + truncateStringRep(safeTypePrint(e.lhs, truncate=false),safeTypePrint(e.rhs, truncate=false), " <: ", "\n")
+          private def defaultMsg = "Is " + safeTypePrint(e.lhs, truncate=true) + "\na subtype of\n " + safeTypePrint(e.rhs, truncate=true) + "?"
+          def basicInfo = uiNode.parent match {
+            case Some(p) =>
+              p.ev match {
+                case AdaptStart(_, _)    =>
+                  p.children.indexOf(uiNode) match {
+                    case 0 =>
+                      "Is " + safeTypePrint(e.lhs, truncate=true) + "\na subtype of\n " + safeTypePrint(e.rhs, truncate=true) + "\nin order to determine if adaptation is needed?"
+                    case 1 =>
+                      "Does folding the constants allows us to\nsatisfy the subtyping constraint involving expected type?"
+                    case _ =>
+                      defaultMsg
+                  }
+                case InfoEligibleTest(_) =>
+                  "Is the type of the implicit a subtype of the one we are after?"
+                case _                   =>
+                  defaultMsg
+              }
+            case None    =>
+              // crash
+              throw new Exception("Invalid tree structure")
+          }
           def fullInfo  = "Subtype check between %tpe and %tpe".dFormat(Some("Subtype check"),
-              snapshotAnyString(e.lhs), snapshotAnyString(e.rhs))
+              snapshotAnyString(e.lhs), snapshotAnyString(e.rhs)) 
         }
 
       case e: SubTypeCheckRes =>
@@ -26,6 +47,7 @@ trait TypesStringOps {
           def fullInfo  = ""
         }
         
+      // todo: explain more how the number of subtype checks depends on the variance
       case e: SubTypeCheckArg =>
 
         new Descriptor {
@@ -34,9 +56,9 @@ trait TypesStringOps {
               if (e.variance > 0) "covariant"
               else if (e.variance < 0) "contravariant"
               else "invariant"
-            "Compare types in " + varianceInfo + " position"
+            "Are the two type arguments in " + varianceInfo + " position comparable?"
           } 
-          def fullInfo  = "" 
+          def fullInfo  = ""
         }
         
       // todo: should display bounds
@@ -70,7 +92,7 @@ trait TypesStringOps {
 
       case e: CompareTypes =>
         new Descriptor {
-          def basicInfo = explainSubtyping(e.compType, e.which)
+          def basicInfo = explainSubtyping(e.compType, e.which, e.tp1, e.tp2)
           def fullInfo  = "Subtyping constraint test for %tpe <:< %tpe".dFormat(Some("Subtyping constraint check"),
               snapshotAnyString(TypeSnapshot.mapOver(e.tp1)), snapshotAnyString(TypeSnapshot.mapOver(e.tp2)))
         }
@@ -102,41 +124,86 @@ trait TypesStringOps {
   trait SubtypingInfo {
     import SubCompare._
     import Side._
-    
-    def explainSubtyping(kind: SubCompare.Value, which: Side.Value): String = kind match {
+
+    def explainSubtyping(kind: SubCompare.Value, which: Side.Value, tp1: Type, tp2: Type)(implicit time: Clock) = kind match {
       case CTypeRef if which == Both =>
-        "Subtyping check between type references"
+        "Are two named types\n(type references) subtypes?"
       case CTypeRef =>
         "Subtyping check with type reference" + explainSide(which)
+      case CTypeRefBase =>
+        // TODO: better explanation
+        "Does converting " + explainSideSimplified(which) + " to its base type\n" +
+        "make the subtyping constraint succeed?"
       case CAnnotated =>
-        "Subtyping check with annotated type" + explainSide(which)
+        "Are the annotated types subtypes?"
       case CSingletonClass =>
-        "Subtyping check involving Singleton class" + explainSide(which)
-      case CClassSym =>
+        select(which){
+          "Subtyping check involving Singleton class" + explainSide(which)
+        }{
+          "Does this type denote a stable reference?"
+        }
+      case CClassSym => // no longer used
         "Subtyping check involving Class symbol" + explainSide(which)
       case CSkolemizedExist =>
-        "Subtyping check involivng existentials" + explainSide(which)
+        "Is skolemized existential type " + safeTypePrint(select(which)(tp1)(tp2), truncate=true) + " " +
+        select(which)("a subtype")("a supertype") + " of the other type?"
       case CRefined =>
-        "Subtyping check with refined type" + explainSide(which)
-      case CNullary =>
+        "Is refined type " + safeTypePrint(select(which)(tp1)(tp2), truncate=true) + " " +
+        select(which)("a subtype")("a supertype") + " of the other type?" 
+      case CNullary =>  // ignore?
         "Subtyping check with nullary method type" + explainSide(which)
       case CTypeBounds =>
-        "Subtyping check between type bounds"
+        "Are the two type bounds subtypes?"
       case CMethod =>
-        "Subtyping check between method types"
+        "Are two Method Types subtypes\n(including parameters and result types)?"
+      case CClassSymRaw =>
+        "Does mapping " + explainSideSimplified(which) + " raw type to an existential type\n" +
+        "make the subtyping constraint succeed?"
+      case CClassSymRefined if which == Right =>
+        "Is " + safeTypePrint(tp1, truncate=true) + " a subtype of refined type " + safeTypePrint(tp2, truncate=true) + "?"
+      case CClassSymRefined =>
+        "Is refined type " + safeTypePrint(tp1, truncate=true) + " a subtype of " + safeTypePrint(tp2, truncate=true) + "?"
+      case CTypeSymDeferred =>
+        val msg = select(which)("upper")("lower")
+        "Do " + msg + " bounds of the abstract type member (" + explainSideSimplified(which) + ")\n" +
+        "make the subtyping constraint succeed?"
+      case CTypeSymNonDeferred =>
+        val msg = select(which)(tp1)(tp2) match {
+          case TypeRef(_, sym:ModuleClassSymbol, _) =>
+            "module class type"
+          case TypeRef(_, sym:TypeSymbol, _) =>
+            if (sym.isAliasType) "alias type"
+            else if (sym.isSkolem) "type skolem"
+            else "class type"
+          case _                             =>
+            "type"                           // fallback, should happen
+        }
+        "Does normalizing the " + msg + " (currenlty " + explainSideSimplified(which) + ")\n" +
+        "make the subtyping constraint succeed?"
+      
+      case CSingletonOrNotNull => // todo: could be ignored?
+        val msg = select(which)(tp1)(tp2) match {
+          case _: SingletonType => "with Singleton Type mixed-in"
+          case _: NotNullType   => "with NotNull Type mixed-in"
+          case _                => "" // invalid
+        }
+        "Subtyping check involving type " + msg + explainSide(which)
       case COther =>
-        ""
+        "Unknown kind of subtyping check"
       case _ =>
-        ""
+        "Unknown kind of subtyping check: " + kind
     }
     
-    def explainSide(which: Side.Value): String = which match {
-      case Left  => " as a subtype" 
-      case Right => " as a supertype"
-      case Both  => ""
-      case Other => ""
+    def select[T](which: Side.Value)(choiceL: => T)(choiceR: => T): T = which match {
+      case Left  => choiceL
+      case Right => choiceR
+      case _     => choiceL // don't care?
     }
     
+    def explainSide(which: Side.Value): String = 
+      select(which)(" as a subtype")(" as a supertype")
     
+    def explainSideSimplified(which: Side.Value): String =
+      select(which)("subtype")("supertype")    
   }
 }

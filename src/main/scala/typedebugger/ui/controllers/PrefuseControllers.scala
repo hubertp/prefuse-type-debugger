@@ -44,7 +44,7 @@ trait PrefuseControllers {
     private[this] var verifiedGoals: List[NodeItem] = null
     private def initGoals(ls: List[UINode[PrefuseEventNode]]): Unit = {
       def verifyUpToRoot(n: UINode[PrefuseEventNode]): Boolean = 
-        !n.advanced && (!n.parent.isDefined || verifyUpToRoot(n.parent.get)) 
+        !n.advanced && (!n.parent.isDefined || verifyUpToRoot(n.parent.get))
       val pNodes = ls filter verifyUpToRoot map (node => toVisualNode(node.pfuseNode, m_vis, dataGroupName))
       debug("verified initial goals: " + pNodes)
       verifiedGoals = pNodes

@@ -83,6 +83,7 @@ abstract class TypeBrowser extends AnyRef
       case _: DebugEvent                  => false
       case _: RegisterBound               => false
       case _: ModifyTypeConstraintForTVar => false
+      case _: NullaryMethodTypeAdapt      => false
       case _: TyperEvent                  => true
       case _: ImplicitMethodTpeAdaptEvent => true
       case _: InferEvent                  => true

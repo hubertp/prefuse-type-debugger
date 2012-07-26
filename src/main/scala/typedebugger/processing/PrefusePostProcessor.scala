@@ -31,7 +31,7 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
       
       val filterNodes:PartialFunction[Event, Boolean] =
         if (settings.fullTypechecking.value) (ev: Event) => ev match {case _ => true} else visibleNodes
-      new EventNodeProcessor1(prefuseTrees, filterNodes, errors, label).process(root)
+      new EventNodeProcessor1(prefuseTrees, filterNodes, errors.map(_.ev), label).process(root)
     }
     
     def ensureTreeColumnExists(tree: Tree, label: String) {
@@ -86,7 +86,7 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
     // don't reuse the class, since it contains internal result of transforming goal nodes
     private class EventNodeProcessor1(trees: io.AbstractFile => Tree,
       invisible: PartialFunction[Event, Boolean],
-      errorNodes0: List[BaseTreeNode[EventNode]], label: String) {
+      errorNodes0: List[Event], label: String) {
       
       val errorNodes: mutable.ListBuffer[UINode[PrefuseEventNode]] = mutable.ListBuffer()
       
@@ -124,6 +124,8 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
             node.updatePfuseNode(t.addChild(par.pfuseNode))
             node.pfuseNode.set(label, node)
         }
+        if (errorNodes0.contains(node.ev))
+          errorNodes += node
         node.children.foreach(ch => updatePrefuseNodeRefs(Some(node), ch, t))
         node
       }
@@ -136,9 +138,6 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
         val realParent = if (parent == null) None else Some(parent)
         val node1 = new PrefuseEventNode(node.ev, realParent)
         node1.children ++= mapNodeChildren(node1, node.children.toList).flatten
-        if (errorNodes0.contains(node)) {
-          errorNodes += node1
-        }
         node1
       }
       
@@ -194,17 +193,27 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
         case _: AllEligibleImplicits =>
           groupEligibleEvents(node, children)
         case _: InferMethodInstance  =>
-          groupCheckBounds(node, children)
+          groupCheckBounds(node, children, new MethTypeArgsResTpeCompatibleWithPt())
+        case _: InferExprInstance    =>
+          groupCheckBounds(node, children, new ExprTypeTpeCompatibleWithPt())
         case _                       => // default
           children.map(processChild(node, _))
       }
       
-      def groupCheckBounds(parent: UINode[PrefuseEventNode], children: List[BaseTreeNode[EventNode]]) = {
-        val checkBoundsFilter: Event => Int = (e: Event) => e match { case CompareTypes(_, _, _, _) => 0; case IsWithinBounds(_, _) => 1; case IsTArgWithinBounds(_, _, _) => 2; case _ => 3 }
-        val subgroupNodes = List(new MethTypeArgsResTpeCompatibleWithPt(), new GroupCheckConstrInstantiationsBounds(), new GroupCheckBoundsOfTArgs())
+      def groupCheckBounds(parent: UINode[PrefuseEventNode], children: List[BaseTreeNode[EventNode]], initialTpeCompareEvent: => SyntheticEvent) = {
+        val checkBoundsFilter: Event => Int = (e: Event) =>
+          e match {
+            case CompareTypes(_, _, _, _)    => 0
+            case SolveSingleTVar(_, _, _)    => 1
+            case InstantiateTypeVars(_, _)   => 1
+            case IsWithinBounds(_, _)        => 2
+            case IsTArgWithinBounds(_, _, _) => 3
+            case _ => 4
+        }
+        val subgroupNodes = List(initialTpeCompareEvent, new TryToSolveTVars(), new GroupCheckConstrInstantiationsBounds(), new GroupCheckBoundsOfTArgs())
         val grouped  = children.groupBy(ch => checkBoundsFilter(ch.ev))
         
-        val rest1 = grouped(3).map(processChild(parent, _))
+        val rest1 = grouped(4).map(processChild(parent, _))
         def groupEventsTogether(syntheticEvent: SyntheticEvent, kind: Int, evs: List[BaseTreeNode[EventNode]]) = {
           evs match {
             case Nil => (None, 0)
@@ -248,6 +257,7 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
       
       // Given processed events we can do better analysis of the context
       // and decide whether the subtree should be included at all
+      // At this point we can also provide more context to any nodes and update it with more info.
       def filterOutStructure(node: UINode[PrefuseEventNode]): FilterAction.Value = {
         if (settings.noFiltering.value) NoOp
         else {var helper = NoOp; node.ev match {
@@ -300,6 +310,13 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
             helper
           case SubTypeCheck(_, rhsTpe) if rhsTpe eq WildcardType                            =>
             Remove
+          case _: SubTypeCheckRes                                                           =>
+            filterOutStructure(node.parent.get) match {
+              case Replace => Remove
+              case _       => NoOp
+            } 
+          case SubTypeCheck(tp1: NullaryMethodType, tp2: NullaryMethodType)                 =>
+            Replace
           case _: TyperTyped if node.children.isEmpty                                       =>
             Remove
           case typechecked: TyperTyped =>
@@ -325,6 +342,16 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
               case _                       => false
             })) && {helper = Remove; true}
             helper
+          /*case InstantiateGlbOrLub(tvar, up, _)               =>
+            def tvar1 = TypeSnapshot.mapOver(tvar)
+            val bounds = if (up) tvar1.constr.hiBounds else tvar1.constr.loBounds
+            if (bounds.length < 2) Replace else NoOp*/
+          case CheckedTypesCompatibility(_, _, fast, res)     =>
+            if (fast && !res) NoOp
+            else // if types are eq still display the node, for information purposes
+              if (!fast && res && !node.parent.get.children.exists( ch => ch.ev match { case _: SubTypeCheck => true; case _ => false }))
+                NoOp
+              else Remove
           case _                                              =>
             NoOp
         }}

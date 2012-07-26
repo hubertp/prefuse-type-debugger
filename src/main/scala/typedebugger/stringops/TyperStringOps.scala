@@ -305,7 +305,7 @@ trait TyperStringOps {
           def fullInfo  = ("Least upper bound for branches:" +
           		            "%tree with type %tpe\n" +
           		            " and %tree with type %tpe\n" +
-          		            "Expected type $tpe").dFormat(Some("Least upper bound for 'if' conditional"),
+          		            "Expected type %tpe").dFormat(Some("Least upper bound for 'if' conditional"),
           		                snapshotAnyString(e.tree1), snapshotAnyString(e.value1),
           		                snapshotAnyString(e.tree2), snapshotAnyString(e.value2),
           		                snapshotAnyString(e.pt))

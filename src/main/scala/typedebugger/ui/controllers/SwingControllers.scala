@@ -200,6 +200,13 @@ trait SwingControllers {
         )
       }
       
+      private def traverseTpeForPos(tp: Type): List[Position] = tp match {
+        case TypeRef(pre, sym, args) =>
+          tp.typeSymbol.pos::(args.flatMap(traverseTpeForPos))
+        case other                   =>
+          List(tp.typeSymbol.pos)
+      }
+      
       // We do not want to include in every event positions for trees
       // as these would have to be passed around in a lot of places.
       // So we try to look above in the hierarchy.
@@ -209,11 +216,11 @@ trait SwingControllers {
             val parentNode = underlyingNode.parent.get
             parentNode.ev match {
               case parentEvent: InferMethodInstance  =>
-                val which = parentNode.children.indexOf(underlyingNode) - 1
+                val which = parentNode.children.indexOf(underlyingNode)
                 val treeArg = parentEvent.args(which)
                 val formalPos  = parentEvent.fun.tpe match {
                   case MethodType(params, _) =>
-                    params(which -1).pos
+                    params(which).pos
                   case _                     =>
                     NoPosition
                 }
@@ -228,10 +235,25 @@ trait SwingControllers {
             if (tvar.typeSymbol != NoSymbol) List(tvar.typeSymbol.pos) else Nil
           case IsTArgWithinBounds(bounds, tparam, _)           =>
             List(tparam.pos)
-          case InstantiateGlbOrLub(_, _, _)            =>
+          case InstantiateGlbOrLub(_, _, _, _)            =>
             referencesFallback(underlyingNode.parent.get)
           case MethodTpeWithUndetTpeParamsDoTypedApply(_, tparams, _) =>
             tparams.map(_.pos)
+          case SubTypeCheck(v1, v2)                    =>
+            traverseTpeForPos(v1) ++ traverseTpeForPos(v2)
+          case SubTypeCheckArg(_)                      =>
+            underlyingNode.children match {
+              case Seq(single, _*) =>
+                referencesFallback(single)
+              case _ => // shouldn't happen?
+                Nil
+            }
+          case ImplicitMethodTpeAdapt(_, tpe: MethodType)      =>
+            // it has to have at least a single implicit parameter
+            tpe.params match {
+              case head ::_ => List(head.pos)
+              case _        => Nil
+            }
           case _                                       =>
             Nil
         }
