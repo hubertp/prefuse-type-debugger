@@ -623,9 +623,11 @@ trait TyperStringOps {
       case e:IdentTyper =>
         new Descriptor() {
           def basicInfo = "Can we attribute identifier \n'" + e.tree.name +"'?" +
-                          safeTypePrint(e.tree.symbol.tpe, "\n(typed as ", ")")
-          def fullInfo  = "Can we find a symbol corresponding to the identifier %sym?".dFormat(Some("Identifier search"),
-                          e.tree.asInstanceOf[Ident].name.toString)
+                          safeTypePrint(e.tree.tpe, "\n(typed as ", ")")
+          def fullInfo  = {
+            "Can we find a symbol corresponding to the identifier %sym?".dFormat(Some("Identifier search"),
+            e.tree.asInstanceOf[Ident].name.toString)
+          }
         }
         
       case e:LiteralTyper =>
@@ -789,9 +791,16 @@ trait TyperStringOps {
          
       case e:DoTypedApplyTyper =>
         new Descriptor() {
-          def argsToString(args0: List[Tree]) = args0.map(a => { val a0 = treeAt(a)
-            anyString(a0) + ": " + (if (a0.tpe == null) "?" else snapshotAnyString(a0.tpe))
-            }).mkString("(", ",", ")")
+          def argsToString(args0: List[Tree]) = args0.map{a => 
+            val a0 = treeAt(a)
+            val tp1 = if (a0.tpe == null) NoType else {
+              TypeSnapshot.mapOver(a0.tpe) match {
+                case invalid@NoType => invalid
+                case other          => other
+              }
+            }
+            anyString(a0) + (if (tp1 eq NoType) "" else ": " + anyString(tp1))
+            }.mkString("(", ",", ")")
           def basicInfo = "Given typechecked function,\ncan we type its application to arguments?"
           def fullInfo  = ("Typecheck application of function %tree " +
                            "to arguments %tree " +
@@ -968,7 +977,7 @@ trait TyperStringOps {
       case e:InstantiatedDoTypedApply =>
         new Descriptor() {
           val fun1 = treeAt(e.fun)
-          def basicInfo = "Can we type application involving just inferred method instance " + safeTypePrint(fun1.tpe, "\n", "?")
+          def basicInfo = "Can we type application\ninvolving just inferred method instance " + safeTypePrint(fun1.tpe, "\n") + "?"
           def fullInfo  = {
             val undets = (if (!e.undet.isEmpty) "\n and still undetermined type parameters " +
             e.undet.map(snapshotAnyString).mkString(",") else "")
@@ -988,7 +997,7 @@ trait TyperStringOps {
           def fullInfo  = {
             val tree1 = treeAt(e.tree)
             "Applied arguments in the tree %tree of type %tpe".dFormat(
-            snapshotAnyString(tree1), snapshotAnyString(tree1.tpe))
+            anyString(tree1), snapshotAnyString(tree1.tpe))
           } 
         }
 

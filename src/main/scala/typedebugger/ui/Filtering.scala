@@ -49,4 +49,5 @@ trait SyntheticFiltering {
   val TemplateSynth  = GroupValue("synthetic template")
   val DefSynth       = GroupValue("synthetic definition")
   val Constr         = GroupValue("constructor")
+  val TypeEtaExpanded = GroupValue("typecheck eta-expanded tree")
 }

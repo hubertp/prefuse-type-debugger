@@ -15,23 +15,35 @@ trait TypesStringOps {
     def explainTypesEvent(ev: Event with TypesEvent, uiNode: UINode[PrefuseEventNode])(implicit time: Clock = ev.time) = ev match {
       case e: SubTypeCheck    =>
         new Descriptor {
-          private def defaultMsg = "Is " + safeTypePrint(e.lhs, truncate=true) + "\na subtype of\n " + safeTypePrint(e.rhs, truncate=true) + "?"
+          private def defaultMsg = "Is " + safeTypePrint(e.lhs, slice=true) + "\na subtype of\n " + safeTypePrint(e.rhs, slice=true) + "?"
           def basicInfo = uiNode.parent match {
             case Some(p) =>
               p.ev match {
                 case AdaptStart(_, _)    =>
                   p.children.indexOf(uiNode) match {
                     case 0 =>
-                      "Is " + safeTypePrint(e.lhs, truncate=true) + "\na subtype of\n " + safeTypePrint(e.rhs, truncate=true) + "\nin order to determine if adaptation is needed?"
+                      "Is " + safeTypePrint(e.lhs, slice=true) + "\na subtype of\n " + safeTypePrint(e.rhs, slice=true) + "\nin order to determine if adaptation is needed?"
                     case 1 =>
                       "Does folding the constants allows us to\nsatisfy the subtyping constraint involving expected type?"
                     case _ =>
                       defaultMsg
                   }
-                case InfoEligibleTest(_) =>
+                case InfoEligibleTest(_)          =>
                   "Is the type of the implicit a subtype of the one we are after?"
-                case _                   =>
-                  defaultMsg
+                case InferExprInstance(_, _, _)   =>
+                  "Is the current expression type template " + safeTypePrint(e.lhs, slice=true) +
+                  "\n a subtype of\n " + safeTypePrint(e.rhs, slice=true) + "?"
+                case InferMethodInstance(_, _, _, _) =>
+                  "Is the current function result type template " + safeTypePrint(e.lhs, slice=true) +
+                  "\na subtype of expected type\n " + safeTypePrint(e.rhs, slice=true) + "?"
+                case _: ProtoTypeArgsDoTypedApply =>
+                  "Is the result type of function compatible with expected type\n(collect local constraints when possible)?"
+                case _                            =>
+                  // more specialised error message
+                  if (e.lhs.isHigherKinded || e.rhs.isHigherKinded)
+                    "Can the subtyping check involving higher-kinded type(s) succeed?"
+                  else
+                    defaultMsg
               }
             case None    =>
               // crash
@@ -56,7 +68,7 @@ trait TypesStringOps {
               if (e.variance > 0) "covariant"
               else if (e.variance < 0) "contravariant"
               else "invariant"
-            "Are the two type arguments in " + varianceInfo + " position comparable?"
+            "Are the two type arguments\nin " + varianceInfo + " position comparable?"
           } 
           def fullInfo  = ""
         }
@@ -103,11 +115,16 @@ trait TypesStringOps {
           def fullInfo  = ""
         }
         
-      case e: FailedSubtyping =>
+      case FailedSubtyping(tp1, tp2, _, comp) =>
         new Descriptor {
-          def basicInfo = "Types are not subtypes"
+          def basicInfo = comp match {
+              case SubCompare.CHigherKindedTpe =>
+                "Subtyping check infolving higher-kinded type failed"
+              case _                =>
+                "Types are not subtypes"
+            }
           def fullInfo  = "Failed subtyping constraint for %tpe <:/< %tpe".dFormat(Some("Failed subtyping constraint"),
-              snapshotAnyString(e.tp1), snapshotAnyString(e.tp2))
+              snapshotAnyString(tp1), snapshotAnyString(tp2))
         }
         
       case e: InstantiateTypeParams =>
@@ -145,10 +162,10 @@ trait TypesStringOps {
       case CClassSym => // no longer used
         "Subtyping check involving Class symbol" + explainSide(which)
       case CSkolemizedExist =>
-        "Is skolemized existential type " + safeTypePrint(select(which)(tp1)(tp2), truncate=true) + " " +
+        "Is skolemized existential type " + safeTypePrint(select(which)(tp1)(tp2), slice=true) + " " +
         select(which)("a subtype")("a supertype") + " of the other type?"
       case CRefined =>
-        "Is refined type " + safeTypePrint(select(which)(tp1)(tp2), truncate=true) + " " +
+        "Is refined type " + safeTypePrint(select(which)(tp1)(tp2), slice=true) + " " +
         select(which)("a subtype")("a supertype") + " of the other type?" 
       case CNullary =>  // ignore?
         "Subtyping check with nullary method type" + explainSide(which)
@@ -160,9 +177,9 @@ trait TypesStringOps {
         "Does mapping " + explainSideSimplified(which) + " raw type to an existential type\n" +
         "make the subtyping constraint succeed?"
       case CClassSymRefined if which == Right =>
-        "Is " + safeTypePrint(tp1, truncate=true) + " a subtype of refined type " + safeTypePrint(tp2, truncate=true) + "?"
+        "Is " + safeTypePrint(tp1, slice=true) + " a subtype of refined type " + safeTypePrint(tp2, slice=true) + "?"
       case CClassSymRefined =>
-        "Is refined type " + safeTypePrint(tp1, truncate=true) + " a subtype of " + safeTypePrint(tp2, truncate=true) + "?"
+        "Is refined type " + safeTypePrint(tp1, slice=true) + " a subtype of " + safeTypePrint(tp2, slice=true) + "?"
       case CTypeSymDeferred =>
         val msg = select(which)("upper")("lower")
         "Do " + msg + " bounds of the abstract type member (" + explainSideSimplified(which) + ")\n" +
@@ -188,6 +205,10 @@ trait TypesStringOps {
           case _                => "" // invalid
         }
         "Subtyping check involving type " + msg + explainSide(which)
+      case CHigherKindedParams =>
+        "Are corresponding type constructor parameters subtypes?"
+      case CHigherKindedRes    =>
+        "Are the two underlying type constructors subtypes?"
       case COther =>
         "Unknown kind of subtyping check"
       case _ =>

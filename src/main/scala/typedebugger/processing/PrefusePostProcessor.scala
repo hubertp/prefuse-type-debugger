@@ -346,6 +346,8 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
             def tvar1 = TypeSnapshot.mapOver(tvar)
             val bounds = if (up) tvar1.constr.hiBounds else tvar1.constr.loBounds
             if (bounds.length < 2) Replace else NoOp*/
+          case InstantiateTypeVars(tvars, _) if tvars.length > 1                            =>
+            Remove
           case CheckedTypesCompatibility(_, _, fast, res)     =>
             if (fast && !res) NoOp
             else // if types are eq still display the node, for information purposes

@@ -130,7 +130,7 @@ trait StringOps extends AnyRef
         else
           stringRep
       if (msg != "") pre + msg + post else ""
-    } else if (tp == NoType) "NoType"
+    } else if (tp eq NoType) "NoType"
     else ""
       
   def truncateStringRep(v1: String, v2: String, join: String, pre: String) = {
@@ -510,7 +510,7 @@ trait StringOps extends AnyRef
         }
       case TryToSolveTVars() =>
         new Descriptor {
-          def basicInfo = "Given the types compatibility tests,\ncan we try to resolve any type variables?"
+          def basicInfo = "Given results from compatibility tests with expected type,\ncan we try to resolve any type variables?"
           def fullInfo  = ""
         }
       case _                           =>

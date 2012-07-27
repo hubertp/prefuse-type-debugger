@@ -167,8 +167,7 @@ trait InferStringOps {
             def basicInfo = "Can we infer expression instance?"
             def fullInfo  = {
               val snapshotTree = treeAt(e.tree)
-              ("Infer expression instance for tree %tree" +
-               "and current type %tpe\n" +
+              ("Infer expression instance for tree %tree and current type %tpe\n" +
                "with undetermined typeparams %tpe and expected type %tpe").dFormat(Some("Infer expression instance"),
                snapshotAnyString(snapshotTree),
                snapshotAnyString(snapshotTree.tpe),
@@ -274,7 +273,7 @@ trait InferStringOps {
            
         case e:TreeTypeSubstitution =>
           new Descriptor {
-            def basicInfo = "Define a type substitution map\n for the inferred instance"
+            def basicInfo = "Can we perform type substitution\nfor the inferred instance?"
             def fullInfo  = {
               val tpSubst = (e.undet zip e.targs).map(subst => snapshotAnyString(subst._1) + " => " + snapshotAnyString(subst._2)).mkString("\n")
               ("Perform substitution to infer concrete instance: %tpe\n" +
@@ -282,13 +281,13 @@ trait InferStringOps {
             }
           }
           
-        case e: SimpleTreeTypeSubstitution =>
+        case SimpleTreeTypeSubstitution(tparams, targs) =>
           new Descriptor {
-            def basicInfo = "Substitute newly inferred type parameters\nin the expression tree"
+            def basicInfo = "Can we perform type susbtitution\nusing newly inferred type parameters\nin the expression tree?"
             def fullInfo  = {
-              "Substitute %tpe for %tpe".dFormat(Some("Type parameters substitution"),
-              e.tparams.map(snapshotAnyString).mkString(","),
-              e.targs.map(snapshotAnyString).mkString(","))
+               val tpSubst = (tparams zip targs).map(subst => snapshotAnyString(subst._1) + " => " + snapshotAnyString(subst._2)).mkString("\n")
+              "Perform substitution for expression using the following mapping\n%tpe".dFormat(Some("Type parameters substitution"),
+                tpSubst)
             }
               
           }

@@ -64,16 +64,17 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
     
     tabDisplayFiles.addChangeListener(new TabbedListener(0))
     
-
-    
-    val tabFolder = new JTabbedPane()
-    tabFolder.addTab("Tree", null, sCodeViewer)
+    val codeFolder = new JTabbedPane()
+    codeFolder.addTab("Tree", null, sCodeViewer)
     sCodeViewer.setEditable(false)
     sCodeViewer.setFont(new Font("Verdana", Font.PLAIN, 15))
-    tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    codeFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    val scrollCodeFolder = new JScrollPane(codeFolder)
+    scrollCodeFolder.setPreferredSize(new Dimension(350, topPane.getHeight()))
     
-    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
-    topSplitPane.setResizeWeight(0.8)
+    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, scrollCodeFolder)
+    topSplitPane.setResizeWeight(0.7)
+    topSplitPane.setDividerLocation(0.8)
     topPane.add(topSplitPane)
     
     // add menu

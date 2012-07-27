@@ -52,12 +52,12 @@ trait EventFiltering {
       case e: SubTypeCheck              =>
         Some(Filtering.SubCheck)
 
-      case e: Subtyping                 =>
-        Some(Filtering.Subtyping)
+//      case e: Subtyping                 =>
+//        Some(Filtering.Subtyping)
 
 //      case e: OverloadedSymDoTypedApply =>
 //        Some(Filtering.QuickAltFilter)
-
+        
       case e: ImprovesAlternativesCheck =>
         Some(Filtering.AltComp)
 
@@ -96,6 +96,10 @@ trait EventFiltering {
             case e@TypeTemplateStatement(stat) if (stat.symbol != null) =>
               if (stat.symbol.isSynthetic || stat.symbol.isGetter) Some(Filtering.TemplateSynth) 
               else None
+            case _: TypeEtaExpandedTreeWithWildcard =>
+              Some(Filtering.TypeEtaExpanded)
+            case _: TypeEtaExpandedTreeWithPt       =>
+              Some(Filtering.TypeEtaExpanded)  
             case _ =>
               None
           }

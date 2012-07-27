@@ -216,7 +216,9 @@ trait SwingControllers {
             val parentNode = underlyingNode.parent.get
             parentNode.ev match {
               case parentEvent: InferMethodInstance  =>
-                val which = parentNode.children.indexOf(underlyingNode)
+                val which = parentNode.children.filter(_.ev match {
+                  case _: IsArgCompatibleWithFormalMethInfer => true
+                  case _ => false}).indexOf(underlyingNode)
                 val treeArg = parentEvent.args(which)
                 val formalPos  = parentEvent.fun.tpe match {
                   case MethodType(params, _) =>
@@ -248,12 +250,22 @@ trait SwingControllers {
               case _ => // shouldn't happen?
                 Nil
             }
+          case SimpleTreeTypeSubstitution(tparams, _)  =>
+            tparams.map(_.pos)
+          case InferMethodInstance(_, undets, _, _)    =>
+            undets.map(_.pos)
+          case InferInstanceAdapt(_, tparams, _, _)    =>
+            tparams.map(_.pos)
           case ImplicitMethodTpeAdapt(_, tpe: MethodType)      =>
             // it has to have at least a single implicit parameter
             tpe.params match {
               case head ::_ => List(head.pos)
               case _        => Nil
             }
+          case PolyTpeAdapt(tree, tparams, restpe, _, _)  => // should we also somehow include undets?
+            tparams.map(_.pos) ++ List(tree.symbol.pos)
+          case SymSelectTyper(_, _, sym)               =>
+            List(sym.pos)
           case _                                       =>
             Nil
         }
@@ -265,7 +277,7 @@ trait SwingControllers {
     }
     
     object HiddenEvents extends ControlAdapter {
-      private final val PREFIX = "Filtered debugging: "
+      private final val PREFIX = "Hidden debugging information: "
       override def itemEntered(item: VisualItem, e: MouseEvent) {
         item match {
           case node: NodeItem =>
