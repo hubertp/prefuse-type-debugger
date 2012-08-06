@@ -683,11 +683,7 @@ trait TyperStringOps {
         // todo: hide
       case e:DeferredRefCheckTypeTyper =>
         DEFAULT
-         
-      // todo: hide, synthetic
-      case e:TypeTreeTyper =>
-        DEFAULT
-         
+                 
       case e:ImportTyper =>
         new Descriptor() {
           def basicInfo = "Can we type import statement?"
@@ -900,19 +896,10 @@ trait TyperStringOps {
         }
 
       case e:TryTupleApplyDoTypedApply =>
-<<<<<<< HEAD
-        new Descriptor() {
-          def basicInfo = "Try arguments tuple packing"
-          def fullInfo  = ""
-        }
-||||||| merged common ancestors
-        DEFAULT
-=======
         new Descriptor() {
           def basicInfo = "Can we type application of function\n to arguments packed in a tuple?"
           def fullInfo  = ""
         }
->>>>>>> topic/usability-refactoring
         
       case e:PackArgsDoTypedApply =>
         DEFAULT
@@ -1009,11 +996,6 @@ trait TyperStringOps {
             anyString(tree1), snapshotAnyString(tree1.tpe))
           } 
         }
-
-        
-      // todo: remove from events
-      case e:SingleTpeDoTypedApply =>
-        DEFAULT
         
       case e:UnapplyDoTypedApply =>
         new Descriptor() {
@@ -1021,10 +1003,10 @@ trait TyperStringOps {
           def fullInfo  = ""
         }
         
-      case _ =>
+      case other =>
         new Descriptor() {
-          def basicInfo = ev.lName
-          def fullInfo  = ev.toString
+          def basicInfo = other.lName
+          def fullInfo  = other.toString
         }
     }
   }

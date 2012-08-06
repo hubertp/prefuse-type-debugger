@@ -6,8 +6,9 @@ object TypeDebugger extends Build {
     organization := "EPFL",
     name         := "prefuse-type-debugger",
     version      := "0.0.4",
-    scalaVersion := "2.10.0-SNAPSHOT", 
-    scalacOptions in Compile += "-unchecked",
+    scalaVersion := "2.11.0-SNAPSHOT", 
+    scalacOptions in Compile ++= Seq("-unchecked"),
+    javacOptions +=  "-Xss2M",
     resolvers ++= Seq("snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
     //logLevel     := Level.Debug
   )
@@ -26,8 +27,9 @@ object TypeDebugger extends Build {
   
   lazy val jars = unmanagedJars in Compile <++= (scalaHome, baseDirectory) map { (sHome, base) =>
     val scalaCompiler = (sHome.get / "lib" / "scala-compiler.jar")
+    val scalaReflect = (sHome.get / "lib" / "scala-reflect.jar")
     val unmanagedDirs = base +++ (base / "lib")
-    val allJars = (unmanagedDirs ** ".jars") +++ scalaCompiler
+    val allJars = (unmanagedDirs ** ".jars") +++ scalaCompiler +++ scalaReflect
     allJars.classpath
   }
   

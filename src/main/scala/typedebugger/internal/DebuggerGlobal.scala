@@ -2,8 +2,7 @@ package scala.typedebugger
 package internal
 
 import scala.tools.nsc.interactive
-import scala.tools.nsc.event.EventsGlobal
-import scala.tools.nsc.event.HookLoader
+import scala.tools.nsc.event
 import scala.tools.nsc.io
 import scala.tools.nsc.reporters.Reporter
 import scala.tools.nsc.Settings
@@ -13,7 +12,7 @@ import scala.collection.mutable
 
 class DebuggerGlobal(_settings: Settings with DebuggerSettings, _reporter: Reporter)
   extends scala.tools.nsc.Global(_settings, _reporter)
-    with EventsGlobal
+    with event.EventsGlobal
     with DebuggerCompilationUnits
     with interactive.RangePositions
     with DebuggerPositions

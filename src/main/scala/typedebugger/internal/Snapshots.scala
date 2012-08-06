@@ -58,7 +58,7 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
           if (tree.hasSymbol) t2.setSymbolNoLog(attrs._2)
           t2
       }
-      t setPos makeTransparent(tree.pos)
+      t setPos tree.pos.makeTransparent
       t
     }
   }

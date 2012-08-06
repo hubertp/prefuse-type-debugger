@@ -27,7 +27,7 @@ trait EventFiltering {
       def apply(e: Event): Filtering.Value = {
         cachedRes(e) match {
           case Some(v) => v
-          case None    => missingCase(e)
+          case None    => throw new Exception("Event not categorized under any filtering value")//missingCase(e)
         }
       }
       
