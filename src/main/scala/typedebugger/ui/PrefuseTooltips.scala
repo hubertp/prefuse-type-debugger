@@ -103,7 +103,7 @@ trait PrefuseTooltips {
     def init(): Boolean =  {
       val textArea = swingFormattedText(contents, findAreaMaxHeight(), findAreaMaxWidth())
       (textArea != null) && {
-        textArea.setFont(new Font("monospaced", Font.PLAIN, 12))
+        textArea.setFont(new Font("monospaced", Font.PLAIN, 14))
         textArea.setEditable(false)
         textArea.setLineWrap(true)
   
@@ -155,28 +155,34 @@ trait PrefuseTooltips {
       val positions = new mutable.ListBuffer[(Int, Int)]()
       val color = new DefaultHighlightPainter(Color.lightGray)
       
-      // todo: probably something more complicated will need to be added
-      // if we are dealing with longish signatures
+      case object DummyTag extends CustomArg {
+        def text = ""
+        override def toString = ""
+      }
+      
       def maybeAddNewLine(s: String, t: CustomArg): String = t match {
-        case tag@TypeText(_) => s
-        case tag@SymText(_)  => s
-        case _               => addNewLine(s)
+        case TreeText(_)      =>
+          // TODO: constant may need some adaptation
+          if ((t.text.contains("\n") && !t.text.endsWith("\n")) || (t.text.length > Formatting.maxTypeLength)) addNewLine(s)
+          else s
+        case TreeTextNLine(_) => addNewLine(s)
+        case _                => s
       }
       
       def addNewLine(s: String): String = {
         if (!s.endsWith(newLine)) s + newLine else s
       }
       val text0 = if (formatter.text.isEmpty) formatter.args.map(_ => " ") else formatter.text
-      var text = (text0 zip formatter.args).foldLeft("") { (x, y) =>
+      val paddedArgs = formatter.args.padTo(text0.length, DummyTag)
+      var text = (text0 zip paddedArgs).foldLeft("") { (x, y) =>
         val upto = x + maybeAddNewLine(y._1, y._2) // only text
-        val withArg = upto + y._2 // tree/tpe/symbol
+        val withArg = upto + y._2.text // tree/tpe/symbol
         positions += ((upto.length, withArg.length))
-        addNewLine(withArg)
+        maybeAddNewLine(withArg, y._2)
       }
+      
       val textArea =  new JTextArea(height, width)
       textArea.setMargin(new Insets(2, 2, 2, 2));
-      if (text0.length != formatter.args.length) // add missing bit after zip
-        text = text + addNewLine(text0.last)
 
       if (text != "") {
         textArea.setText(text)

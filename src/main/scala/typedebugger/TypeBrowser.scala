@@ -81,6 +81,9 @@ abstract class TypeBrowser extends AnyRef
       // that open/close blocks -> this can cause unexpected graphs
       case _: TyperTypeSet                => false
       case _: DebugEvent                  => false
+      case _: RegisterBound               => false
+      case _: ModifyTypeConstraintForTVar => false
+      case _: NullaryMethodTypeAdapt      => false
       case _: TyperEvent                  => true
       case _: ImplicitMethodTpeAdaptEvent => true
       case _: InferEvent                  => true

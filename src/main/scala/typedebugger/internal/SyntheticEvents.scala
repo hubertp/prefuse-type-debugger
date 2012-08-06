@@ -25,4 +25,24 @@ trait SyntheticEvents {
   case class GroupEligibleImplicits(source: ImplicitInfoSource) extends SyntheticEvent {
     def tag = "synthetic-grouping-of-implicits"
   }
+  
+  case class GroupCheckBoundsOfTArgs() extends SyntheticEvent {
+    def tag = "synthetic-grouping-of-check-targ-bounds"
+  }
+  
+  case class GroupCheckConstrInstantiationsBounds() extends SyntheticEvent {
+    def tag = "synthetic-grouping-of-checking-of-constraint-instantiations"
+  }
+  
+  case class MethTypeArgsResTpeCompatibleWithPt() extends SyntheticEvent {
+    def tag = "is-method-result-tpe-compatible-with-pt"
+  }
+  
+  case class ExprTypeTpeCompatibleWithPt() extends SyntheticEvent {
+    def tag = "is-expr-tpe-compatible-with-pt"
+  }
+  
+  case class TryToSolveTVars() extends SyntheticEvent {
+    def tag = "try-to-solve-tvars-given-constraints"
+  }
 }

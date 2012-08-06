@@ -5,7 +5,7 @@ import scala.collection.mutable
 import ui.Filtering
 
 trait EventFiltering {
-  self: internal.CompilerInfo =>
+  self: internal.CompilerInfo with SyntheticEvents =>
     
   import global.EV._
   import global.{ definitions, DefDef, nme }
@@ -35,37 +35,49 @@ trait EventFiltering {
         if (!cache.contains(e)) {
           cache(e) = e match {
               case e: TyperTyped => handleTyperTyped(e)
-              case _             => handleRest(e)
+              case _             => handleOtherEvents(e)
             }
         }
         cache(e)
       }
     }
     
-    private def handleRest(e: Event): Option[Filtering.Value] = e match {
+    private def handleOtherEvents(e: Event): Option[Filtering.Value] = e match {
       case e: ProtoTypeArgsDoTypedApply =>
         Some(Filtering.ProtoTpeArgs)
 
-      case e: CheckTypesCompatibility =>
-        Some(Filtering.TypesComp)
+//      case e: CheckTypesCompatibility   =>
+//        Some(Filtering.TypesComp)
 
-      case e: SubTypeCheck =>
+      case e: SubTypeCheck              =>
         Some(Filtering.SubCheck)
 
-      case e: Subtyping =>
-        Some(Filtering.Subtyping)
+//      case e: Subtyping                 =>
+//        Some(Filtering.Subtyping)
 
-      case e: OverloadedSymDoTypedApply =>
-        Some(Filtering.QuickAltFilter)
-
+//      case e: OverloadedSymDoTypedApply =>
+//        Some(Filtering.QuickAltFilter)
+        
       case e: ImprovesAlternativesCheck =>
         Some(Filtering.AltComp)
 
-      case e: ImplicitsEligibility =>
+      case e: ImplicitsEligibility      =>
         Some(Filtering.ImplElig)
 
-      case e: VerifyImplicit =>
+      case e: VerifyImplicit            =>
         Some(Filtering.VerifyImpl)
+        
+      case e: ConvertConstrBody         =>
+        Some(Filtering.ConvConstr)
+        
+      case e: ValidateParentClass       =>
+        Some(Filtering.ValidateParent)
+
+      case e: IsWithinBounds            =>
+        Some(Filtering.IsWithinBounds)
+        
+      case e: GroupCheckConstrInstantiationsBounds =>
+        Some(Filtering.GroupIsWithinBounds)
 
       case _ =>
         None
@@ -84,6 +96,10 @@ trait EventFiltering {
             case e@TypeTemplateStatement(stat) if (stat.symbol != null) =>
               if (stat.symbol.isSynthetic || stat.symbol.isGetter) Some(Filtering.TemplateSynth) 
               else None
+            case _: TypeEtaExpandedTreeWithWildcard =>
+              Some(Filtering.TypeEtaExpanded)
+            case _: TypeEtaExpandedTreeWithPt       =>
+              Some(Filtering.TypeEtaExpanded)  
             case _ =>
               None
           }

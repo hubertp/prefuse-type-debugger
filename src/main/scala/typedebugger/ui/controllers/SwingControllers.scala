@@ -8,13 +8,11 @@ import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
 import prefuse.controls.{ControlAdapter, FocusControl, PanControl, WheelZoomControl,
                          ZoomControl, ZoomToFitControl}
 import prefuse.data.expression.{AbstractPredicate, Predicate, OrPredicate}
-
 import java.awt.Color
 import java.awt.event._
 import javax.swing.text.DefaultHighlighter.DefaultHighlightPainter
 import javax.swing.text.Highlighter
 import javax.swing.event.{CaretListener, CaretEvent}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.tools.nsc.io
@@ -79,6 +77,7 @@ trait SwingControllers {
         loadSourceFile(srcs.head)
         currentDisplay.reRenderView()
       }
+      tabDisplayFiles.grabFocus()
     }
     
     def processKeyEvent(k: KeyEvent) { keyHandler.keyPressed(k) }
@@ -134,7 +133,7 @@ trait SwingControllers {
       
       override def itemClicked(item: VisualItem, e: MouseEvent) = 
         if (containsDataNode(item) && e.isAltDown())
-            fullEventInfo(asDataNode(item).ev)
+            fullEventInfo(asDataNode(item))
 
       override def itemEntered(item: VisualItem, e: MouseEvent) {
         if (containsDataNode(item)) {
@@ -178,7 +177,8 @@ trait SwingControllers {
               e.references.foreach((ref:Symbol) => if (ref != null) highlight(ref.pos, TreeReferenceHighlighter))
             case e: TreeReferencesEvent =>
               e.references.foreach((ref:STree) => highlight(ref.pos, TreeReferenceHighlighter))
-            case _ =>
+            case e =>
+              referencesFallback(node).foreach((pos: Position) => if (pos != NoPosition) highlight(pos, TreeReferenceHighlighter))
           }
         }
       }
@@ -189,22 +189,95 @@ trait SwingControllers {
 	    }
       
       private[SwingControllers] def highlight(pos: Position, colorSelection: DefaultHighlightPainter): AnyRef =
-        if (pos.isRange) codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
-        else null
+        if (pos.isRange) {
+          //sCodeViewer.setCaretPosition(pos.start) // jumps to the selected code, which can be annoying for large files
+          codeHighlighter.addHighlight(pos.start, pos.end, colorSelection)
+        } else null
   
       private[SwingControllers] def clearHighlight(force: Boolean = false) = {
         codeHighlighter.getHighlights foreach (h =>
           if (force || h != activeSelection) codeHighlighter.removeHighlight(h)
         )
       }
+      
+      private def traverseTpeForPos(tp: Type): List[Position] = tp match {
+        case TypeRef(pre, sym, args) =>
+          tp.typeSymbol.pos::(args.flatMap(traverseTpeForPos))
+        case other                   =>
+          List(tp.typeSymbol.pos)
+      }
+      
+      // We do not want to include in every event positions for trees
+      // as these would have to be passed around in a lot of places.
+      // So we try to look above in the hierarchy.
+      private def referencesFallback(underlyingNode: UINode[PrefuseEventNode]): List[Position] = {
+        underlyingNode.ev match {
+          case e: IsArgCompatibleWithFormalMethInfer   =>
+            val parentNode = underlyingNode.parent.get
+            parentNode.ev match {
+              case parentEvent: InferMethodInstance  =>
+                val which = parentNode.children.filter(_.ev match {
+                  case _: IsArgCompatibleWithFormalMethInfer => true
+                  case _ => false}).indexOf(underlyingNode)
+                val treeArg = parentEvent.args(which)
+                val formalPos  = parentEvent.fun.tpe match {
+                  case MethodType(params, _) =>
+                    params(which).pos
+                  case _                     =>
+                    NoPosition
+                }
+                List(treeArg.pos, formalPos)
+              case _                             =>
+                Nil
+            }
+          case e: AddBoundTypeVar                      =>
+            // try to look even more up in the hierarchy
+            referencesFallback(underlyingNode.parent.get)
+          case InstantiateTVarToBound(tvar)            =>
+            if (tvar.typeSymbol != NoSymbol) List(tvar.typeSymbol.pos) else Nil
+          case IsTArgWithinBounds(bounds, tparam, _)           =>
+            List(tparam.pos)
+          case InstantiateGlbOrLub(_, _, _, _)            =>
+            referencesFallback(underlyingNode.parent.get)
+          case MethodTpeWithUndetTpeParamsDoTypedApply(_, tparams, _) =>
+            tparams.map(_.pos)
+          case SubTypeCheck(v1, v2)                    =>
+            traverseTpeForPos(v1) ++ traverseTpeForPos(v2)
+          case SubTypeCheckArg(_)                      =>
+            underlyingNode.children match {
+              case Seq(single, _*) =>
+                referencesFallback(single)
+              case _ => // shouldn't happen?
+                Nil
+            }
+          case SimpleTreeTypeSubstitution(tparams, _)  =>
+            tparams.map(_.pos)
+          case InferMethodInstance(_, undets, _, _)    =>
+            undets.map(_.pos)
+          case InferInstanceAdapt(_, tparams, _, _)    =>
+            tparams.map(_.pos)
+          case ImplicitMethodTpeAdapt(_, tpe: MethodType)      =>
+            // it has to have at least a single implicit parameter
+            tpe.params match {
+              case head ::_ => List(head.pos)
+              case _        => Nil
+            }
+          case PolyTpeAdapt(tree, tparams, restpe, _, _)  => // should we also somehow include undets?
+            tparams.map(_.pos) ++ List(tree.symbol.pos)
+          case SymSelectTyper(_, _, sym)               =>
+            List(sym.pos)
+          case _                                       =>
+            Nil
+        }
+      }
      
-      object TreeMainHighlighter extends DefaultHighlightPainter(Color.red)
+      object TreeMainHighlighter extends DefaultHighlightPainter(new Color(255, 69, 0))//Color.red)
       object TreeReferenceHighlighter extends DefaultHighlightPainter(Color.green)
       object TargetDebuggingHighlighter extends DefaultHighlightPainter(new Color(204, 204, 204, 80))
     }
     
     object HiddenEvents extends ControlAdapter {
-      private final val PREFIX = "Filtered debugging: "
+      private final val PREFIX = "Hidden debugging information: "
       override def itemEntered(item: VisualItem, e: MouseEvent) {
         item match {
           case node: NodeItem =>
@@ -242,7 +315,15 @@ trait SwingControllers {
               vis.getFocusGroup(display.toRemoveNodes).addTuple(asDataNode(item).pfuseNode)
               cleanup(item.getSourceTuple.asInstanceOf[Node], vis, display)
             } else {
-              fGroup.addTuple(item)
+              // if the node is in the main goal (error) nodes, remove it
+              val goalsGroup = vis.getFocusGroup(display.openGoalNodes)
+              val realnode = asDataNode(item).pfuseNode
+              if (goalsGroup.containsTuple(realnode)) {
+                currentDisplay[PrefuseController].removeFromGoals(item)
+                currentDisplay.reRenderView(true)
+              } else {
+                fGroup.addTuple(item)
+              }
             }
             display.lastItem = item
           case _ =>   
@@ -306,8 +387,7 @@ trait SwingControllers {
 	    override def itemKeyPressed(item: VisualItem, k: KeyEvent) = keyPressed(k)
 	    
 	    override def keyPressed(k: KeyEvent): Unit = {
-	      val keyCode = k.getKeyCode 
-	      debugUI("Key Action for " + k)
+	      val keyCode = k.getKeyCode
 	      if (!(keyFilter contains k.getKeyCode))
 	        return
 
@@ -367,7 +447,7 @@ trait SwingControllers {
     	              case Some(target) => navigate(target, display.getVisualization)
     	              case None         =>
     	            }
-    	        case _ =>
+    	        case _                =>
     	      }
         }
 	    }
@@ -598,31 +678,34 @@ trait SwingControllers {
 	  }
 	  
 	  // only debugging information
-    private def fullEventInfo(ev: Event) {
-	    if (settings.debugTD.value == "ui" && ev != null) {
-	      println("----------------")
-	      println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
-	      ev match {
-	        case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
-	        case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
-	        case _ =>
-	      }
-	      ev match {
-	        case e0: SymbolReferencesEvent => println("References symbol: " + e0.references.map(_.pos))
-	        case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
-	        case _ =>
-	      }
-	      
-	      if (ev.isInstanceOf[DoneBlock])
-	        println("DONE BLOCK: " + ev.asInstanceOf[DoneBlock].originEvent)
-	      if (ev.isInstanceOf[TyperTyped]) {
-	        val nTyperTyped = ev.asInstanceOf[TyperTyped]
-	        val expl = nTyperTyped.expl
-	        println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
-	          expl.getClass)
-	      }  
-	      println("----------------")
-	    }
+    private def fullEventInfo(prefuseNode: UINode[PrefuseEventNode]) {
+      val ev = prefuseNode.ev
+      if (settings.debugTD.value == "ui" && ev != null) {
+      println("----------------")
+      println("ITEM [" + ev.id + "] CLICKED: " + ev.getClass)
+      ev match {
+        case e0: TreeEvent => println("TREE POS: " + e0.tree.pos)
+        case e0: SymEvent  => println("SYM POS: " + e0.sym.pos)
+        case _ =>
+      }
+      ev match {
+        case e0: SymbolReferencesEvent => println("References symbol: " + e0.references.map(_.pos))
+        case e0: TreeReferencesEvent   => println("References tree: " + e0.references.map(_.pos))
+        case _ =>
+      }
+      println("Children: ")
+      println(prefuseNode.children.map(_.ev.toString).mkString("[", "|", "]"))
+      
+      if (ev.isInstanceOf[DoneBlock])
+        println("DONE BLOCK: " + ev.asInstanceOf[DoneBlock].originEvent)
+      if (ev.isInstanceOf[TyperTyped]) {
+        val nTyperTyped = ev.asInstanceOf[TyperTyped]
+        val expl = nTyperTyped.expl
+        println("[TYPER-TYPED] : " + expl + " " + nTyperTyped.tree.getClass + " ||" +
+          expl.getClass)
+      }  
+      println("----------------")
+    }
 	  }
   }
   

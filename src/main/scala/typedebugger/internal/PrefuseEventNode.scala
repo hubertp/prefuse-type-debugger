@@ -10,16 +10,29 @@ trait PrefuseStructure extends IStructure {
   import global.EV.Event
   
   trait UINodeLike[T, Container[X]] extends BaseTreeNodeLike[T, Container] {
-    val pfuseNode: Node
     def advanced: Boolean
+    def updateParent(newParent: Container[T])
+    def pfuseNode: Node
+    def updatePfuseNode(node: Node)
   }
   
   trait UINode[T] extends UINodeLike[T, UINode]
 
   class PrefuseEventNode(val ev: Event,
-                         val parent: Option[UINode[PrefuseEventNode]],
-                         val pfuseNode: Node) extends UINode[PrefuseEventNode] {
+                         parent0: Option[UINode[PrefuseEventNode]]) extends UINode[PrefuseEventNode] {
     val children = ListBuffer[UINode[PrefuseEventNode]]()
+    
+    private var _parent = parent0
+    def parent = _parent
+    def updateParent(newParent: UINode[PrefuseEventNode]) {
+      _parent = Some(newParent)
+    }
+    
+    private var _pfuseNode: Node = null
+    def pfuseNode = _pfuseNode
+    def updatePfuseNode(node: Node) {
+      _pfuseNode = node
+    }
     
     override def toString: String = "[prefuse node] " + ev + " " + ev.getClass
     

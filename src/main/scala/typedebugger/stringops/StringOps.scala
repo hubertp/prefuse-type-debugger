@@ -5,7 +5,7 @@ import scala.tools.nsc.symtab
 import scala.collection.mutable
 import scala.ref.WeakReference
 
-import util.StringFormatter
+import util. { StringFormatter, Formatting }
 
 trait StringOps extends AnyRef
                 with TyperStringOps
@@ -13,21 +13,14 @@ trait StringOps extends AnyRef
                 with InferStringOps
                 with ImplicitsStringOps
                 with NamerStringOps
-                with TypesStringOps {
-  self: internal.CompilerInfo with internal.SyntheticEvents =>
+                with TypesStringOps
+                with util.DebuggerUtils {
+  self: internal.CompilerInfo with internal.SyntheticEvents with internal.PrefuseStructure =>
     
   import global.{Tree => STree, _}
   import EV._
   
   //implicit val snapshotOpenTypes: List[Type] = Nil
-  
-  object Formatting {
-    //val fmtFull = "[%ph] [%tg] %ev %po %id" // TODO this should be configurable
-    //val fmtFull = "[%ph] [%tg] %ev" // TODO this should be configurable
-    val fmtFull = "%ev"
-    val fmt = "%ln"
-    val maxTypeLength = 50 // arbitrary const, used for UI reasons
-  }
   
   object Explanations extends AnyRef
                       with TyperExplanations
@@ -58,6 +51,7 @@ trait StringOps extends AnyRef
                 with NamerEventsOps
                 with TypesEventsOps
                 with SyntheticStringOps
+                with GeneralStringOps
                 with Descriptors {
 
     private[this] val cache = new mutable.WeakHashMap[Int, WeakReference[Descriptor]]()
@@ -71,17 +65,17 @@ trait StringOps extends AnyRef
       descr
     }
     
-    def apply(e: Event): Descriptor = cache.get(e.id) match {
+    def apply(e: Event, node: UINode[PrefuseEventNode]): Descriptor = cache.get(e.id) match {
       case Some(ref) =>
         ref.get match {
           case Some(v) => v
-          case None    => update(e, generate(e))
+          case None    => update(e, generate(e, node))
         }
       case None =>
-        update(e, generate(e))
+        update(e, generate(e, node))
     }
     
-    def generate(e: Event): Descriptor = e match {
+    def generate(e: Event, node: UINode[PrefuseEventNode]): Descriptor = e match {
       case eEV: ContextTypeError =>
         explainError(eEV)
       case ev: TyperEvent        =>
@@ -97,18 +91,15 @@ trait StringOps extends AnyRef
       case ev: ImplicitEvent     =>
         explainImplicitsEvent(ev)
       case ev: NamerEvent        =>
-        explainNamerEvent(ev)
+        explainNamerEvent(ev, node)
       case ev: LubEvent          =>
         explainLubGlbEvent(ev)
       case ev: TypesEvent        =>
-        explainTypesEvent(ev)
+        explainTypesEvent(ev, node)
       case ev: SyntheticEvent    =>
-        explainSyntheticEvent(ev)
+        explainSyntheticEvent(ev, node)
       case _                     =>
-        new Descriptor {
-          def basicInfo = e formattedString Formatting.fmt
-          def fullInfo  = e formattedString Formatting.fmtFull
-        }
+        explainGeneralEvent(e)
     }
   }
   
@@ -118,7 +109,7 @@ trait StringOps extends AnyRef
   
   // TODO incorporate into our string converter when
   // we move snapshotAnyString directly to prefuse
-  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true)(implicit time: Clock): String =
+  def safeTypePrint(tp: Type, pre: String = "", post: String = "", truncate: Boolean = true, slice: Boolean = false)(implicit time: Clock): String =
     if (tp != null && tp != NoType) {
       val stringRep0 = snapshotAnyString(tp)
       // strip kind information
@@ -133,9 +124,14 @@ trait StringOps extends AnyRef
         case ExactType(tpe)       => tpe
         case _                    => stringRep0
       }
-      if (truncate && (stringRep.length > Formatting.maxTypeLength)) ""// || tp.isErroneous)) ""
-      else pre + stringRep + post
-    } else ""
+      val msg =
+        if (truncate && (stringRep.length > Formatting.maxTypeLength))
+          if (slice) stringRep.slice(0, Formatting.maxTypeLength - 3) + "..." else ""// || tp.isErroneous)) ""
+        else
+          stringRep
+      if (msg != "") pre + msg + post else ""
+    } else if (tp eq NoType) "NoType"
+    else ""
       
   def truncateStringRep(v1: String, v2: String, join: String, pre: String) = {
     val totalLength = v1.length + v2.length + join.length
@@ -167,6 +163,20 @@ trait StringOps extends AnyRef
       case _ => snapshotAnyString(y(x))
     }
   }
+  
+  // customizable length
+  def visibleName(name: Name): Option[String] =
+    if (name.toString.length < 15) Some(name.toString) 
+    else None
+    
+  // todo: mixing with string interpolation would be the best 
+  def visibleNameInTemplate(name: Name, templ: String => String): String =
+    visibleName(name) match {
+      case Some(str) => templ(str)
+      case None      => templ("")
+    }
+  
+  def simpleName(name: Name): String = visibleNameInTemplate(name, (s: String) => s)
   
   
   // TODO refactor
@@ -233,10 +243,10 @@ trait StringOps extends AnyRef
 
       //Eta
       case _: TypeEtaExpandedTreeWithWildcard => 
-        "Typecheck eta-expanded tree\n without expected type involved"
+        "Typecheck eta-expanded tree\n without the expected type involved"
 
       case _: TypeEtaExpandedTreeWithPt => 
-        "Typecheck newly eta-expanded tree\n with expected type"
+        "Typecheck newly eta-expanded tree\n with the expected type"
 
       //TypeApply
       case _: TypeTypeConstructorTypeApply => 
@@ -266,10 +276,13 @@ trait StringOps extends AnyRef
         //override def provide(a: Tree): Explanation = TypeArgStandalone(a)
         
       case _: TypeArgForCorrectArgsNum =>
-        "Typecheck argument \n (when dealing with correct number of args in application)"
+        "Typecheck single argument \n (number of parameters agrees with parameters)"
           
       case expl: TypeArgWithLenientPt =>
-        "Typecheck argument \nwith lenient target type\n " + safeTypePrint(expl.pt)
+        if (expl.pt == WildcardType)
+          "Typecheck argument \nwithout expected type"
+        else
+          "Typecheck argument \nwith lenient target type" + safeTypePrint(expl.pt, pre="\n")
 
       //Block
       case _: TypeStatementInBlock =>
@@ -310,7 +323,7 @@ trait StringOps extends AnyRef
 
       //Type constructor
       case _: TypeTypeConstructorInNew =>
-        "Typecheck type constructor for 'new'" // TODO
+        "Typecheck type constructor in a new" // TODO
 
       //Parent typing
       case _: TypeInitialSuperType =>
@@ -388,6 +401,15 @@ trait StringOps extends AnyRef
         "Typecheck use-case statement"
         //"Type statement in the use case"
       
+      case _: TypeCasePattern =>
+        "Typecheck case pattern"
+        
+      case _: TypeCaseGuard   =>
+        "Typecheck case guard"
+      
+      case _: TypeCaseBody    =>
+        "Typecheck case body"
+        
       case _ =>
         printDebug(ev)
         "Typecheck ?"
@@ -406,14 +428,14 @@ trait StringOps extends AnyRef
         "Infer and typecheck result type of the method"
 
       case ValExplicitType(_, sym) =>
-        "Typecheck type of a " + (if (sym.isMutable) "variable" else "value")
+        "Typecheck explicit type of " + (if (sym.isMutable) "variable's" else "value's") + " signature"
 
       case _: TypeAbstractTpeBounds =>
         "Typecheck bounds for the abstract type definition"
 
-      case expl: TypeValDefBody =>
-        "Typecheck body of the value/variable" +
-        (if (!expl.expectedPt) " to infer its type" +safeTypePrint(expl.vdef.symbol.tpe, "\n(inferred as ", ")") else "")
+      case TypeValDefBody(vdef, pt) =>
+        "Typecheck body of the " + (if (vdef.symbol == null) "value/variable" else if (vdef.symbol.isValue) "value" else "variable") +
+        (if (!pt) " to infer its type" +safeTypePrint(vdef.symbol.tpe, "\n(inferred type is ", ")") else "")
 
       case _: TypeMethodDefBody =>
         "Typecheck body of the method"
@@ -446,7 +468,10 @@ trait StringOps extends AnyRef
         "Typecheck tree with applied \n (inferred) implicit arguments"
 
       case _: TypeImplicitViewApplication =>
-        "Typecheck application of found implicit view"
+        "Typecheck application of found implicit view\nto the initial expression"
+      
+      case _: TypeApplyAdapt =>
+        "Typecheck expression with an adapted 'apply' member"
       
       case _ =>
         printDebug(ev)
@@ -457,13 +482,38 @@ trait StringOps extends AnyRef
   
   trait SyntheticStringOps {
     self: Descriptors =>
-    def explainSyntheticEvent(ev: SyntheticEvent) = ev match {
+    def explainSyntheticEvent(ev: SyntheticEvent, uiNode: UINode[PrefuseEventNode]) = ev match {
       case GroupEligibleImplicits(src) =>
         new Descriptor {
-          def basicInfo = "Eligible " + sourceRep(src)
+          def basicInfo = "What are the eligible " + sourceRep(src) + "?"
           def fullInfo  = "" // explain more for each kind
         }
-      case _ =>
+      case GroupCheckBoundsOfTArgs()   =>
+        new Descriptor {
+          def basicInfo = "Do bounds of all inferred type arguments\nagree with formal type parameters?"
+          def fullInfo  = ""
+        }
+      case GroupCheckConstrInstantiationsBounds() =>
+        new Descriptor {
+          def basicInfo = "Do instantations of type variable constraints\nagree with their bounds?"
+          def fullInfo  = ""
+        }
+      case MethTypeArgsResTpeCompatibleWithPt() =>
+        new Descriptor {
+          def basicInfo = "Is the result type of the Method Type\ncompatible with the expected type\n(may contain undefined type arguments)?"
+          def fullInfo  = ""
+        }
+      case ExprTypeTpeCompatibleWithPt() =>
+        new Descriptor {
+          def basicInfo = "Is the current type of the expression\ncompatible with the expected type\n(may contain undefined type arguments)?"
+          def fullInfo  = ""
+        }
+      case TryToSolveTVars() =>
+        new Descriptor {
+          def basicInfo = "Given results from compatibility tests with expected type,\ncan we try to resolve any type variables?"
+          def fullInfo  = ""
+        }
+      case _                           =>
         new Descriptor {
           def basicInfo = ev formattedString Formatting.fmt
           def fullInfo  = ev formattedString Formatting.fmtFull
@@ -476,6 +526,22 @@ trait StringOps extends AnyRef
       case ImportS        => "imported implicits"
       case PackageObjectS => "package object implicits"
       case UnknownS       => "implicits" 
+    }
+  }
+  
+  trait GeneralStringOps {
+    self: Descriptors =>
+    def explainGeneralEvent(ev: Event) = ev match {
+      case _: TyperApplyPhase =>
+        new Descriptor {
+          def basicInfo = "Debug typechecking"
+          def fullInfo  = ""
+        }
+      case _ =>
+        new Descriptor {
+          def basicInfo = ev formattedString Formatting.fmt
+          def fullInfo  = ev formattedString Formatting.fmtFull
+        }
     }
   }
   

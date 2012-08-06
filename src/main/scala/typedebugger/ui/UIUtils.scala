@@ -37,7 +37,7 @@ trait UIUtils {
   // todo: define in terms of unapply/apply
   def containsDataNode(t: Tuple): Boolean = t.canGet(label, COLUMN_PREFUSENODE_CLASS)
   def asDataNode(t: Tuple): UINode[PrefuseEventNode] = t.get(label).asInstanceOf[UINode[PrefuseEventNode]]
-  val COLUMN_PREFUSENODE_CLASS = (new PrefuseEventNode(null, null, null)).getClass
+  val COLUMN_PREFUSENODE_CLASS = (new PrefuseEventNode(null, null)).getClass
 }
 
 object UIConfig {

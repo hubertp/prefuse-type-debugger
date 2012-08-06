@@ -10,21 +10,25 @@ trait PrefuseStringOps {
   import global._
   import EV._
     
-  def fullStringOps(item: VisualItem): util.StringFormatter =
-    fullStringOps(asDataNode(item).ev)
+  def fullStringOps(item: VisualItem): util.StringFormatter = {
+    val node = asDataNode(item)
+    fullStringOps(node.ev, node)
+  }
 
-  def fullStringOps(ev: Event): util.StringFormatter =
-    if (ev != null) EventDescriptors(ev).fullInfo else "Typecheck full tree" // root
+  def fullStringOps(ev: Event, uiNode: UINode[PrefuseEventNode]): util.StringFormatter =
+    if (ev != null) EventDescriptors(ev, uiNode).fullInfo else "Typecheck full tree" // root
   
-  def shortStringOps(item: VisualItem): String =
-    shortStringOps(asDataNode(item).ev)
+  def shortStringOps(item: VisualItem): String = {
+    val node = asDataNode(item) // use UI node only for the label descriptions for the moment
+    shortStringOps(node.ev, node)
+  }
   
-  def shortStringOps(ev: Event): String = if (ev != null)
+  def shortStringOps(ev: Event, uiNode: UINode[PrefuseEventNode]): String = if (ev != null)
     ev match {
       case tpchecker:TyperTyped =>
         Explanations(tpchecker)
       case _ =>
-        EventDescriptors(ev).basicInfo
+        EventDescriptors(ev, uiNode).basicInfo
     }
     else "Typecheck full tree" // root
 }

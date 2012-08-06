@@ -61,23 +61,14 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
   
   private var edgeRenderer: EdgeRenderer = _
   private var nodeRenderer: LabelRenderer = _
+  private var leafNodeRenderer: LabelRenderer = _
   protected var orientation: Int = _
-  private var treeLayout: NodeLinkTreeLayout = new CustomTreeLayout()
-    
-  class CustomTreeLayout() extends
-    VisibilityAwareNodeLinkTreeLayout(orientation, 50, 0, 8, dataGroupName, visibleGroup) {
-    def realRoot(): Node = getBottomNode
-    def isCustomNodeVisible(node: NodeItem) = !adv.isAdvancedOption(node) || adv.isOptionEnabled(node)
-  }
+  private var treeLayout: NodeLinkTreeLayout = new CustomNodeLinkTreeLayout(orientation, 50, 0, 8)
   
   protected def debug(msg: => String): Unit
   def source = source0
   
-  // TODO: reduce visibility?
-  def treeRoot(): NodeItem = treeLayout.getLayoutRoot()
-  
-  
-  private val lst = new CachedLeastSpanningTree()
+  protected val lst = new CachedLeastSpanningTree()
   def nodesAlwaysVisible: List[NodeItem] = {
     lst.get()
   }
@@ -93,6 +84,7 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
   private def isAdvEnabled(t: Tuple): Boolean = adv.isAdvancedOption(t) && adv.isOptionEnabled(t)
   
   protected def _goals(): List[NodeItem]
+  protected def removeFromGoals(node: NodeItem): Unit
   
   private[this] var _lastItem: Option[NodeItem] = None
   def lastItem: Option[NodeItem] = _lastItem
@@ -133,9 +125,25 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     nodeRenderer.setVerticalPadding(10)
     nodeRenderer.setHorizontalPadding(20)
     nodeRenderer.setRoundedCorner(8,8)
+    
+    // nodes for leafs
+    leafNodeRenderer = new CustomLabelRenderer(label)
+    leafNodeRenderer.setRenderType(AbstractShapeRenderer.RENDER_TYPE_FILL)
+    leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
+    leafNodeRenderer.setVerticalAlignment(Constants.CENTER)
+    leafNodeRenderer.setVerticalPadding(10)
+    leafNodeRenderer.setHorizontalPadding(20)
+    leafNodeRenderer.setRoundedCorner(40,40)
+    
+    
     edgeRenderer = new EdgeRenderer(Constants.EDGE_TYPE_LINE)
         
-    val rf = new DefaultRendererFactory(nodeRenderer)
+    val rf = new DefaultRendererFactory()//nodeRenderer)
+    rf.add(new IsLeafNode(), leafNodeRenderer)
+    rf.add(new AbstractPredicate{override def getBoolean(t: Tuple) = t match {
+      case _: NodeItem => true
+      case _           => false
+    }}, nodeRenderer)
     rf.add(new InGroupPredicate(treeEdges), edgeRenderer)
     m_vis.setRendererFactory(rf)
     
@@ -254,9 +262,9 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     vis.run(PrefuseActions.advancedOptions)
   }
   
-  def reRenderView() {
+  def reRenderView(force: Boolean = false) {
     debug("re-render view for " + source + ", initial goals only: " + (!displayed && !showFullTree))
-    if (!displayed && !showFullTree) {
+    if (force || (!displayed && !showFullTree)) {
       vis.run(PrefuseActions.initialGoals)
       displayed = true
     }
@@ -283,24 +291,28 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
     orientation0 match {
       case Constants.ORIENT_LEFT_RIGHT =>
         nodeRenderer.setHorizontalAlignment(Constants.LEFT)
+        leafNodeRenderer.setHorizontalAlignment(Constants.LEFT)
         edgeRenderer.setHorizontalAlignment1(Constants.RIGHT)
         edgeRenderer.setHorizontalAlignment2(Constants.LEFT)
         edgeRenderer.setVerticalAlignment1(Constants.CENTER)
         edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_RIGHT_LEFT =>
         nodeRenderer.setHorizontalAlignment(Constants.RIGHT)
+        leafNodeRenderer.setHorizontalAlignment(Constants.RIGHT)
         edgeRenderer.setHorizontalAlignment1(Constants.LEFT)
         edgeRenderer.setHorizontalAlignment2(Constants.RIGHT)
         edgeRenderer.setVerticalAlignment1(Constants.CENTER)
         edgeRenderer.setVerticalAlignment2(Constants.CENTER)
       case Constants.ORIENT_TOP_BOTTOM =>
         nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+        leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
         edgeRenderer.setVerticalAlignment1(Constants.BOTTOM)
         edgeRenderer.setVerticalAlignment2(Constants.TOP)
       case Constants.ORIENT_BOTTOM_TOP =>
         nodeRenderer.setHorizontalAlignment(Constants.CENTER)
+        leafNodeRenderer.setHorizontalAlignment(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment1(Constants.CENTER)
         edgeRenderer.setHorizontalAlignment2(Constants.CENTER)
         edgeRenderer.setVerticalAlignment1(Constants.TOP)
@@ -628,9 +640,220 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
         
         val res = idx.keys.toList map(toVisualNode(_, m_vis, dataGroupName))
         assert(root != null)
-        (res, toVisualNode(root, m_vis, dataGroupName)) 
+
+        (res, toVisualNode(root, m_vis, dataGroupName))
     }
   }
+  
+  class CustomNodeLinkTreeLayout(orientation: Int, dspace: Double, bspace: Double, tspace: Double)
+    extends NodeLinkTreeLayout(dataGroupName) {//, orientation, dspace, bspace, tspace) {
+    
+    // For the initial layout we anchor the tree layout at our least spanning tree root.
+    // This needs to dynamically change as we expand our tree in include further nodes.
+    // Therefore we need to find last visible parent.
+    override def getLayoutRoot() = {      
+      var item:NodeItem = lst.getRoot()
+      if (item == null) {
+        super.getLayoutRoot()
+      } else {
+        val openGoals = m_vis.getFocusGroup(openGoalNodes)
+        var temp = item.getParent.asInstanceOf[NodeItem]
+        while (temp != null && (openGoals.containsTuple(temp.getSourceTuple))) {
+          item = temp
+          temp = temp.getParent.asInstanceOf[NodeItem]
+        }
+        item
+      }
+    }
+    
+    override def getGraph(): Graph = {
+      m_vis.getGroup(visibleGroup).asInstanceOf[Graph]
+    }
+    
+    // Methods below are a direct copy of the original behaviour with the exception
+    // that we take into account visible/advanced nodes when calculating
+    // the proper layout
+    // @see prefuse.action.layout.graph.NodeLinkTreeLayout for details
+    override def firstWalk(n: NodeItem, num: Int, depth: Int) {
+      val np = getParams(n)
+      np.number = num
+      updateDepths(depth, n)
+        
+      val expanded = n.isExpanded()
+      if ( Proxy.getChildCount(n) == 0 || !expanded ) {
+        val l = Proxy.getPreviousSibling(n)
+        np.prelim = if ( l == null ) 0 else (getParams(l).prelim + spacing(l,n,true))
+      } else if ( expanded ) {
+        val leftMost = Proxy.getFirstChild(n)
+        val rightMost = Proxy.getLastChild(n)
+        var defaultAncestor = leftMost
+        var c = leftMost
+        var i = 0
+        while (c != null) {
+          firstWalk(c, i, depth+1)
+          defaultAncestor = apportion(c, defaultAncestor)
+          i += 1
+          c = Proxy.getNextSibling(c)
+        }
+            
+        executeShifts(n)
+            
+        val midpoint = 0.5 *
+           (getParams(leftMost).prelim + getParams(rightMost).prelim)
+            
+        val left = Proxy.getPreviousSibling(n)
+        if ( left != null ) {
+          np.prelim = getParams(left).prelim + spacing(left, n, true)
+          np.mod = np.prelim - midpoint
+        } else {
+          np.prelim = midpoint
+        }
+      }
+    }
+    
+    override def apportion(v: NodeItem, a: NodeItem): NodeItem = {        
+      val w = Proxy.getPreviousSibling(v)
+      if ( w != null ) {
+        var vip, vim, vop, vom: NodeItem = null
+        var sip, sim, sop, som: Double = 0
+
+        vip = v; vop = v
+
+        vim = w
+        vom = Proxy.getFirstChild(vip.getParent().asInstanceOf[NodeItem])
+
+        sip = getParams(vip).mod
+        sop = getParams(vop).mod
+        sim = getParams(vim).mod
+        som = getParams(vom).mod
+        
+        var nr = nextRight(vim) // TODO: need to use our version
+        var nl = nextLeft(vip)  // same here
+        while ( nr != null && nl != null ) {
+          vim = nr
+          vip = nl
+          vom = nextLeft(vom)
+          vop = nextRight(vop)
+          getParams(vop).ancestor = v
+          val shift: Double = (getParams(vim).prelim + sim) - 
+              (getParams(vip).prelim + sip) + spacing(vim,vip,false)
+          if ( shift > 0 ) {
+              moveSubtree(ancestor(vim,v,a), v, shift)
+              sip += shift
+              sop += shift
+          }
+          sim += getParams(vim).mod
+          sip += getParams(vip).mod
+          som += getParams(vom).mod
+          sop += getParams(vop).mod
+          
+          nr = nextRight(vim)
+          nl = nextLeft(vip)
+        }
+        if ( nr != null && nextRight(vop) == null ) {
+          val vopp = getParams(vop)
+          vopp.thread = nr
+          vopp.mod += sim - sop
+        }
+        if ( nl != null && nextLeft(vom) == null ) {
+          val vomp = getParams(vom)
+          vomp.thread = nl
+          vomp.mod += sip - som
+          v
+        } else a
+      } else a
+    }
+    
+    override def nextLeft(n: NodeItem): NodeItem = {
+      var c: NodeItem = null
+      if ( n.isExpanded() && Proxy.isValid(n) ) c = Proxy.getFirstChild(n)
+      if (c != null) c else getParams(n).thread
+    }
+    
+    override def nextRight(n: NodeItem): NodeItem = {
+      var c: NodeItem = null
+      if ( n.isExpanded() && Proxy.isValid(n) ) c = Proxy.getLastChild(n)
+      if (c != null) c else getParams(n).thread
+    }
+    
+    override def executeShifts(n: NodeItem) {
+      var shift, change: Double = 0
+      var c = Proxy.getLastChild(n)
+      while (c != null) {
+        val cp = getParams(c)
+        cp.prelim += shift
+        cp.mod += shift
+        change += cp.change
+        shift += cp.shift + change
+        c = Proxy.getPreviousSibling(c)
+      }
+    }
+
+    override def ancestor(vim: NodeItem, v: NodeItem, a: NodeItem): NodeItem = {
+      val p:NodeItem = v.getParent().asInstanceOf[NodeItem]
+      val vimp = getParams(vim)
+      if (vimp.ancestor.getParent() == p) vimp.ancestor else a
+    }
+    
+    override def secondWalk(n: NodeItem, p: NodeItem, m: Double, depth0: Int) {
+      val np = getParams(n)
+      var depth = depth0
+      setBreadth(n, p, np.prelim + m)
+      setDepth(n, p, m_depths(depth))
+      
+      if ( n.isExpanded() && Proxy.isValid(n) ) {
+        depth += 1
+        var c = Proxy.getFirstChild(n)
+        while (c != null) {
+          secondWalk(c, n, m + np.mod, depth)
+          c = Proxy.getNextSibling(c)
+        }
+      }
+      np.clear()
+    }
+    
+    //end of custom layout, specialized NodeLinkTreeLayout for our needs
+    
+    // Provide main custom operation for navigating between nodes, 
+    // that takes into account visibility requirements of the type debugger
+    object Proxy {
+      def isValid(node: NodeItem): Boolean = {
+        node.isVisible && (!adv.isAdvancedOption(node) || adv.isOptionEnabled(node))
+      }
+      
+      def getChildCount(underlying: NodeItem): Int =
+        underlying.children_[NodeItem].toList.filter(isValid).size
+      
+      def getFirstChild(underlying: NodeItem): NodeItem = {
+        val first = underlying.getFirstChild().asInstanceOf[NodeItem]
+        if (first != null) {
+          if (!isValid(first)) Proxy.getNextSibling(first) else first
+        } else null
+      }
+      
+      def getLastChild(underlying: NodeItem): NodeItem = {
+        val last = underlying.getLastChild().asInstanceOf[NodeItem]
+        if (last != null) {
+          if (!isValid(last)) Proxy.getPreviousSibling(last) else last
+        } else null
+      }
+      
+      def getPreviousSibling(underlying: NodeItem): NodeItem = {
+        var previous = underlying.getPreviousSibling().asInstanceOf[NodeItem]
+        while (previous != null && !isValid(previous))
+          previous = previous.getPreviousSibling().asInstanceOf[NodeItem]
+        previous
+      }
+      
+      def getNextSibling(underlying: NodeItem): NodeItem = {
+        var next = underlying.getNextSibling().asInstanceOf[NodeItem]
+        while (next != null && !isValid(next))
+          next = next.getNextSibling().asInstanceOf[NodeItem]
+        next
+      }
+    }
+  }
+  
   
   // Collapse the whole tree initially so that only goals are visible (and paths to them)
   class CollapseTree() extends Action {    
@@ -700,6 +923,15 @@ abstract class PrefuseDisplay(source0: io.AbstractFile, t: Tree, vis: TypeDebugg
           ts2.containsTuple(item.getSourceTuple)
         }
       case _ =>
+        false
+    }
+  }
+  
+  class IsLeafNode() extends AbstractPredicate {
+    override def getBoolean(t: Tuple): Boolean = t match {
+      case item: NodeItem =>
+        item.getChildCount == 0
+      case _              =>
         false
     }
   }

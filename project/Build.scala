@@ -83,5 +83,5 @@ object TypeDebugger extends Build {
   def singleRunTask = myFullRunInputTask(singleRun, ExtraTasks, "scala.typedebugger.TypeDebuggerUI")
 
   lazy val root =
-    Project("Type Debugger",file (".")).configs(ExtraTasks).settings((tdsettings ++ Seq(testResourcesTask, scalaRunTask, allResourcesTask, singleRunTask, allResourcesTask, localScala, jars, forkExtra)):_*)
+    Project("TypeDebugger",file (".")).configs(ExtraTasks).settings((tdsettings ++ Seq(testResourcesTask, scalaRunTask, allResourcesTask, singleRunTask, allResourcesTask, localScala, jars, forkExtra)):_*)
 }

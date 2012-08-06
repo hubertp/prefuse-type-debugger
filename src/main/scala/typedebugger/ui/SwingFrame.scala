@@ -1,7 +1,7 @@
 package scala.typedebugger
 package ui
 
-import java.awt.{ BorderLayout, Dimension }
+import java.awt.{ BorderLayout, Dimension, Font}
 import java.awt.event.{WindowAdapter, WindowEvent, ItemListener,
                        ItemEvent, KeyListener, KeyEvent, KeyAdapter}
 import javax.swing.{Action => swingAction, _}
@@ -21,8 +21,8 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
   val jframe = new ClosableFrame(frameName)
   val topPane = new JPanel(new BorderLayout())
 
-  val ASTViewer = new JTextArea(30, 90)
-  val sCodeViewer = new JTextArea(30, 30)
+  val ASTViewer = new JTextArea(30, 15)
+  val sCodeViewer = new JTextArea(30, 15)
   val statusBar = new JLabel()
   
   protected val tabDisplayFiles = new JTabbedPane()
@@ -64,15 +64,17 @@ abstract class SwingFrame(frameName: String, filtState: Boolean,
     
     tabDisplayFiles.addChangeListener(new TabbedListener(0))
     
-
-    
-    val tabFolder = new JTabbedPane()
-    tabFolder.addTab("Tree", null, new JScrollPane(sCodeViewer))
+    val codeFolder = new JTabbedPane()
+    codeFolder.addTab("Tree", null, sCodeViewer)
     sCodeViewer.setEditable(false)
-    tabFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    sCodeViewer.setFont(new Font("Verdana", Font.PLAIN, 15))
+    codeFolder.addTab("Transformed tree", null, new JScrollPane(ASTViewer))
+    val scrollCodeFolder = new JScrollPane(codeFolder)
+    scrollCodeFolder.setPreferredSize(new Dimension(350, topPane.getHeight()))
     
-    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, new JScrollPane(tabFolder))
+    val topSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabDisplayFiles, scrollCodeFolder)
     topSplitPane.setResizeWeight(0.7)
+    topSplitPane.setDividerLocation(0.8)
     topPane.add(topSplitPane)
     
     // add menu

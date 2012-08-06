@@ -238,21 +238,21 @@ trait Snapshots { self: scala.reflect.internal.SymbolTable =>
     }
     
     private def cloneSymbol[T <: Symbol](sym: T, info: Type)(implicit openTypes: List[Type], time: Clock): T = {
-      sym match {
+      import definitions._
+      sym match { // todo: we probably need to list more stuff here
         // don't clone module/moduleclass-symbols, this leads to bugs in bootstraping
-        case _: ModuleSymbol =>
-          sym
-        case _: ModuleClassSymbol =>
-          sym
-/*        case msym: ModuleClassSymbol=>
-          if (msym == definitions.RootClass || msym == definitions.ScalaPackageClass)
-            sym
-          else {
-            println("clone module class symbol: " + sym + " ")
-            val sm1 = this(msym.sourceModule)
-            sm1.moduleClass.setInfoNoLog(info).asInstanceOf[T]
-          }*/
-        case _ =>
+        case _: ModuleSymbol      => sym
+        case _: ModuleClassSymbol => sym
+        case sym0 if FunctionClass.contains(sym0)         => sym
+        case sym0 if TupleClass.contains(sym0)            => sym
+        case sym0 if ProductClass.contains(sym0)          => sym
+        case sym0 if AbstractFunctionClass.contains(sym0) => sym
+        case AnyClass                                     => sym
+        case AnyRefClass                                  => sym
+        case ObjectClass                                  => sym
+        case sym0 if ScalaValueClasses.contains(sym0)     => sym
+        case sym0 if isPhantomClass(sym0)                 => sym
+        case sym0                                         =>
           sym.cloneSymbol.setInfoNoLog(info).asInstanceOf[T]
       }
     }
