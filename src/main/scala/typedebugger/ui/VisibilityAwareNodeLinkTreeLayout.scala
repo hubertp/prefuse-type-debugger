@@ -2,6 +2,7 @@ package scala.typedebugger
 package ui
 
 import prefuse.data.{Graph, Table, Node, Tuple, Edge, Tree}
+import prefuse.data.tuple.TupleSet
 import prefuse.action.layout.graph.{NodeLinkTreeLayout, Params}
 import prefuse.visual.{VisualItem, NodeItem, EdgeItem}
 
@@ -16,20 +17,25 @@ abstract class VisibilityAwareNodeLinkTreeLayout(
   import PrefuseDisplay.toVisualNode
   import PrefusePimping.nodeItemWraper
   
-  def realRoot(): Node
+  def realRoot(): NodeItem
   def isCustomNodeVisible(n: NodeItem): Boolean
+  def allOpenGoals(): TupleSet
   
-  // Anchor the layout root at the first error
-  // or show the synthetic root
-  // whenever we expand the type tree we update the root
+  // For the initial layout we anchor the tree layout at our least spanning tree root.
+  // This needs to dynamically change as we expand our tree in include further nodes.
+  // Therefore we need to find last visible parent.
   override def getLayoutRoot() = {      
-    var item:Node = realRoot()//lst.getRoot()
+    var item:NodeItem = realRoot()
     if (item == null) {
       super.getLayoutRoot()
     } else {
-      while (item.getParent() != null && toVisualNode(item.getParent, m_vis, dataGroupName).isVisible)
-        item = item.getParent()
-      toVisualNode(item, m_vis, dataGroupName)
+      val openGoals = allOpenGoals()
+      var temp = item.getParent.asInstanceOf[NodeItem]
+      while (temp != null && (openGoals.containsTuple(temp.getSourceTuple))) {
+        item = temp
+        temp = temp.getParent.asInstanceOf[NodeItem]
+      }
+      item
     }
   }
   
