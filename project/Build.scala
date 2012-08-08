@@ -2,6 +2,13 @@ import sbt._
 import Keys._
 
 object TypeDebugger extends Build {
+  val scalaSnapshotSuffix = "v2.10.0-instrumented4"
+  val prefuseSnapshotSuffix = "0.22-snapshot"
+  val typeDebuggerSnapshotSuffix = "v0.3-0.4"
+  val resourcesBinDir = "resources/lib"
+  val snapshotsUrl = "http://lampwww.epfl.ch/~plocinic/typedebugger-snapshots"
+
+  
   val tdsettings = Defaults.defaultSettings ++ Seq(
     organization := "EPFL",
     name         := "prefuse-type-debugger",
@@ -65,7 +72,36 @@ object TypeDebugger extends Build {
     allFiles.get.map(f => Seq(f.toString)).toList // need to take into account multiple files
   }
   
-
+  def pullLatestScalaBin = TaskKey[Unit]("pull-latest-scala-binary", "Gets instrumented version of latest scala (compiler, library, reflection)")
+  def pullLatestScalaBinTask: Setting[Task[Unit]] = pullLatestScalaBin <<= (baseDirectory) map { base =>
+    // Use scripts in tools to download jars to resources/lib
+    val lampUrl = snapshotsUrl + "/com/github/hubertp"
+    val scalaPackPrefix = "org/scala-lang/scala-"
+    val packages = List("compiler", "library", "reflect")
+    packages.foreach { p =>
+      val from = lampUrl + "/" + scalaPackPrefix + p + "/" + "scala-" + p + "-" + scalaSnapshotSuffix + ".jar"
+      val to = resourcesBinDir + "/scala-" + p + "-latest.jar"
+      url(from) #> file(to)
+    }
+  }
+  
+  def pullLatestPrefuseBin = TaskKey[Unit]("pull-latest-prefuse-binary", "Gets snapshot of Prefuse binary")
+  def pullLatestPrefuseBinTask: Setting[Task[Unit]] = pullLatestPrefuseBin <<= (baseDirectory) map { base =>
+    // Use scripts in tools to download jars to resources/lib
+    val lampUrl = snapshotsUrl + "/com/github/hubertp"
+    val from = lampUrl + "/prefuse/prefuse-core-" + prefuseSnapshotSuffix + ".jar"
+    val to = resourcesBinDir + "/prefuse-core-latest.jar"
+    url(from) #> file(to)
+  }
+  
+  def pullLatestDebuggerBin = TaskKey[Unit]("pull-latest-type-debugger-binary", "Gets latest snapshot of type debugger binary")
+  def pullLatestDebuggerBinTask: Setting[Task[Unit]] = pullLatestDebuggerBin <<= (baseDirectory) map { base =>
+    // Use scripts in tools to download jars to resources/lib
+    val lampUrl = snapshotsUrl + "/com/github/hubertp"
+    val from = lampUrl + "/scala/typedebugger/type-debugger-" + typeDebuggerSnapshotSuffix + ".jar"
+    val to = resourcesBinDir + "/type-debugger-latest.jar"
+    url(from) #> file(to)
+  }
   
   def scalaRun = TaskKey[sbt.ScalaRun]("sbt-run-inst", "")
   def scalaRunTask = scalaRun <<= myRunnerInit(ExtraTasks)
@@ -85,5 +121,5 @@ object TypeDebugger extends Build {
   def singleRunTask = myFullRunInputTask(singleRun, ExtraTasks, "scala.typedebugger.TypeDebuggerUI")
 
   lazy val root =
-    Project("TypeDebugger",file (".")).configs(ExtraTasks).settings((tdsettings ++ Seq(testResourcesTask, scalaRunTask, allResourcesTask, singleRunTask, allResourcesTask, localScala, jars, forkExtra)):_*)
+    Project("TypeDebugger",file (".")).configs(ExtraTasks).settings((tdsettings ++ Seq(pullLatestScalaBinTask, pullLatestPrefuseBinTask, pullLatestDebuggerBinTask, testResourcesTask, scalaRunTask, allResourcesTask, singleRunTask, allResourcesTask, localScala, jars, forkExtra)):_*)
 }
