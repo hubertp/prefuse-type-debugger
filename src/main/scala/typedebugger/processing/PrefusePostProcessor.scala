@@ -261,7 +261,7 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
       def filterOutStructure(node: UINode[PrefuseEventNode]): FilterAction.Value = {
         if (settings.noFiltering.value) NoOp
         else {var helper = NoOp; node.ev match {
-          case AdaptStart(tree, _) if (tree.tpe eq ErrorType) || (tree.tpe eq NoType) =>
+          case AdaptStart(tree, _) if tree.tpe eq NoType =>
             Remove
           case AdaptStart(tree, pt) if node.children.length == 2 =>
             node.children(0).ev.isInstanceOf[SubTypeCheck] && {
@@ -277,7 +277,7 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
               }
             }
             helper
-          case AdaptStart(tree, pt) =>
+          case e@AdaptStart(tree, pt) =>
             node.children match {
               case Seq(single) =>
                 single.ev match {
@@ -293,7 +293,11 @@ trait PrefusePostProcessors extends util.DebuggerUtils {
               case Seq()       =>
                 Remove
               case _           =>
-                NoOp
+                // get rid of ErrorType trees since info about them is useless
+                if (treeAt(tree)(e.time).tpe == ErrorType)
+                  Remove
+                else
+                  NoOp
             }
           case _: PolyTpeAdapt                                =>
             (node.children.length == 2 &&

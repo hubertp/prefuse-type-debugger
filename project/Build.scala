@@ -2,17 +2,17 @@ import sbt._
 import Keys._
 
 object TypeDebugger extends Build {
-  val scalaSnapshotSuffix = "v2.10.0-instrumented4"
+  val scalaSnapshotSuffix = "v2.11.0-instrumented5"
   val prefuseSnapshotSuffix = "0.22-snapshot"
-  val typeDebuggerSnapshotSuffix = "v0.3-0.4"
+  val typeDebuggerSnapshotSuffix = "v0.4"
   val resourcesBinDir = "resources/lib"
   val snapshotsUrl = "http://lampwww.epfl.ch/~plocinic/typedebugger-snapshots"
 
   
   val tdsettings = Defaults.defaultSettings ++ Seq(
     organization := "EPFL",
-    name         := "prefuse-type-debugger",
-    version      := "0.0.4",
+    name         := "type-debugger",
+    version      := "0.4",
     scalaVersion := "2.11.0-SNAPSHOT", 
     scalacOptions in Compile ++= Seq("-unchecked"),
     javacOptions +=  "-Xss2M",
@@ -24,9 +24,12 @@ object TypeDebugger extends Build {
     val props = new java.util.Properties()
     IO.load(props, f / "local.properties")
     val x = props.getProperty("scala.instrumented.home")
-    if (x == null)
-      sys.error("I need scala compiler version with instrumentation on. Define scala.instrumented.home in local.properties")
-    else {
+    if (x == null) {
+      // try to use the resources directory
+      println("Using resources directory to locate necessary scala jars")
+      Some(file("resources"))
+      //sys.error("I need scala compiler version with instrumentation on. Define scala.instrumented.home in local.properties")
+    } else {
       println("Using: " + x)
       Some(file(x))
     }
@@ -35,8 +38,8 @@ object TypeDebugger extends Build {
   lazy val jars = unmanagedJars in Compile <++= (scalaHome, baseDirectory) map { (sHome, base) =>
     val scalaCompiler = (sHome.get / "lib" / "scala-compiler.jar")
     val scalaReflect = (sHome.get / "lib" / "scala-reflect.jar")
-    val unmanagedDirs = base +++ (base / "lib")
-    val allJars = (unmanagedDirs ** ".jars") +++ scalaCompiler +++ scalaReflect
+    val prefuselib = file(resourcesBinDir + "/prefuse-core-latest.jar")
+    val allJars = scalaCompiler +++ scalaReflect +++ prefuselib
     allJars.classpath
   }
   
@@ -81,7 +84,7 @@ object TypeDebugger extends Build {
     packages.foreach { p =>
       val from = lampUrl + "/" + scalaPackPrefix + p + "/" + "scala-" + p + "-" + scalaSnapshotSuffix + ".jar"
       val to = resourcesBinDir + "/scala-" + p + "-latest.jar"
-      url(from) #> file(to)
+      url(from) #> file(to) !
     }
   }
   
@@ -91,7 +94,7 @@ object TypeDebugger extends Build {
     val lampUrl = snapshotsUrl + "/com/github/hubertp"
     val from = lampUrl + "/prefuse/prefuse-core-" + prefuseSnapshotSuffix + ".jar"
     val to = resourcesBinDir + "/prefuse-core-latest.jar"
-    url(from) #> file(to)
+    url(from) #> file(to) !
   }
   
   def pullLatestDebuggerBin = TaskKey[Unit]("pull-latest-type-debugger-binary", "Gets latest snapshot of type debugger binary")
@@ -100,7 +103,7 @@ object TypeDebugger extends Build {
     val lampUrl = snapshotsUrl + "/com/github/hubertp"
     val from = lampUrl + "/scala/typedebugger/type-debugger-" + typeDebuggerSnapshotSuffix + ".jar"
     val to = resourcesBinDir + "/type-debugger-latest.jar"
-    url(from) #> file(to)
+    url(from) #> file(to) !
   }
   
   def scalaRun = TaskKey[sbt.ScalaRun]("sbt-run-inst", "")

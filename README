@@ -8,25 +8,27 @@ Dependencies:
  - latest scala with instrumenting support
  - prefuse library
 
-Both available in my repositories. You will also need xsbt for convenient compiling of type debugger.
+Both available in my repositories. You will also need sbt for convenient compiling of type debugger.
 
-How to start (the hard way):
-1) build scala with instrumenting support ('topic/contexterrors-events--instrumenting' branch),
+How to start (the hard way, from scratch):
+1) build scala with instrumenting support ('topic/events-instrumenting' branch),
    in all other steps we assume that $SCALA_INSTRUMENTING_HOME to its directory
-2) create 'lib' directory
-3) define local.properties with the following line: scala.instrumented.home=$SCALA_INSTRUMENTING_HOME/build/pack
-4) build prefuse and put prefuse-core-x.x.jar into lib
-5) xsbt compile (needs at least 0.11.2 version of sbt)
-6) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
-7) scala -cp lib/prefuse-core-0.21.jar:target/scala-2.10.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
+2) define local.properties with the following line: scala.instrumented.home=$SCALA_INSTRUMENTING_HOME/build/pack
+4) sbt pull-latest-prefuse-binary
+5) sbt compile
+5.1) sbt run-type-debugger file1 file2 ...
+or 
+5.1a) export PATH=$SCALA_INSTRUMENTING_HOME/build/pack/bin:$PATH
+5.1b) scala -cp resources/lib/prefuse-core-0.21-latest.jar:target/scala-2.11.0-SNAPSHOT/classes scala.typedebugger.TypeDebuggerUI resources/code/src/A.scala
 
-or (the easier way for building)
+or (use the latest snapshots)
 
-Use provided binaries with instrumented Scala library that are in resources/lib
-(point scala.instrumented.home at this directory). You have to make sure that type debugger and scala compiler
-have the same matching tags, otherwise you are likely to get some bugs.
+Pull latest snaphots using
+1) sbt pull-latest-scala-binary
+2) sbt pull-latest-prefuse-binary
+3) sbt pull-latest-debugger-binary
 
-or (the easiest for using)
+This will put all the necessary jars (that are in sync) into resource/lib and you can just run it with
 
-java -Xbootclasspath/a:resources/lib/scala-library.jar:resources/lib/scala-compiler.jar scala.tools.nsc.MainGenericRunner -classpath resources/lib/prefuse-core-0.22-snapshot.jar:resources/lib/type-debugger-snapshot.jar scala.typedebugger.TypeDebuggerUI resources/code/src/paper/Example01.scala
+java -Xbootclasspath/a:resources/lib/scala-library-latest.jar:resources/lib/scala-compiler-latest.jar:resources/lib/scala-reflect-latest.jar scala.tools.nsc.MainGenericRunner -classpath resources/lib/prefuse-core-latest.jar:resources/lib/type-debugger-latest.jar scala.typedebugger.TypeDebuggerUI resources/code/src/paper/Example01.scala
 
